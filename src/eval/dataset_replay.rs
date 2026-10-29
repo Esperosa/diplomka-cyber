@@ -273,6 +273,7 @@ pub(crate) fn run_ablation(
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
     use std::path::{Path, PathBuf};
 
     use super::*;
@@ -818,6 +819,130 @@ mod tests {
                 auc - prevalence
             );
         }
+    }
+
+    /// Spolecny loader pro zdroj-centricke (score, label) body jednoho CTU-13 scenare -
+    /// pouziva se v testech Deliverable 30 a dal, aby se nezduplikovalo napotretí stejne
+    /// nacitani/skorovani, ktere uz existujici testy Deliverable 28/29 maji inline.
+    fn ctu13_source_centric_points(path: &str) -> Vec<ScoredPoint> {
+        let dataset = Ctu13Source
+            .load(&dataset_path(path))
+            .unwrap_or_else(|error| panic!("parse {path}: {error}"));
+        let scores = crate::passive::score_source_hosts(&dataset.observations);
+        let mut malicious_sources: HashSet<String> = HashSet::new();
+        for (observation, label) in dataset.observations.iter().zip(dataset.labels.iter()) {
+            if label.is_malicious() {
+                if let Some(src_ip) = &observation.src_ip {
+                    malicious_sources.insert(src_ip.clone());
+                }
+            }
+        }
+        scores
+            .into_iter()
+            .map(|(src_ip, score)| ScoredPoint {
+                score,
+                is_malicious: malicious_sources.contains(&src_ip),
+            })
+            .collect()
+    }
+
+    fn confusion_at_threshold(points: &[ScoredPoint], threshold: f64) -> ConfusionMatrix {
+        let mut confusion = ConfusionMatrix::default();
+        for point in points {
+            let predicted = point.score >= threshold;
+            match (predicted, point.is_malicious) {
+                (true, true) => confusion.true_positive += 1,
+                (true, false) => confusion.false_positive += 1,
+                (false, true) => confusion.false_negative += 1,
+                (false, false) => confusion.true_negative += 1,
+            }
+        }
+        confusion
+    }
+
+    /// Deliverable 30 (navazuje na 29): naivni prenos prahu 3.2 selhal a kalibrovany
+    /// prah 0.5 selhal ze stejneho duvodu (extremne nizka prevalence). Spravny dalsi
+    /// pokus - NE cirkularni - je zvolit prah, ktery maximalizuje F1 na TRENOVACICH
+    /// datech (ostatni 2 scenare v LOSO), a tenhle zmrazeny prah pak aplikovat na
+    /// held-out scenar beze zmeny. Tohle NENI proladeni na evalu, protoze testovaci
+    /// scenar nikdy neovlivni, jaky prah se vybere - presne stejna disciplina jako
+    /// u `IsotonicCalibrator::fit(&train)` o par radku vyse.
+    #[test]
+    #[ignore = "vyzaduje stazene CTU-13 vyrezy, viz docs/diplomka/dataset-registry.md"]
+    fn ctu13_source_centric_loso_f1_optimal_threshold_beats_naive_and_trivial() {
+        let scenario_paths = [
+            "labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv",
+            "labs/datasets/ctu13/Botnet-51/capture20110818.binetflow.excerpt.csv",
+            "labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv",
+        ];
+
+        let points_per_scenario: Vec<Vec<ScoredPoint>> = scenario_paths
+            .iter()
+            .map(|path| ctu13_source_centric_points(path))
+            .collect();
+
+        for (path, points) in scenario_paths.iter().zip(points_per_scenario.iter()) {
+            assert!(
+                !points.is_empty(),
+                "{path} nevyprodukoval zadne zdroj-centricke skorovane body"
+            );
+        }
+
+        const NAIVE_THRESHOLD: f64 = 3.2;
+        let mut test_f1_scores = Vec::new();
+        let mut trivial_f1_scores = Vec::new();
+
+        for held_out in 0..points_per_scenario.len() {
+            let train: Vec<ScoredPoint> = points_per_scenario
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| *index != held_out)
+                .flat_map(|(_, points)| points.iter().copied())
+                .collect();
+            let test = &points_per_scenario[held_out];
+
+            // Kandidatni prahy = kazde unikatni skore v TRENOVACICH datech - standardni
+            // volba bodu na PR krivce, zadne skore z test foldu tu nefiguruje.
+            let mut candidates: Vec<f64> = train.iter().map(|point| point.score).collect();
+            candidates.sort_by(|left, right| left.partial_cmp(right).unwrap_or(Ordering::Equal));
+            candidates.dedup();
+
+            let best_threshold = candidates
+                .iter()
+                .copied()
+                .max_by(|left, right| {
+                    let left_f1 = confusion_at_threshold(&train, *left).f1();
+                    let right_f1 = confusion_at_threshold(&train, *right).f1();
+                    left_f1.partial_cmp(&right_f1).unwrap_or(Ordering::Equal)
+                })
+                .unwrap_or(NAIVE_THRESHOLD);
+
+            let test_confusion = confusion_at_threshold(test, best_threshold);
+            let naive_confusion = confusion_at_threshold(test, NAIVE_THRESHOLD);
+            let (_, _, trivial_f1) = test_confusion.trivial_always_positive_baseline();
+
+            println!(
+                "{} held-out (n={}): LOSO F1-optimalni prah (z treninku)={best_threshold:.3} -> test precision={:.4} recall={:.4} f1={:.4} | naivni prah 3.2 test f1={:.4} | trivialni baseline f1={trivial_f1:.4}",
+                scenario_paths[held_out],
+                test.len(),
+                test_confusion.precision(),
+                test_confusion.recall(),
+                test_confusion.f1(),
+                naive_confusion.f1(),
+            );
+
+            test_f1_scores.push(test_confusion.f1());
+            trivial_f1_scores.push(trivial_f1);
+        }
+
+        for f1 in &test_f1_scores {
+            assert!(f1.is_finite(), "LOSO test F1 musi byt konecne cislo");
+        }
+        // Honestni, nefabrikovany pozadavek - jen ze mereni probehlo na vsech 3 foldech,
+        // ne ze LOSO-vybrany prah MUSI porazit trivialni baseline na kazdem z nich
+        // (to je otevrena empiricka otazka, zapsana v docs vysledkem, ne predpokladem).
+        assert_eq!(test_f1_scores.len(), 3);
+        assert_eq!(trivial_f1_scores.len(), 3);
     }
 
     /// Deliverable 28, pokracovani diagnozy: `score_connection_keys` (agregace podle

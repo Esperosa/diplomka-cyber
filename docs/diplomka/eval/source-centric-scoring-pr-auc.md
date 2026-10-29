@@ -82,10 +82,24 @@ Botnet-42 held-out (n=2789): naive(3.2) brier=0.8498 f1=0.0008 | kalibrovane(0.5
 
 **Co z toho plyne správně**: u vzácných jevů se práh nemá hledat jako jedno pevné číslo vůbec — patří sem přesně to, co diplomka od začátku identifikuje jako svůj skutečný cíl (VOI/typovaná nejistota ve `verification_planner.rs`/`hypothesis.rs`, ne binární klasifikace s jedním prahem). Tohle je konkrétní, měřený argument PRO tenhle směr, ne proti kalibraci — kalibrace (Brier) funguje přesně podle očekávání, jen ukazuje, že navazující rozhodovací krok nesmí být fixní prah.
 
+## Naměřeno — krok 4: nekruhový LOSO F1-optimální práh (třetí a definitivní pokus)
+
+Námitka proti krokům 2–3 výše: oba použily prah zvolený mimo trénovací data (3.2 z jiné domény, 0.5 z učebnice) — co kdyby se prah zvolil správnou, nekruhovou metodikou — maximalizací F1 **jen na trénovacích foldech** (LOSO, stejná disciplína jako `IsotonicCalibrator::fit(&train)`), a tenhle zmrazený práh pak aplikoval na held-out scénář? To je přesně to, co dělá standardní PR-křivka threshold selection, a NENÍ to cirkulární — held-out scénář nikdy neovlivní, jaký práh se vybere.
+
+```
+Botnet-54 held-out: LOSO F1-optimalni prah (z treninku)=494020.518 -> test precision=0.0038 recall=1.0000 f1=0.0077 | naivni (3.2) f1=0.0010 | trivialni baseline f1=0.0008
+Botnet-51 held-out: LOSO F1-optimalni prah (z treninku)=704664.166 -> test precision=0.0000 recall=0.0000 f1=0.0000 | naivni (3.2) f1=0.0105 | trivialni baseline f1=0.0082
+Botnet-42 held-out: LOSO F1-optimalni prah (z treninku)=77435.366  -> test precision=0.0008 recall=1.0000 f1=0.0015 | naivni (3.2) f1=0.0008 | trivialni baseline f1=0.0007
+```
+
+**Výsledek: ani tohle nefunguje — a způsob, jak nefunguje, je sám o sobě informativní.** Vybrané prahy jsou absurdně vysoké (desítky až stovky tisíc) — F1-optimalizace na tréninku najde jediný extrémní odlehlý bod, který v trénovacích datech náhodou perfektně odděluje tu hrstku pozitiv, a zvolí ho jako "optimální" práh. Na Botnet-51 je tenhle přemrštěný práh tak vysoký, že na held-out datech nezachytí NIC (recall=0.0) — naprosté selhání generalizace. To NENÍ chyba implementace F1-optimalizace, je to přímý důsledek **příliš málo trénovacích scénářů (jen 2 v LOSO) vůči extrémní vzácnosti pozitiv** — jeden šťastný bod v tréninku stačí k tomu, aby "optimální" práh byl ve skutečnosti degenerovaný artefakt, ne stabilní hranice.
+
+**Definitivní závěr ze 3 po sobě jdoucích pokusů (naivní přenos → kalibrace+0.5 → nekruhová LOSO F1-optimalizace):** u tohoto skóre, na téhle vzorkové velikosti a téhle míře vzácnosti jevu, **žádná podoba jediného skalárního prahu není spolehlivý způsob, jak z LIFT/PR-AUC zlepšení (prokazatelně reálného) udělat klasifikaci**. To nevyvrací hodnotu zdroj-centrického skóre — LIFT 24–90× zůstává naměřený, reprodukovatelný a konzistentní přes všechny 3 scénáře. Vyvrací to konkrétně **binární prah jako rozhodovací mechanismus** pro tenhle typ vzácného jevu. To je přesně ten typ zjištění, který návrhový dokument diplomky od začátku předjímá jako důvod pro VOI/typovanou nejistotu (`verification_planner.rs`, `hypothesis.rs`) místo pevných prahů — teď s konkrétním, měřeným, trojnásobně potvrzeným argumentem proč, ne jen teoretickým zdůvodněním.
+
 ## Co z tohoto plyne — konkrétní další krok
 
-1. **Toto je zatím diagnostický nástroj, ne zapojený detektor.** `score_source_hosts` běží jen v testu, ne v `detect_connection_anomalies`/produkčním rozhodování.
-2. **Tři zjištění dohromady**: (a) ranking (PR-AUC/LIFT) je prokazatelně silný, (b) naivní threshold-transfer mezi doménami agregace nefunguje, (c) ani kalibrovaná pravděpodobnost s "učebnicovým" prahem 0.5 nefunguje u tak vzácného jevu — F1 jako metrika "porazilo/neporazilo triviální baseline" je u zdroj-centrické klasifikace **špatně položená otázka při jakémkoliv fixním prahu**. Správná metrika zůstává LIFT/PR-AUC (threshold-independent) dokud rozhodovací logika nepřejde na VOI/typovanou nejistotu místo binárního prahu.
+1. **Toto je zatím diagnostický nástroj, ne zapojený detektor.** `score_source_hosts` běží jen v testu, ne v `detect_connection_anomalies`/produkčním rozhodování — a na základě kroku 4 výše by zapojení přes jediný pevný práh bylo vědomě špatné rozhodnutí, ne jen nedodělané.
+2. **Čtyři zjištění dohromady**: (a) ranking (PR-AUC/LIFT) je prokazatelně silný, (b) naivní threshold-transfer mezi doménami agregace nefunguje, (c) kalibrovaná pravděpodobnost s "učebnicovým" prahem 0.5 nefunguje u tak vzácného jevu, (d) ani nekruhová LOSO F1-optimalizace prahu nefunguje (degeneruje na přeučení na 1 odlehlý bod při jen 2 trénovacích scénářích). F1 jako metrika "porazilo/neporazilo triviální baseline" je u zdroj-centrické klasifikace **špatně položená otázka při jakékoliv podobě fixního prahu** — ne jen při naivní. Správná metrika zůstává LIFT/PR-AUC (threshold-independent); správný další krok není pátý pokus o práh, ale přechod rozhodovací logiky na VOI/typovanou nejistotu.
 3. **Ground truth na úrovni zdroje vyžaduje jinou definici "known evidence"** — aktuální `GroundTruthLabel`/confusion matrix logika je psaná pro destinace-centrické klíče; přepis na zdroj-centrické vyžaduje paralelní, ne nahrazující, evaluační cestu (žádná regrese v existujících ablacích A-D).
 
 ## Honestní omezení
