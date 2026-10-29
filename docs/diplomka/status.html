@@ -91,15 +91,16 @@
 </head>
 <body>
 
-<h1>Bakula — stav diplomky</h1>
+<h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 16:02</strong> ·
-  commit <code>47dae1e</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 16:27</strong> ·
+  commit <code>07b4c34</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
-  <a href="dalsi-postup-master-plan.md">master plán</a>
+  <a href="produkcni-plan.md">produkční plán</a> ·
+  <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
 </div>
 
-<h2>Jádro (v rozsahu diplomky) — stage po stagi, s jednotlivými položkami</h2>
+<h2>Jádro — stage po stagi, s jednotlivými položkami</h2>
 <p class="hint">Klikni na stage pro rozbalení konkrétních hotových/nehotových kroků pod ní.</p>
 
 <details class="stage" open>
@@ -200,15 +201,52 @@
   </div>
 </details>
 
-<h2>Mimo rozsah (vědomě, ne zapomenuto)</h2>
-<div class="outscope">
-  Stejná kategorie rozhodnutí u všech — nová infrastruktura neúměrná jedné diplomce, zdůvodněno v <code class="file">dalsi-postup-master-plan.md</code>, ne ignorováno.
-  <ul>
-    <li>H5 — distribuované škálování workerů (žádná multi-node infrastruktura)</li>
-    <li>Firewall / DNS / IPS enforcement</li>
-    <li>Multi-tenant izolace, HA/DR, Supply chain</li>
-  </ul>
-</div>
+<h2>Produkční plán (ne jen diplomka)</h2>
+<p class="hint">H2 a H5 jsou vlastnosti jádra (korektnost fúze evidence / škálování), ne nové subsystémy — proto se vrátily do rozsahu. Firewall/DNS/IPS/SOAR zůstávají vědomě odloženy, rozhodnutím uživatele po 3-agentní debatě. Detaily: <code class="file">produkcni-plan.md</code>.</p>
+
+<details class="stage" open>
+  <summary><span class="badge badge-yellow">fáze 1 — probíhá</span> <span class="stage-title">H5 korektnost + H2 fúze</span> <span class="stage-sub">bounded, dny až 2 týdny</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-yellow mini">probíhá</span> H5: <code class="file">claimed_by</code> fencing, lease navázaný na config, DLQ, connection pooling — <code class="file">src/platform.rs</code>, <code class="file">src/broker.rs</code></li>
+      <li><span class="badge badge-yellow mini">probíhá</span> H5: test se 2 reálnými worker procesy proti 1 Redis+DB</li>
+      <li><span class="badge badge-yellow mini">probíhá</span> H2: Community ID join-key mezi Zeek/Suricata — <code class="file">src/passive/community_id.rs</code></li>
+      <li><span class="badge badge-yellow mini">probíhá</span> H2: dependency-aware fúzní vrstva — nový <code class="file">src/fusion.rs</code></li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage">
+  <summary><span class="badge badge-gray">fáze 2 — další krok</span> <span class="stage-title">Skutečný multi-host H5 + re-validace H2</span> <span class="stage-sub">větší investice</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-gray mini">plán</span> Postgres migrace (skutečný blokátor pro multi-host — SQLite nejde bezpečně sdílet přes síť)</li>
+      <li><span class="badge badge-gray mini">plán</span> 2+ reálné stroje, síťová latence/ztráta vstřikována, měření propustnosti/p99</li>
+      <li><span class="badge badge-gray mini">plán</span> re-validace ablací B/C/E s H2 fúzí na dual-sensor datech (Suricata sidecar v multiservice labu)</li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage">
+  <summary><span class="badge badge-gray">odloženo — rozhodnutí uživatele</span> <span class="stage-title">Firewall / DNS / IPS / SOAR</span> <span class="stage-sub">P2/P3 podle návrhu</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-gray mini">odloženo</span> žádný zákazník/nasazení zatím neexistuje — stavba teď by byla čisté platformní riziko bez validační smyčky (skeptikovo doporučení, potvrzeno uživatelem 29.10.2026)</li>
+      <li><span class="badge badge-gray mini">zapsáno pro budoucnost</span> MVP sekvence navržená (SOAR → firewall TTL-sety → DNS RPZ → IPS) — viz <code class="file">produkcni-plan.md</code>, spustí se až bude reálná potřeba</li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage">
+  <summary><span class="badge badge-gray">odloženo — trigger-based</span> <span class="stage-title">Multi-tenant / HA-DR / Supply chain</span> <span class="stage-sub">bez kontroverze mezi agenty</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-gray mini">trigger</span> Multi-tenant: až 2. placený zákazník</li>
+      <li><span class="badge badge-gray mini">trigger</span> HA/DR: až enforcement vrstva běží live v produkci</li>
+      <li><span class="badge badge-gray mini">levné, bez rizika</span> Supply chain (SBOM, pinned deps, signed artifacts) — nízká priorita, ale žádný důvod odkládat donekonečna</li>
+    </ul>
+  </div>
+</details>
 
 <h2>Výzkumné hypotézy H1–H5</h2>
 <table>
@@ -220,8 +258,8 @@
   </tr>
   <tr>
     <td><strong>H2</strong><br><span style="color:var(--muted)">graph fusion s korekcí zdrojů</span></td>
-    <td><span class="badge badge-red">netestováno</span></td>
-    <td>Kód umí jen okénkování jedné heuristiky, ne multi-senzorovou fúzi. Vědomě mimo rozsah.</td>
+    <td><span class="badge badge-yellow">zpět v rozsahu, probíhá</span></td>
+    <td>Kód umí jen okénkování jedné heuristiky, ne multi-senzorovou fúzi. Vlastnost jádra (ne nový subsystém) — stavím Community ID + dependency-aware fúzi, viz Produkční plán výše.</td>
   </tr>
   <tr>
     <td><strong>H3</strong><br><span style="color:var(--muted)">VOI planner ≤ blanket scan</span></td>
@@ -235,8 +273,8 @@
   </tr>
   <tr>
     <td><strong>H5</strong><br><span style="color:var(--muted)">sharding škáluje propustnost</span></td>
-    <td><span class="badge badge-gray">mimo rozsah</span></td>
-    <td>Rozhodnuto vědomě — stejná kategorie jako firewall/DNS/IPS.</td>
+    <td><span class="badge badge-yellow">zpět v rozsahu, probíhá</span></td>
+    <td>Broker primitivy solidní a testované, ale platform.rs je SQLite-only (nejde sdílet přes síť) + chybí claimed_by fencing/DLQ. Opravuju korektnost nejdřív, multi-host je další fáze.</td>
   </tr>
 </table>
 
