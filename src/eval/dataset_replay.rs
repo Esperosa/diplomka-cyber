@@ -65,6 +65,28 @@ impl ConfusionMatrix {
             2.0 * precision * recall / (precision + recall)
         }
     }
+
+    /// Triviální "klasifikuj vse jako malicious" na STEJNE (known, ne-unknown) mnozine
+    /// klicu - recall je vzdy 1.0, precision = prevalence. Bez tohoto srovnani neni
+    /// jasne, jestli detektor skutecne neco umi, nebo jen kopíruje prevalenci - presne
+    /// pitfall "missing baseline", ktery nezavisla kontrola (Opus Plan agent, 29.10.2026)
+    /// u puvodnich tabulek oznacila. `(precision, recall, f1)`.
+    pub(crate) fn trivial_always_positive_baseline(&self) -> (f64, f64, f64) {
+        let total_known =
+            self.true_positive + self.false_positive + self.false_negative + self.true_negative;
+        let total_positive = self.true_positive + self.false_negative;
+        if total_known == 0 {
+            return (0.0, 0.0, 0.0);
+        }
+        let precision = total_positive as f64 / total_known as f64;
+        let recall = 1.0;
+        let f1 = if precision + recall == 0.0 {
+            0.0
+        } else {
+            2.0 * precision * recall / (precision + recall)
+        };
+        (precision, recall, f1)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -72,7 +94,16 @@ pub(crate) struct BaselineResult {
     pub(crate) dataset_id: String,
     pub(crate) observation_count: usize,
     pub(crate) malicious_flow_count: usize,
+    /// POUZE potvrzene benigni flows (ne "Unknown"). Oprava 29.10.2026: puvodne
+    /// pocitalo i CTU-13 "Background" (neoverenej provoz) jako benigni - viz
+    /// `unknown_flow_count`/`excluded_unknown_keys` a `ground_truth.rs::is_unknown()`.
     pub(crate) benign_flow_count: usize,
+    /// Flows s `label.is_unknown()` (CTU-13 "Background") - NEJSOU v
+    /// `benign_flow_count`, nejsou v confusion matrix.
+    pub(crate) unknown_flow_count: usize,
+    /// Kolik (dst_ip,proto,port) klicu bylo vyrazeno z confusion matrix, protoze
+    /// VSECHNY flows pod nimi jsou "Unknown" - 0 pro datasety bez tretiho stavu (IoT-23).
+    pub(crate) excluded_unknown_keys: usize,
     pub(crate) correlated_event_count: usize,
     pub(crate) finding_count: usize,
     pub(crate) decision_action_count: usize,
@@ -141,13 +172,20 @@ pub(crate) fn run_ablation(
 
     let mut ground_truth_positive: HashSet<AggKey> = HashSet::new();
     let mut all_keys: HashSet<AggKey> = HashSet::new();
+    // Klic ma "known evidence", pokud alespon jeden flow pod nim je malicious NEBO
+    // potvrzene benigni (ne "Unknown") - jinak se z confusion matrix VYRADI, viz
+    // oprava 29.10.2026 (puvodne se Unknown tise pocitalo jako benigni).
+    let mut key_has_known_evidence: HashSet<AggKey> = HashSet::new();
     let mut malicious_flow_count = 0usize;
     let mut benign_flow_count = 0usize;
+    let mut unknown_flow_count = 0usize;
     let mut malicious_detailed_labels: BTreeSet<String> = BTreeSet::new();
     for (observation, label) in dataset.observations.iter().zip(dataset.labels.iter()) {
         if label.is_malicious() {
             malicious_flow_count += 1;
             malicious_detailed_labels.insert(label.detailed_label.clone());
+        } else if label.is_unknown() {
+            unknown_flow_count += 1;
         } else {
             benign_flow_count += 1;
         }
@@ -157,12 +195,20 @@ pub(crate) fn run_ablation(
         let key = (observation.dst_ip.clone(), observation.proto.clone(), port);
         all_keys.insert(key.clone());
         if label.is_malicious() {
-            ground_truth_positive.insert(key);
+            ground_truth_positive.insert(key.clone());
+            key_has_known_evidence.insert(key);
+        } else if !label.is_unknown() {
+            key_has_known_evidence.insert(key);
         }
     }
 
     let mut confusion = ConfusionMatrix::default();
+    let mut excluded_unknown_keys = 0usize;
     for key in &all_keys {
+        if !key_has_known_evidence.contains(key) {
+            excluded_unknown_keys += 1;
+            continue;
+        }
         let predicted = predicted_positive.contains(key);
         let actual = ground_truth_positive.contains(key);
         match (predicted, actual) {
@@ -206,6 +252,8 @@ pub(crate) fn run_ablation(
         observation_count: dataset.observations.len(),
         malicious_flow_count,
         benign_flow_count,
+        unknown_flow_count,
+        excluded_unknown_keys,
         correlated_event_count: correlated.len(),
         finding_count,
         decision_action_count,
@@ -330,6 +378,11 @@ mod tests {
                 result.finding_count,
             );
         }
+
+        let (trivial_p, trivial_r, trivial_f1) = a.confusion.trivial_always_positive_baseline();
+        println!(
+            "IoT-23 44-1 trivialni baseline (vse=malicious): precision={trivial_p:.3} recall={trivial_r:.3} f1={trivial_f1:.3} (srovnej s ablaci A vyse)"
+        );
 
         // Ablace C pridava multi_target_pattern nalezy s dst_port=None, ktere confusion
         // matrix (klicovana (dst_ip,proto,port)) nikdy nezachyti jako predicted_positive -
@@ -469,6 +522,11 @@ mod tests {
                 result.finding_count,
             );
         }
+
+        let (trivial_p, trivial_r, trivial_f1) = a.confusion.trivial_always_positive_baseline();
+        println!(
+            "CTU-13 trivialni baseline (vse=malicious): precision={trivial_p:.3} recall={trivial_r:.3} f1={trivial_f1:.3} (srovnej s ablaci A vyse)"
+        );
     }
 
     /// Nasledna otazka z `docs/diplomka/eval/cross-dataset-ctu13.md`: byla 300s

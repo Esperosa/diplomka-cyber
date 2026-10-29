@@ -6,14 +6,19 @@
 //!
 //! **Tri kategorie labelu, ne dve jako u IoT-23:** CTU-13 oznacuje kazdy flow jako
 //! `Botnet`/`Normal`/`Background`. `Background` je provoz, ktery autoři datasetu
-//! nemohli overit jako cistě normalni ani botnet. **Modelovaci rozhodnuti**: pro
-//! kompatibilitu se spolecnym `GroundTruthLabel::is_malicious()` (ktery kontroluje
-//! presne `label == "Malicious"`, zavedeno v Deliverable 1/IoT-23) se vsechny tri
-//! kategorie normalizuji na binarni `label` ("Malicious" pro Botnet, "Benign" pro
-//! Background i Normal), a puvodni CTU-13 kategorie zustava v `detailed_label`.
-//! `Background` jako "ne-malicious" je zjednoduseni (neni totez jako potvrzene
-//! benigni) - explicitne zdokumentovano, ne skryto - presny typ limitace, kterou
-//! navrh sekce 7.2 varuje nezamlcovat.
+//! nemohli overit jako cistě normalni ani botnet.
+//!
+//! **OPRAVA 29.10.2026 (puvodne mapovano chybne):** prvni verze tohoto parseru
+//! mapovala `Background` na `label="Benign"` - zduvodnene jako "zjednoduseni", ale
+//! nezavisla kontrola (Opus Plan agent) na realnych datech ukazala, ze z 26 212
+//! (dst_ip,proto,port) klicu v CTU-13 vyrezu je 25 317 (96,6 %) "Background-only".
+//! Pocitat vsechny tyhle klice jako potvrzene benigni v confusion matrix NENI
+//! "zjednoduseni s dokumentovanou limitaci" - je to chyba, ktera sama o sobe
+//! zpusobila hlasenou precision 0.083 na CTU-13 (vs. ~0.77 po spravnem vyrazeni
+//! neznamych klicu z confusion matrix, viz `docs/diplomka/eval/cross-dataset-ctu13.md`).
+//! Ted se `Background` mapuje na `label="Unknown"` (tretí hodnota, ne jen Malicious/
+//! Benign) a `dataset_replay.rs` tyto klice z confusion matrix VYRAZUJE, nepocita
+//! je jako TN/FP.
 //!
 //! **Cross-dataset limitace:** `State` pole ("FPA_FPA", "CON", "RA_PA"...) je NetFlow
 //! stavova notace, ne Zeek `conn_state` slovnik ("S0", "REJ", "RSTOS0"...), na ktery
@@ -141,20 +146,24 @@ fn parse_ctu13_timestamp(value: &str) -> Option<DateTime<Utc>> {
 }
 
 /// `Label` pole ma tvar `flow=From-Botnet-V54-UDP-DNS` / `flow=Background` /
-/// `flow=Normal-V54-HTTP...`. `GroundTruthLabel::is_malicious()` (z Deliverable 1,
-/// sdilene pres vsechny zdroje) kontroluje presne `label == "Malicious"` - proto se
-/// tu CTU-13 trikategorie (Botnet/Background/Normal) normalizuje na binarni
-/// `label` ("Malicious"/"Benign") pro kompatibilitu se spolecnym rozhranim, a
-/// puvodni CTU-13-specificka kategorie (vcetne rozlisani Background vs. Normal,
-/// viz modulova dokumentace k jejich vyznamu) zustava v `detailed_label`.
+/// `flow=Normal-V54-HTTP...`. CTU-13 trikategorie (Botnet/Background/Normal) se
+/// mapuje na `label` se TREMI hodnotami ("Malicious"/"Benign"/"Unknown" -
+/// `GroundTruthLabel::is_malicious()`/`is_unknown()`), ne na binarni - viz oprava
+/// v modulove dokumentaci vyse. Puvodni CTU-13-specificka kategorie zustava v
+/// `detailed_label`.
 fn extract_label(raw: &str) -> GroundTruthLabel {
     let detailed = raw
         .trim()
         .strip_prefix("flow=")
         .unwrap_or(raw.trim())
         .to_string();
-    let label = if detailed.to_ascii_lowercase().contains("botnet") {
+    let lower = detailed.to_ascii_lowercase();
+    let label = if lower.contains("botnet") {
         "Malicious".to_string()
+    } else if lower.contains("background") {
+        // Neoverenej provoz (CTU-13 metodologie) - NE potvrzene benigni. Viz
+        // modulova dokumentace k opravě 29.10.2026.
+        "Unknown".to_string()
     } else {
         "Benign".to_string()
     };
@@ -181,16 +190,18 @@ mod tests {
 2011/08/15 17:13:40.513280,75.502029,tcp,74.125.218.80,80,  <?>,147.32.86.187,54142,FPA_FA,0,0,6491,7424261,7328903,flow=Normal-V54-HTTP\n";
 
     #[test]
-    fn normalizes_three_ctu13_categories_to_binary_label_with_detail_preserved() {
+    fn normalizes_three_ctu13_categories_to_ternary_label_with_detail_preserved() {
         let file = write_sample(SAMPLE);
         let dataset = Ctu13Source.load(file.path()).expect("parse ctu13 sample");
 
         assert_eq!(dataset.observations.len(), 3);
         assert_eq!(dataset.labels.len(), 3);
 
-        // Background: ne-malicious (zjednoduseni, viz modulova dokumentace), detail zachovan.
-        assert_eq!(dataset.labels[0].label, "Benign");
+        // Background: NEOVERENY provoz, ne potvrzene benigni - viz oprava 29.10.2026
+        // v modulove dokumentaci. `is_unknown()`, ne `label=="Benign"`.
+        assert_eq!(dataset.labels[0].label, "Unknown");
         assert!(!dataset.labels[0].is_malicious());
+        assert!(dataset.labels[0].is_unknown());
         assert_eq!(dataset.labels[0].detailed_label, "Background");
 
         assert_eq!(dataset.labels[1].label, "Malicious");
@@ -199,6 +210,7 @@ mod tests {
 
         assert_eq!(dataset.labels[2].label, "Benign");
         assert!(!dataset.labels[2].is_malicious());
+        assert!(!dataset.labels[2].is_unknown());
         assert_eq!(dataset.labels[2].detailed_label, "Normal-V54-HTTP");
     }
 
