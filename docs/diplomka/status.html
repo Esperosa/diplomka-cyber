@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 15:45</strong> ·
-  commit <code>5190714</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 15:41</strong> ·
+  commit <code>95444fe</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="dalsi-postup-master-plan.md">master plán</a>
 </div>
@@ -155,12 +155,13 @@
 </details>
 
 <details class="stage">
-  <summary><span class="badge badge-green">hotovo a prokázáno (H3)</span> <span class="stage-title">Active verification</span> <span class="stage-sub">reálný Docker lab, VOI vs. blanket</span></summary>
+  <summary><span class="badge badge-green">hotovo a prokázáno (H1, H3)</span> <span class="stage-title">Active verification</span> <span class="stage-sub">reálný Docker lab, VOI vs. blanket, Zeek passive capture</span></summary>
   <div class="stage-body">
     <ul class="items">
       <li><span class="badge badge-green mini">hotovo</span> Juice Shop lab, reálný nuclei nález (prometheus-metrics-exposed)</li>
       <li><span class="badge badge-green mini">hotovo</span> multiservice lab (4 cíle) — <code class="file">src/lab.rs</code></li>
       <li><span class="badge badge-green mini">hotovo</span> H3 měřeno: VOI 16× méně kontrol, 2/3 nálezů správně</li>
+      <li><span class="badge badge-green mini">hotovo</span> H1 doslovně měřeno se skutečným Zeek 9.0.1 (tcpdump sidecar + offline analýza) — pasivní 3 findings, pasivní+aktivní 5</li>
     </ul>
   </div>
 </details>
@@ -212,8 +213,8 @@
   <tr><th>Hypotéza</th><th>Stav</th><th>Co je skutečně prokázáno</th></tr>
   <tr>
     <td><strong>H1</strong><br><span style="color:var(--muted)">pasivní+aktivní &gt; pasivní</span></td>
-    <td><span class="badge badge-yellow">náhradní měření</span></td>
-    <td>Lehký aktivní sken vs. hlubší aktivní ověření — hlubší najde věci, co lehký nemůže. H1 v doslovném znění (reálná pasivní telemetrie) zatím nezměřena.</td>
+    <td><span class="badge badge-green">prokázáno</span></td>
+    <td>Skutečný Zeek 9.0.1 (tcpdump sidecar, offline analýza) — pasivní-only 3 findings, pasivní+aktivní 5. Exponovaný <code class="file">/metrics</code> vzniká jen v kombinované variantě. 1 lab cíl, krátký capture.</td>
   </tr>
   <tr>
     <td><strong>H2</strong><br><span style="color:var(--muted)">graph fusion s korekcí zdrojů</span></td>
@@ -260,13 +261,18 @@
     <div class="sub">16× méně, 2 ze 3 nálezů správně</div>
   </div>
   <div class="num-card">
+    <div class="label">H1 reálný Zeek, findings</div>
+    <div class="value">3 → 5</div>
+    <div class="sub">pasivní-only vs. pasivní+aktivní, 18 connections</div>
+  </div>
+  <div class="num-card">
     <div class="label">Testy (lib, bez broker/lab)</div>
     <div class="value">81 / 81</div>
     <div class="sub">0 selhání</div>
   </div>
   <div class="num-card">
     <div class="label">Lab testy (Docker)</div>
-    <div class="value">7 / 7</div>
+    <div class="value">8 / 8</div>
     <div class="sub">0 selhání</div>
   </div>
 </div>
