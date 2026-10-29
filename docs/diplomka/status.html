@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 21:05</strong> ·
-  commit <code>31cf495</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 21:22</strong> ·
+  commit <code>9a26589</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -223,13 +223,15 @@
 </details>
 
 <details class="stage" open>
-  <summary><span class="badge badge-yellow">fáze 1 (architektura) — probíhá</span> <span class="stage-title">Pipeline do lib beze změny chování</span> <span class="stage-sub">mechanický refaktor, golden-snapshot ověřuje každý krok</span></summary>
+  <summary><span class="badge badge-green">fáze 1 (architektura) — hotovo</span> <span class="stage-title">Pipeline do lib beze změny chování</span> <span class="stage-sub">mechanický refaktor, golden-snapshot ověřil každý krok</span></summary>
   <div class="stage-body">
     <ul class="items">
       <li><span class="badge badge-green mini">hotovo</span> <code class="file">Workspace::save_run</code>: 21 pozičních parametrů → <code class="file">RunArtifacts</code> struct</li>
       <li><span class="badge badge-green mini">hotovo</span> <code class="file">report::build_source_metadata</code>: 21 pozičních parametrů → <code class="file">SourceInputs</code> struct</li>
-      <li><span class="badge badge-gray mini">zbývá</span> přesun <code class="file">run_pipeline</code> (~1010 řádků) do <code class="file">src/pipeline/mod.rs</code> jako <code class="file">Pipeline::run(&amp;PipelineConfig)</code></li>
-      <li><span class="badge badge-gray mini">zbývá</span> sjednocení trojího přepočtu <code class="file">summary</code> do jedné funkce</li>
+      <li><span class="badge badge-green mini">hotovo</span> <code class="file">run_pipeline</code> + <code class="file">BehArgs</code> + pomocný cluster (~1420 řádků) přesunuty do <code class="file">src/pipeline/mod.rs</code> — <code class="file">main.rs</code> kleslo z 3195 na 1782 řádků</li>
+      <li><span class="badge badge-green mini">hotovo</span> sjednocen trojí doslovně opsaný přepočet <code class="file">monitoring_lanes_total</code>/<code class="file">live_lanes_total</code>/<code class="file">audit_lanes_total</code> do jedné funkce</li>
+      <li><span class="badge badge-gray mini">vědomě odloženo</span> druhé duplicitní zapisování <code class="file">mas_parallelism_ratio</code>/atd. (2 různé vzorce, ne doslovný dedup — potřebuje vlastní ověření)</li>
+      <li><span class="badge badge-gray mini">další krok</span> Fáze 2–6: traity pro detektory/findingy → stínové aditivní zapojení → přepínače → změna výchozího chování jen na základě měření</li>
     </ul>
   </div>
 </details>
