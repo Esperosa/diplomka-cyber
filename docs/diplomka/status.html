@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 15:41</strong> ·
-  commit <code>95444fe</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 15:52</strong> ·
+  commit <code>b491a62</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="dalsi-postup-master-plan.md">master plán</a>
 </div>
@@ -114,11 +114,12 @@
 </details>
 
 <details class="stage">
-  <summary><span class="badge badge-yellow">postaveno, neověřeno na reálu</span> <span class="stage-title">Identita</span> <span class="stage-sub">MAC-aware cross-run resolver</span></summary>
+  <summary><span class="badge badge-green">hotovo a testováno na reálné síti</span> <span class="stage-title">Identita</span> <span class="stage-sub">MAC-aware cross-run resolver</span></summary>
   <div class="stage-body">
     <ul class="items">
       <li><span class="badge badge-green mini">hotovo</span> DHCP renewal, NAT/swap jako Ambiguous, no-MAC fallback — <code class="file">src/identity.rs</code></li>
-      <li><span class="badge badge-red mini">chybí</span> validace na reálných vícedenních datech (jen syntetické sekvence)</li>
+      <li><span class="badge badge-green mini">hotovo</span> reálná síť (Docker bridge, skutečné ARP objevování) — <code class="file">src/identity_lab.rs</code></li>
+      <li><span class="badge badge-yellow mini">omezeno</span> jen krátký časový úsek, 1 plochá podsíť — ne vícedenní longitudinal capture</li>
     </ul>
   </div>
 </details>
@@ -272,8 +273,8 @@
   </div>
   <div class="num-card">
     <div class="label">Lab testy (Docker)</div>
-    <div class="value">8 / 8</div>
-    <div class="sub">0 selhání</div>
+    <div class="value">9 / 9</div>
+    <div class="sub">0 selhání (8 lab:: + 1 identity_lab::)</div>
   </div>
 </div>
 
