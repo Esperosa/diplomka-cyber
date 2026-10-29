@@ -42,3 +42,21 @@
 - **Fáze 2 (po Fázi 1, větší investice)**: Postgres migrace pro skutečný multi-host H5; re-validace ablací B/C/E s H2 fúzí na dual-sensor datech.
 - **Fáze 3 (odloženo, rozhodnuto 29.10.2026)**: firewall/DNS/IPS/SOAR zůstává P2/P3 podle skeptika a návrhu samotného — uživatel potvrdil tuhle volbu po předložení obou stran. MVP sekvence od Opus/pragmatika (SOAR→firewall TTL-sety→DNS RPZ→IPS) zůstává zapsaná výše pro budoucí referenci, až bude reálné nasazení/zákazník.
 - **Fáze 4 (trigger-based, ne kalendářní)**: multi-tenant (2. zákazník), HA/DR (enforcement live v produkci), supply-chain hardening (první procurement security review).
+
+## Dodatek (29.10.2026): zapojení ověřeného jádra do produkční cesty + "framework style"
+
+**Impuls**: uživatel se zeptal, jestli je "core hotový a framework style, snadno rozšiřitelný". Ověřeno přímo v kódu (ne odhadem): produkční pipeline (`run_pipeline` v `main.rs`) stále běží na pre-diplomkové logice. `correlation_v2.rs`/`fusion.rs`/`hypothesis.rs`/`verification_planner.rs`/`identity.rs` jsou vědecky ověřené, ale volané jen z `eval/`/`lab.rs`, ne z produkční cesty. Architektonicky existuje jediný skutečný runtime extension point v celém crate (`vuln::VulnerabilityProvider`) — nový typ detekce dnes zasahuje až 10 souborů, nový senzor až 8.
+
+**3-agentní kolo (Opus comprehensive + pragmatik + skeptik)** nezávisle ověřilo kód a došlo k těmto závěrům:
+
+1. **`correlation_v2` NENÍ náhrada `correlate_events`** — je to alternativa k `passive::anomaly::detect_connection_anomalies` (jiný vstup/výstup). Přepnutí produkční cesty na B/C/D jako VÝCHOZÍ chování by bylo podle vlastních naměřených čísel diplomky **zhoršení** (ablace B: F1 0,306→0,124; C dává FP na NTP fan-outu; D jen "safety net" bez zlepšení přesnosti) a rozbilo by `tests/mas_deep.rs` (v2 vynechává z-score detektor, test ho vyžaduje).
+2. **Skeptik**: dnešní (tehdy) schválený plán výše o workspace splitu/pluginové architektuře vůbec nemluví — je to nová škála práce. Bezpečné a bez rizika regrese je zapojit **stínově/aditivně** (nová pole v `RunReport`, žádná změna výchozího rozhodování), ne nahradit výchozí cestu.
+3. **Pragmatik**: nejlevnější skutečný plug-point pro detektory je `passive::load_and_normalize` (ne main.rs), přes malý trait `EventDetector` ve stylu už existujícího `eval::source::ScenarioSource`. `hypothesis`/hodnoty jdou nejlevněji jako nové pole na `RunReport` (konstruuje se na 1 místě), ne na `Finding` (25+ konstrukčních míst).
+
+**Rozhodnutí**: pokračovat podle Opusova fázovaného plánu, začít Fází 0 (bezpečnostní síť), další fáze jen aditivně/za přepínači, výchozí produkční chování se mění JEN tam, kde je to změřeně lepší (dnes nikde kromě zdroj-centrického skóre z Deliverable 28, které ještě nemá funkční rozhodovací mechanismus — Deliverable 29/30).
+
+### Fáze 0 (bezpečnostní síť pro refaktor): HOTOVO (29. 10. 2026)
+
+`tests/golden_snapshot.rs` — golden-snapshot regresní test nad `full_visibility_stack_populates_lanes_and_findings` fixturami (plně deterministický vstup, `data/*.json` + `simulace generuj --seed 7`). Normalizuje volatilní pole (run_id i jako substring, ISO8601 časová razítka, unixová razítka v `event_id`, a — honestně odhalený zdroj nedeterminismu — skutečně naměřené `mas_*`/`runtime_ms`/`parallelism_ratio` hodnoty z reálného `thread::scope` běhu) a porovná zbytek proti committed `tests/golden/full_visibility_stack.json`. Ověřeno: stabilní přes 3 opakované běhy beze změny; negativní kontrola (dočasná změna `--nazev`) test spolehlivě shodí. Aktualizace po vědomé změně: `BAKULA_UPDATE_GOLDEN=1 cargo test --test golden_snapshot -- --ignored`.
+
+Další fáze (1–6, dle Opusova plánu: pipeline do lib beze změny chování → `ConnectionDetector`/`FindingKindSpec` traity se stejným chováním → stínové aditivní zapojení hypotéz/identity/plannneru/community_id → přepínače s výchozím "staré chování" → změna výchozího chování jen na základě měření → volitelný workspace split) jsou navazující, samostatné kroky.

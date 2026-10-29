@@ -1,0 +1,2866 @@
+{
+  "diff": null,
+  "findings": [
+    {
+      "confidence": "low",
+      "evidence": [
+        "service_key=192.168.56.30/host-only",
+        "service_name=host-only",
+        "product=Korelace pouze na uroven hosta | version=- | port_state=n/a",
+        "zeek | connection_timeout_burst | ip-only | Spojeni vykazuje timeout/retry tlak (ratio 0.67, timeout_like 2, celkem 3)."
+      ],
+      "finding_id": "finding:connection_timeout_burst:192.168.56.30:192.168.56.30/host-only",
+      "finding_type": "connection_timeout_burst",
+      "host_key": "192.168.56.30",
+      "rationale": "Pasivní vrstva zachytila opakované timeouty/retry stavy, které často doprovází přetížení, nestabilní cestu nebo agresivní skenovací vzor.",
+      "recommendation": "Prověřit limity služby, fronty, firewall a transportní retry chování. Pokud jde o útok nebo burst sken, dočasně aplikovat přísnější rate limit a segmentaci.",
+      "service_key": "192.168.56.30/host-only",
+      "severity": "medium",
+      "title": "Na službě 192.168.56.30/host-only je zvýšený výskyt timeout/retry provozu"
+    },
+    {
+      "confidence": "low",
+      "evidence": [
+        "unexpected_traffic | ip-only | Pozorovan provoz na port 3306, ktery neni v aktivnim inventari jako otevrena sluzba.",
+        "connection_timeout_burst | ip-only | Spojeni vykazuje timeout/retry tlak (ratio 0.67, timeout_like 2, celkem 3).",
+        "packet_rate_spike | ip-only | Pozorovan prudky narust rychlosti paketu (max_pps 6833, max_bps 3333333, timeout_ratio 0.67).",
+        "service_overload_risk | ip-only | Kombinace vysokych rychlosti, retry a zatizeni ukazuje na riziko pretizeni sluzby (votes 2, max_pps 6833)."
+      ],
+      "finding_id": "finding:correlation_uncertainty:192.168.56.30:192.168.56.30/host-only",
+      "finding_type": "correlation_uncertainty",
+      "host_key": "192.168.56.30",
+      "rationale": "Část událostí byla přiřazena pouze na úrovni hostu nebo zůstala neúplně mapována; to je z metodického hlediska korektní, ale snižuje přesnost závěru.",
+      "recommendation": "Rozšířit viditelnost senzoru, doplnit portový kontext nebo kurátorované korelační výjimky tam, kde je vazba opakovaně nejednoznačná.",
+      "service_key": "192.168.56.30/host-only",
+      "severity": "low",
+      "title": "Korelace pro 192.168.56.30/host-only obsahuje události s nižší jistotou"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "host_ip=192.168.56.20",
+        "port=22",
+        "oid=1.3.6.1.4.1.25623.1.0.108000"
+      ],
+      "finding_id": "finding:greenbone:gb-001",
+      "finding_type": "greenbone_finding",
+      "host_key": "192.168.56.20",
+      "rationale": "Credentialed audit indicates outdated OpenSSH package.",
+      "recommendation": "Update OpenSSH to supported build and verify ciphers.",
+      "service_key": null,
+      "severity": "high",
+      "title": "OpenSSH outdated version"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "service_key=192.168.56.10/tcp/443",
+        "cpe=cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:* | method=nmap | confidence=High",
+        "CVE-2021-41773 | CVSS 3.1 7.5",
+        "CVE-2021-42013 | CVSS 3.1 9.8"
+      ],
+      "finding_id": "finding:high_risk_cve_exposure:192.168.56.10:192.168.56.10/tcp/443",
+      "finding_type": "high_risk_cve_exposure",
+      "host_key": "192.168.56.10",
+      "rationale": "Nejvyšší nalezené CVSS je 9.8; výstup slouží jako podklad pro priorizaci a další ověření.",
+      "recommendation": "Ověřit skutečnou verzi a konfiguraci služby proti vendor advisory, naplánovat patch nebo kompenzační opatření a případně omezit síťovou expozici.",
+      "service_key": "192.168.56.10/tcp/443",
+      "severity": "high",
+      "title": "Služba 192.168.56.10/tcp/443 obsahuje zranitelnosti s vysokou prioritou"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "service_key=192.168.56.10/tcp/80",
+        "cpe=cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:* | method=nmap | confidence=High",
+        "CVE-2021-41773 | CVSS 3.1 7.5",
+        "CVE-2021-42013 | CVSS 3.1 9.8"
+      ],
+      "finding_id": "finding:high_risk_cve_exposure:192.168.56.10:192.168.56.10/tcp/80",
+      "finding_type": "high_risk_cve_exposure",
+      "host_key": "192.168.56.10",
+      "rationale": "Nejvyšší nalezené CVSS je 9.8; výstup slouží jako podklad pro priorizaci a další ověření.",
+      "recommendation": "Ověřit skutečnou verzi a konfiguraci služby proti vendor advisory, naplánovat patch nebo kompenzační opatření a případně omezit síťovou expozici.",
+      "service_key": "192.168.56.10/tcp/80",
+      "severity": "high",
+      "title": "Služba 192.168.56.10/tcp/80 obsahuje zranitelnosti s vysokou prioritou"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "service_key=192.168.56.30/tcp/22",
+        "cpe=cpe:2.3:a:openbsd:openssh:8.9:*:*:*:*:*:*:* | method=nmap | confidence=High",
+        "CVE-2023-38408 | CVSS 3.1 8.8"
+      ],
+      "finding_id": "finding:high_risk_cve_exposure:192.168.56.30:192.168.56.30/tcp/22",
+      "finding_type": "high_risk_cve_exposure",
+      "host_key": "192.168.56.30",
+      "rationale": "Nejvyšší nalezené CVSS je 8.8; výstup slouží jako podklad pro priorizaci a další ověření.",
+      "recommendation": "Ověřit skutečnou verzi a konfiguraci služby proti vendor advisory, naplánovat patch nebo kompenzační opatření a případně omezit síťovou expozici.",
+      "service_key": "192.168.56.30/tcp/22",
+      "severity": "medium",
+      "title": "Služba 192.168.56.30/tcp/22 obsahuje zranitelnosti s vysokou prioritou"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "service_key=192.168.56.10/tcp/80",
+        "service_name=http",
+        "product=Apache httpd | version=2.4.49 | port_state=open",
+        "suricata | http_basic_without_tls | ip+port | HTTP Basic credentials over plaintext channel",
+        "zeek | http_basic_without_tls | ip+port | HTTP pozorovani: /login"
+      ],
+      "finding_id": "finding:http_basic_without_tls:192.168.56.10:192.168.56.10/tcp/80",
+      "finding_type": "http_basic_without_tls",
+      "host_key": "192.168.56.10",
+      "rationale": "Použití HTTP Basic bez šifrovaného kanálu vystavuje přihlašovací údaje odposlechu.",
+      "recommendation": "Vynutit TLS, odstranit Basic autentizaci na HTTP endpointu nebo ji přesunout za reverzní proxy s TLS terminací a silnějším ověřením.",
+      "service_key": "192.168.56.10/tcp/80",
+      "severity": "high",
+      "title": "Na službě 192.168.56.10/tcp/80 byla pozorována autentizace bez TLS"
+    },
+    {
+      "confidence": "medium",
+      "evidence": [
+        "https://attack.mitre.org/techniques/T1040/",
+        "status=analytical-context"
+      ],
+      "finding_id": "finding:intel:intel:mitre:T1040",
+      "finding_type": "intel:mitre-att&ck-context",
+      "host_key": null,
+      "rationale": "Shoda z reputačního nebo IOC feedu sama o sobě nenahrazuje lokální důkaz, ale zvyšuje prioritu ručního ověření a doplnění kontextu.",
+      "recommendation": "Potvrdit indikátor proti lokálním logům, flow telemetrii nebo host-level artefaktům a zachovat oddělení mezi externí reputací a doloženým lokálním stavem.",
+      "service_key": null,
+      "severity": "low",
+      "title": "Externí intel vrstva vrátila shodu pro T1040"
+    },
+    {
+      "confidence": "medium",
+      "evidence": [
+        "https://attack.mitre.org/techniques/T1049/",
+        "status=analytical-context"
+      ],
+      "finding_id": "finding:intel:intel:mitre:T1049",
+      "finding_type": "intel:mitre-att&ck-context",
+      "host_key": null,
+      "rationale": "Shoda z reputačního nebo IOC feedu sama o sobě nenahrazuje lokální důkaz, ale zvyšuje prioritu ručního ověření a doplnění kontextu.",
+      "recommendation": "Potvrdit indikátor proti lokálním logům, flow telemetrii nebo host-level artefaktům a zachovat oddělení mezi externí reputací a doloženým lokálním stavem.",
+      "service_key": null,
+      "severity": "low",
+      "title": "Externí intel vrstva vrátila shodu pro T1049"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "https://alpaca-attack.com/",
+        "https://lists.debian.org/debian-lts-announce/2022/11/msg00031.html",
+        "https://bugzilla.redhat.com/show_bug.cgi?id=1975623",
+        "status=referenced"
+      ],
+      "finding_id": "finding:intel:intel:osv:CVE-2021-3618",
+      "finding_type": "intel:osv.dev",
+      "host_key": null,
+      "rationale": "Shoda z reputačního nebo IOC feedu sama o sobě nenahrazuje lokální důkaz, ale zvyšuje prioritu ručního ověření a doplnění kontextu.",
+      "recommendation": "Potvrdit indikátor proti lokálním logům, flow telemetrii nebo host-level artefaktům a zachovat oddělení mezi externí reputací a doloženým lokálním stavem.",
+      "service_key": null,
+      "severity": "low",
+      "title": "Externí intel vrstva vrátila shodu pro CVE-2021-3618"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-41773",
+        "http://www.openwall.com/lists/oss-security/2021/10/05/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/4",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/5",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/6",
+        "status=referenced"
+      ],
+      "finding_id": "finding:intel:intel:osv:CVE-2021-41773",
+      "finding_type": "intel:osv.dev",
+      "host_key": null,
+      "rationale": "Shoda z reputačního nebo IOC feedu sama o sobě nenahrazuje lokální důkaz, ale zvyšuje prioritu ručního ověření a doplnění kontextu.",
+      "recommendation": "Potvrdit indikátor proti lokálním logům, flow telemetrii nebo host-level artefaktům a zachovat oddělení mezi externí reputací a doloženým lokálním stavem.",
+      "service_key": null,
+      "severity": "low",
+      "title": "Externí intel vrstva vrátila shodu pro CVE-2021-41773"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-42013",
+        "http://jvn.jp/en/jp/JVN51106450/index.html",
+        "http://packetstormsecurity.com/files/165089/Apache-HTTP-Server-2.4.50-CVE-2021-42013-Exploitation.html",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/3",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/4",
+        "status=referenced"
+      ],
+      "finding_id": "finding:intel:intel:osv:CVE-2021-42013",
+      "finding_type": "intel:osv.dev",
+      "host_key": null,
+      "rationale": "Shoda z reputačního nebo IOC feedu sama o sobě nenahrazuje lokální důkaz, ale zvyšuje prioritu ručního ověření a doplnění kontextu.",
+      "recommendation": "Potvrdit indikátor proti lokálním logům, flow telemetrii nebo host-level artefaktům a zachovat oddělení mezi externí reputací a doloženým lokálním stavem.",
+      "service_key": null,
+      "severity": "low",
+      "title": "Externí intel vrstva vrátila shodu pro CVE-2021-42013"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "http://packetstormsecurity.com/files/173661/OpenSSH-Forwarded-SSH-Agent-Remote-Code-Execution.html",
+        "https://cert-portal.siemens.com/productcert/html/ssa-398330.html",
+        "https://news.ycombinator.com/item?id=36790196",
+        "https://support.apple.com/kb/HT213940",
+        "https://www.openssh.com/security.html",
+        "https://www.openssh.com/txt/release-9.3p2",
+        "https://www.qualys.com/2023/07/19/cve-2023-38408/rce-openssh-forwarded-ssh-agent.txt",
+        "https://www.vicarius.io/vsociety/posts/exploring-opensshs-agent-forwarding-rce-cve-2023-38408",
+        "status=referenced"
+      ],
+      "finding_id": "finding:intel:intel:osv:CVE-2023-38408",
+      "finding_type": "intel:osv.dev",
+      "host_key": null,
+      "rationale": "Shoda z reputačního nebo IOC feedu sama o sobě nenahrazuje lokální důkaz, ale zvyšuje prioritu ručního ověření a doplnění kontextu.",
+      "recommendation": "Potvrdit indikátor proti lokálním logům, flow telemetrii nebo host-level artefaktům a zachovat oddělení mezi externí reputací a doloženým lokálním stavem.",
+      "service_key": null,
+      "severity": "low",
+      "title": "Externí intel vrstva vrátila shodu pro CVE-2023-38408"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "device=edge-rtr01",
+        "ip=192.168.56.1"
+      ],
+      "finding_id": "finding:napalm:napalm-001",
+      "finding_type": "napalm_config_issue",
+      "host_key": "192.168.56.1",
+      "rationale": "Configuration snapshot does not contain expected NTP servers.",
+      "recommendation": "Define approved NTP servers and save the running config.",
+      "service_key": null,
+      "severity": "medium",
+      "title": "NTP servers missing"
+    },
+    {
+      "confidence": "medium",
+      "evidence": [
+        "src_ip=192.168.56.30",
+        "dst_ip=8.8.8.8",
+        "dst_port=53",
+        "protocol=udp",
+        "bytes=2048",
+        "packets=4",
+        "pps=0",
+        "bps=0",
+        "timeouts=0",
+        "retransmits=0",
+        "dropped_packets=0",
+        "category=-",
+        "url=-"
+      ],
+      "finding_id": "finding:netflow-ipfix:flow:192.168.56.30:8.8.8.8:53",
+      "finding_type": "external_flow_observed",
+      "host_key": "192.168.56.30",
+      "rationale": "NetFlow/IPFIX nebo ntopng zachytil komunikaci do veřejné sítě. Výstup sám o sobě neznamená kompromitaci, ale doplňuje provozní kontext a kandidáty k ověření.",
+      "recommendation": "Prověřit, zda jde o očekávanou komunikaci, případně doplnit reputační a URL intel vrstvu a zachovat auditní stopu pro následné vyšetření.",
+      "service_key": null,
+      "severity": "low",
+      "title": "Live vrstva zachytila externí tok 192.168.56.30 -> 8.8.8.8"
+    },
+    {
+      "confidence": "medium",
+      "evidence": [
+        "src_ip=192.168.56.40",
+        "dst_ip=1.1.1.1",
+        "dst_port=443",
+        "protocol=tcp",
+        "bytes=4096",
+        "packets=8",
+        "pps=0",
+        "bps=0",
+        "timeouts=0",
+        "retransmits=0",
+        "dropped_packets=0",
+        "category=-",
+        "url=-"
+      ],
+      "finding_id": "finding:netflow-ipfix:flow:192.168.56.40:1.1.1.1:443",
+      "finding_type": "external_flow_observed",
+      "host_key": null,
+      "rationale": "NetFlow/IPFIX nebo ntopng zachytil komunikaci do veřejné sítě. Výstup sám o sobě neznamená kompromitaci, ale doplňuje provozní kontext a kandidáty k ověření.",
+      "recommendation": "Prověřit, zda jde o očekávanou komunikaci, případně doplnit reputační a URL intel vrstvu a zachovat auditní stopu pro následné vyšetření.",
+      "service_key": null,
+      "severity": "low",
+      "title": "Live vrstva zachytila externí tok 192.168.56.40 -> 1.1.1.1"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "device=branch-fw01",
+        "ip=192.168.56.254"
+      ],
+      "finding_id": "finding:netmiko:netmiko-001",
+      "finding_type": "netmiko_config_issue",
+      "host_key": "192.168.56.254",
+      "rationale": "Configuration export shows admin HTTPS exposed on WAN.",
+      "recommendation": "Restrict administration to management segment or VPN.",
+      "service_key": null,
+      "severity": "high",
+      "title": "WAN admin access exposed"
+    },
+    {
+      "confidence": "medium",
+      "evidence": [
+        "src_ip=192.168.56.10",
+        "dst_ip=93.184.216.34",
+        "dst_port=443",
+        "protocol=tcp",
+        "bytes=120034",
+        "packets=88",
+        "pps=0",
+        "bps=0",
+        "timeouts=0",
+        "retransmits=0",
+        "dropped_packets=0",
+        "category=-",
+        "url=https://example.com/update"
+      ],
+      "finding_id": "finding:ntopng:flow:192.168.56.10:93.184.216.34:443",
+      "finding_type": "external_flow_observed",
+      "host_key": "192.168.56.10",
+      "rationale": "NetFlow/IPFIX nebo ntopng zachytil komunikaci do veřejné sítě. Výstup sám o sobě neznamená kompromitaci, ale doplňuje provozní kontext a kandidáty k ověření.",
+      "recommendation": "Prověřit, zda jde o očekávanou komunikaci, případně doplnit reputační a URL intel vrstvu a zachovat auditní stopu pro následné vyšetření.",
+      "service_key": null,
+      "severity": "low",
+      "title": "Live vrstva zachytila externí tok 192.168.56.10 -> 93.184.216.34"
+    },
+    {
+      "confidence": "medium",
+      "evidence": [
+        "src_ip=192.168.56.20",
+        "dst_ip=45.61.49.78",
+        "dst_port=80",
+        "protocol=tcp",
+        "bytes=8096",
+        "packets=16",
+        "pps=0",
+        "bps=0",
+        "timeouts=0",
+        "retransmits=0",
+        "dropped_packets=0",
+        "category=-",
+        "url=http://45.61.49.78/razor/r4z0r.mips"
+      ],
+      "finding_id": "finding:ntopng:flow:192.168.56.20:45.61.49.78:80",
+      "finding_type": "external_flow_observed",
+      "host_key": "192.168.56.20",
+      "rationale": "NetFlow/IPFIX nebo ntopng zachytil komunikaci do veřejné sítě. Výstup sám o sobě neznamená kompromitaci, ale doplňuje provozní kontext a kandidáty k ověření.",
+      "recommendation": "Prověřit, zda jde o očekávanou komunikaci, případně doplnit reputační a URL intel vrstvu a zachovat auditní stopu pro následné vyšetření.",
+      "service_key": null,
+      "severity": "low",
+      "title": "Live vrstva zachytila externí tok 192.168.56.20 -> 45.61.49.78"
+    },
+    {
+      "confidence": "low",
+      "evidence": [
+        "service_key=192.168.56.30/host-only",
+        "service_name=host-only",
+        "product=Korelace pouze na uroven hosta | version=- | port_state=n/a",
+        "zeek | packet_rate_spike | ip-only | Pozorovan prudky narust rychlosti paketu (max_pps 6833, max_bps 3333333, timeout_ratio 0.67)."
+      ],
+      "finding_id": "finding:packet_rate_spike:192.168.56.30:192.168.56.30/host-only",
+      "finding_type": "packet_rate_spike",
+      "host_key": "192.168.56.30",
+      "rationale": "Detektor zaznamenal neobvykle vysokou packet-rate vůči běžnému průběhu služby; to je praktický signál rizika degradace a nedostupnosti.",
+      "recommendation": "Doplnit limitaci pps/bps, ověřit capacity plán a připravit burst-profil obrany (dočasný shaper, ACL nebo agresivnější WAF/IPS režim).",
+      "service_key": "192.168.56.30/host-only",
+      "severity": "medium",
+      "title": "Na službě 192.168.56.30/host-only byla detekována špička rychlosti paketů"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "service_key=192.168.56.20/tcp/21",
+        "service_name=ftp",
+        "product=vsftpd | version=3.0.3 | port_state=open"
+      ],
+      "finding_id": "finding:plaintext_management_protocol:192.168.56.20:192.168.56.20/tcp/21",
+      "finding_type": "plaintext_management_protocol",
+      "host_key": "192.168.56.20",
+      "rationale": "FTP přenáší řídicí kanál a často i přihlašovací údaje bez šifrování. I když nejde vždy o správu systému, pořád jde o slabý přístupový kanál.",
+      "recommendation": "Přesunout přenos na SFTP nebo FTPS, omezit port 21 jen na nutné zdroje a ověřit, zda se přes službu nepřenáší citlivé údaje.",
+      "service_key": "192.168.56.20/tcp/21",
+      "severity": "medium",
+      "title": "FTP na službě 192.168.56.20/tcp/21 nepoužívá šifrovaný přenos"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "service_key=192.168.56.20/tcp/23",
+        "service_name=telnet",
+        "product=BusyBox telnetd | version=1.36.1 | port_state=open",
+        "suricata | plaintext_protocol | ip+port | TELNET plaintext management traffic",
+        "zeek | plaintext_protocol | ip+port | Telnet management session observed"
+      ],
+      "finding_id": "finding:plaintext_management_protocol:192.168.56.20:192.168.56.20/tcp/23",
+      "finding_type": "plaintext_management_protocol",
+      "host_key": "192.168.56.20",
+      "rationale": "Telnet přenáší přihlašovací údaje i správcovské příkazy bez šifrování, takže je v běžné síti citlivý na odposlech a převzetí relace.",
+      "recommendation": "Nahradit Telnet za SSH, zablokovat port 23 mimo nezbytný správcovský segment a ověřit, zda služba není jen zbytková nebo testovací.",
+      "service_key": "192.168.56.20/tcp/23",
+      "severity": "high",
+      "title": "Telnet na službě 192.168.56.20/tcp/23 nepoužívá šifrovaný přenos"
+    },
+    {
+      "confidence": "high",
+      "evidence": [
+        "device=branch-sw01",
+        "ip=192.168.56.3"
+      ],
+      "finding_id": "finding:scrapli:scrapli-001",
+      "finding_type": "scrapli_config_issue",
+      "host_key": "192.168.56.3",
+      "rationale": "Interface Gi1/0/44 remains enabled without expected access policy.",
+      "recommendation": "Shutdown unused port or apply standard access edge template.",
+      "service_key": null,
+      "severity": "low",
+      "title": "Unused access port left enabled"
+    },
+    {
+      "confidence": "low",
+      "evidence": [
+        "service_key=192.168.56.30/host-only",
+        "service_name=host-only",
+        "product=Korelace pouze na uroven hosta | version=- | port_state=n/a",
+        "zeek | service_overload_risk | ip-only | Kombinace vysokych rychlosti, retry a zatizeni ukazuje na riziko pretizeni sluzby (votes 2, max_pps 6833)."
+      ],
+      "finding_id": "finding:service_overload_risk:192.168.56.30:192.168.56.30/host-only",
+      "finding_type": "service_overload_risk",
+      "host_key": "192.168.56.30",
+      "rationale": "Kombinace timeoutů, rate spike a provozního tlaku indikuje, že služba může být na hraně kapacity nebo pod aktivním tlakem.",
+      "recommendation": "Aktivovat agresivnější ochranu: krátkodobý rate-limit, přísnější ACL/WAF pravidla, priorizace provozu a audit kapacitního stropu.",
+      "service_key": "192.168.56.30/host-only",
+      "severity": "high",
+      "title": "Služba 192.168.56.30/host-only vykazuje riziko přetížení a degradace"
+    },
+    {
+      "confidence": "low",
+      "evidence": [
+        "service_key=192.168.56.30/host-only",
+        "service_name=host-only",
+        "product=Korelace pouze na uroven hosta | version=- | port_state=n/a",
+        "zeek | unexpected_traffic | ip-only | Pozorovan provoz na port 3306, ktery neni v aktivnim inventari jako otevrena sluzba."
+      ],
+      "finding_id": "finding:unexpected_traffic:192.168.56.30:192.168.56.30/host-only",
+      "finding_type": "unexpected_traffic",
+      "host_key": "192.168.56.30",
+      "rationale": "Pasivní vrstva zaznamenala komunikaci na port nebo službu, které se nepotvrdily aktivním během; může jít o krátkodobou expozici, mezeru ve viditelnosti nebo chybu korelace.",
+      "recommendation": "Ověřit aktivním opakováním, zda služba nebyla dostupná jen krátce, a prověřit topologii senzoru i pravidla filtrace.",
+      "service_key": "192.168.56.30/host-only",
+      "severity": "low",
+      "title": "Na cíli 192.168.56.30/host-only byl zaznamenán provoz mimo aktivní inventář"
+    },
+    {
+      "confidence": "medium",
+      "evidence": [
+        "rule_id=5712",
+        "src_ip=-",
+        "dst_ip=192.168.56.20",
+        "agent=server-01"
+      ],
+      "finding_id": "finding:wazuh:wz-001",
+      "finding_type": "wazuh_alert",
+      "host_key": "192.168.56.20",
+      "rationale": "Wazuh agentless audit vrátil pravidlový alert nad cílovým systémem nebo jeho konfigurací.",
+      "recommendation": "Prověřit alert proti reálné konfiguraci, potvrdit dopad a zachovat auditní stopu o nápravě.",
+      "service_key": null,
+      "severity": "medium",
+      "title": "Weak SSH configuration detected"
+    }
+  ],
+  "hosts": [
+    {
+      "host_id": "host:192.168.56.10",
+      "host_key": "192.168.56.10",
+      "hostname": "web-frontend",
+      "ip": "192.168.56.10",
+      "mac": null,
+      "services": [
+        {
+          "activeChecks": [],
+          "cpe": [
+            {
+              "confidence": "high",
+              "cpe23Uri": "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
+              "method": "nmap",
+              "note": "Prevzato primo z Nmap XML."
+            }
+          ],
+          "cves": [
+            {
+              "cveId": "CVE-2021-41773",
+              "cvss": {
+                "base_score": 7.5,
+                "severity": "HIGH",
+                "version": "3.1"
+              },
+              "exploit_context": null,
+              "references": [
+                "https://nvd.nist.gov/vuln/detail/CVE-2021-41773"
+              ],
+              "retrieved_at": "<TIMESTAMP>",
+              "source": "demo",
+              "summary": "Path traversal a moznost RCE v Apache HTTP Server 2.4.49."
+            },
+            {
+              "cveId": "CVE-2021-42013",
+              "cvss": {
+                "base_score": 9.8,
+                "severity": "CRITICAL",
+                "version": "3.1"
+              },
+              "exploit_context": null,
+              "references": [
+                "https://nvd.nist.gov/vuln/detail/CVE-2021-42013"
+              ],
+              "retrieved_at": "<TIMESTAMP>",
+              "source": "demo",
+              "summary": "Nedostatecne odstranena chyba po CVE-2021-41773."
+            }
+          ],
+          "events": [
+            {
+              "correlation": {
+                "confidence": "high",
+                "host_id": "host:192.168.56.10",
+                "method": "ip+port",
+                "service_id": "svc:192.168.56.10/tcp/80",
+                "time_window_s": 3600
+              },
+              "event": {
+                "count": 1,
+                "dst_ip": "192.168.56.10",
+                "dst_port": 80,
+                "event_id": "suricata:1002:<EPOCH>",
+                "event_type": "http_basic_without_tls",
+                "message": "HTTP Basic credentials over plaintext channel",
+                "proto": "tcp",
+                "raw_ref": "<TMP>\\zakladni\\suricata\\eve.json",
+                "rule_id": "2100011",
+                "severity": "high",
+                "source": "suricata",
+                "src_ip": "192.168.56.3",
+                "timestamp": "<TIMESTAMP>"
+              }
+            },
+            {
+              "correlation": {
+                "confidence": "high",
+                "host_id": "host:192.168.56.10",
+                "method": "ip+port",
+                "service_id": "svc:192.168.56.10/tcp/80",
+                "time_window_s": 3600
+              },
+              "event": {
+                "count": 1,
+                "dst_ip": "192.168.56.10",
+                "dst_port": 80,
+                "event_id": "zeek:H1:http:<EPOCH>",
+                "event_type": "http_basic_without_tls",
+                "message": "HTTP pozorovani: /login",
+                "proto": "tcp",
+                "raw_ref": "<TMP>\\zakladni\\zeek\\http.log",
+                "rule_id": "heuristika:http",
+                "severity": "high",
+                "source": "zeek",
+                "src_ip": "192.168.56.3",
+                "timestamp": "<TIMESTAMP>"
+              }
+            }
+          ],
+          "inventory": {
+            "confidence": "high",
+            "detection_source": "probed",
+            "extrainfo": null,
+            "product": "Apache httpd",
+            "service_name": "http",
+            "version": "2.4.49"
+          },
+          "port": 80,
+          "port_state": "open",
+          "priorita": "vysoka",
+          "proto": "tcp",
+          "score": 11.27,
+          "service_id": "svc:192.168.56.10/tcp/80",
+          "service_key": "192.168.56.10/tcp/80",
+          "state_reason": "syn-ack",
+          "webProbe": null
+        },
+        {
+          "activeChecks": [],
+          "cpe": [
+            {
+              "confidence": "high",
+              "cpe23Uri": "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
+              "method": "nmap",
+              "note": "Prevzato primo z Nmap XML."
+            }
+          ],
+          "cves": [
+            {
+              "cveId": "CVE-2021-41773",
+              "cvss": {
+                "base_score": 7.5,
+                "severity": "HIGH",
+                "version": "3.1"
+              },
+              "exploit_context": null,
+              "references": [
+                "https://nvd.nist.gov/vuln/detail/CVE-2021-41773"
+              ],
+              "retrieved_at": "<TIMESTAMP>",
+              "source": "demo",
+              "summary": "Path traversal a moznost RCE v Apache HTTP Server 2.4.49."
+            },
+            {
+              "cveId": "CVE-2021-42013",
+              "cvss": {
+                "base_score": 9.8,
+                "severity": "CRITICAL",
+                "version": "3.1"
+              },
+              "exploit_context": null,
+              "references": [
+                "https://nvd.nist.gov/vuln/detail/CVE-2021-42013"
+              ],
+              "retrieved_at": "<TIMESTAMP>",
+              "source": "demo",
+              "summary": "Nedostatecne odstranena chyba po CVE-2021-41773."
+            }
+          ],
+          "events": [],
+          "inventory": {
+            "confidence": "high",
+            "detection_source": "probed",
+            "extrainfo": null,
+            "product": "Apache httpd",
+            "service_name": "https",
+            "version": "2.4.49"
+          },
+          "port": 443,
+          "port_state": "open",
+          "priorita": "vysoka",
+          "proto": "tcp",
+          "score": 9.8,
+          "service_id": "svc:192.168.56.10/tcp/443",
+          "service_key": "192.168.56.10/tcp/443",
+          "state_reason": "syn-ack",
+          "webProbe": null
+        }
+      ],
+      "vendor": null
+    },
+    {
+      "host_id": "host:192.168.56.20",
+      "host_key": "192.168.56.20",
+      "hostname": "admin-gateway",
+      "ip": "192.168.56.20",
+      "mac": null,
+      "services": [
+        {
+          "activeChecks": [],
+          "cpe": [
+            {
+              "confidence": "high",
+              "cpe23Uri": "cpe:2.3:a:vsftpd_project:vsftpd:3.0.3:*:*:*:*:*:*:*",
+              "method": "nmap",
+              "note": "Prevzato primo z Nmap XML."
+            }
+          ],
+          "cves": [
+            {
+              "cveId": "CVE-2021-3618",
+              "cvss": {
+                "base_score": 6.5,
+                "severity": "MEDIUM",
+                "version": "3.1"
+              },
+              "exploit_context": null,
+              "references": [
+                "https://nvd.nist.gov/vuln/detail/CVE-2021-3618"
+              ],
+              "retrieved_at": "<TIMESTAMP>",
+              "source": "demo",
+              "summary": "Problem v pristupovych pravech pri urcite konfiguraci vsftpd."
+            }
+          ],
+          "events": [],
+          "inventory": {
+            "confidence": "high",
+            "detection_source": "probed",
+            "extrainfo": null,
+            "product": "vsftpd",
+            "service_name": "ftp",
+            "version": "3.0.3"
+          },
+          "port": 21,
+          "port_state": "open",
+          "priorita": "stredni",
+          "proto": "tcp",
+          "score": 6.5,
+          "service_id": "svc:192.168.56.20/tcp/21",
+          "service_key": "192.168.56.20/tcp/21",
+          "state_reason": "syn-ack",
+          "webProbe": null
+        },
+        {
+          "activeChecks": [],
+          "cpe": [
+            {
+              "confidence": "medium",
+              "cpe23Uri": "cpe:2.3:a:*:busybox_telnetd:1.36.1:*:*:*:*:*:*:*",
+              "method": "partial",
+              "note": "Heuristicke mapovani z nazvu produktu."
+            }
+          ],
+          "cves": [],
+          "events": [
+            {
+              "correlation": {
+                "confidence": "high",
+                "host_id": "host:192.168.56.20",
+                "method": "ip+port",
+                "service_id": "svc:192.168.56.20/tcp/23",
+                "time_window_s": 3600
+              },
+              "event": {
+                "count": 1,
+                "dst_ip": "192.168.56.20",
+                "dst_port": 23,
+                "event_id": "suricata:1001:<EPOCH>",
+                "event_type": "plaintext_protocol",
+                "message": "TELNET plaintext management traffic",
+                "proto": "tcp",
+                "raw_ref": "<TMP>\\zakladni\\suricata\\eve.json",
+                "rule_id": "2100010",
+                "severity": "medium",
+                "source": "suricata",
+                "src_ip": "192.168.56.2",
+                "timestamp": "<TIMESTAMP>"
+              }
+            },
+            {
+              "correlation": {
+                "confidence": "high",
+                "host_id": "host:192.168.56.20",
+                "method": "ip+port",
+                "service_id": "svc:192.168.56.20/tcp/23",
+                "time_window_s": 3600
+              },
+              "event": {
+                "count": 1,
+                "dst_ip": "192.168.56.20",
+                "dst_port": 23,
+                "event_id": "zeek:C1:<EPOCH>",
+                "event_type": "plaintext_protocol",
+                "message": "Telnet management session observed",
+                "proto": "tcp",
+                "raw_ref": "<TMP>\\zakladni\\zeek\\notice.log",
+                "rule_id": "Plaintext::Telnet",
+                "severity": "medium",
+                "source": "zeek",
+                "src_ip": "192.168.56.2",
+                "timestamp": "<TIMESTAMP>"
+              }
+            }
+          ],
+          "inventory": {
+            "confidence": "medium",
+            "detection_source": "table",
+            "extrainfo": null,
+            "product": "BusyBox telnetd",
+            "service_name": "telnet",
+            "version": "1.36.1"
+          },
+          "port": 23,
+          "port_state": "open",
+          "priorita": "nizka",
+          "proto": "tcp",
+          "score": 0.0,
+          "service_id": "svc:192.168.56.20/tcp/23",
+          "service_key": "192.168.56.20/tcp/23",
+          "state_reason": "syn-ack",
+          "webProbe": null
+        }
+      ],
+      "vendor": null
+    },
+    {
+      "host_id": "host:192.168.56.30",
+      "host_key": "192.168.56.30",
+      "hostname": "fileserver",
+      "ip": "192.168.56.30",
+      "mac": null,
+      "services": [
+        {
+          "activeChecks": [],
+          "cpe": [],
+          "cves": [],
+          "events": [
+            {
+              "correlation": {
+                "confidence": "low",
+                "host_id": "host:192.168.56.30",
+                "method": "ip-only",
+                "service_id": null,
+                "time_window_s": 3600
+              },
+              "event": {
+                "count": 3,
+                "dst_ip": "192.168.56.30",
+                "dst_port": 3306,
+                "event_id": "anomaly:192.168.56.30:tcp:3306:3",
+                "event_type": "unexpected_traffic",
+                "message": "Pozorovan provoz na port 3306, ktery neni v aktivnim inventari jako otevrena sluzba.",
+                "proto": "tcp",
+                "raw_ref": "conn.log",
+                "rule_id": "heuristika:unexpected_traffic",
+                "severity": "low",
+                "source": "zeek",
+                "src_ip": null,
+                "timestamp": "<TIMESTAMP>"
+              }
+            },
+            {
+              "correlation": {
+                "confidence": "low",
+                "host_id": "host:192.168.56.30",
+                "method": "ip-only",
+                "service_id": null,
+                "time_window_s": 3600
+              },
+              "event": {
+                "count": 2,
+                "dst_ip": "192.168.56.30",
+                "dst_port": 3306,
+                "event_id": "anomaly:timeout:192.168.56.30:tcp:3306:2",
+                "event_type": "connection_timeout_burst",
+                "message": "Spojeni vykazuje timeout/retry tlak (ratio 0.67, timeout_like 2, celkem 3).",
+                "proto": "tcp",
+                "raw_ref": "conn.log",
+                "rule_id": "heuristika:timeout-burst",
+                "severity": "high",
+                "source": "zeek",
+                "src_ip": "192.168.56.90",
+                "timestamp": "<TIMESTAMP>"
+              }
+            },
+            {
+              "correlation": {
+                "confidence": "low",
+                "host_id": "host:192.168.56.30",
+                "method": "ip-only",
+                "service_id": null,
+                "time_window_s": 3600
+              },
+              "event": {
+                "count": 3,
+                "dst_ip": "192.168.56.30",
+                "dst_port": 3306,
+                "event_id": "anomaly:rate:192.168.56.30:tcp:3306:6833",
+                "event_type": "packet_rate_spike",
+                "message": "Pozorovan prudky narust rychlosti paketu (max_pps 6833, max_bps 3333333, timeout_ratio 0.67).",
+                "proto": "tcp",
+                "raw_ref": "conn.log",
+                "rule_id": "heuristika:packet-rate-spike",
+                "severity": "high",
+                "source": "zeek",
+                "src_ip": "192.168.56.90",
+                "timestamp": "<TIMESTAMP>"
+              }
+            },
+            {
+              "correlation": {
+                "confidence": "low",
+                "host_id": "host:192.168.56.30",
+                "method": "ip-only",
+                "service_id": null,
+                "time_window_s": 3600
+              },
+              "event": {
+                "count": 3,
+                "dst_ip": "192.168.56.30",
+                "dst_port": 3306,
+                "event_id": "anomaly:overload:192.168.56.30:tcp:3306:2",
+                "event_type": "service_overload_risk",
+                "message": "Kombinace vysokych rychlosti, retry a zatizeni ukazuje na riziko pretizeni sluzby (votes 2, max_pps 6833).",
+                "proto": "tcp",
+                "raw_ref": "conn.log",
+                "rule_id": "heuristika:overload-risk",
+                "severity": "high",
+                "source": "zeek",
+                "src_ip": "192.168.56.90",
+                "timestamp": "<TIMESTAMP>"
+              }
+            }
+          ],
+          "inventory": {
+            "confidence": "low",
+            "detection_source": "correlation",
+            "extrainfo": null,
+            "product": "Korelace pouze na uroven hosta",
+            "service_name": "host-only",
+            "version": null
+          },
+          "port": 0,
+          "port_state": "n/a",
+          "priorita": "nizka",
+          "proto": "host",
+          "score": 0.0,
+          "service_id": "svc:192.168.56.30/host-only",
+          "service_key": "192.168.56.30/host-only",
+          "state_reason": "Kontejner pro host-level udalosti",
+          "webProbe": null
+        },
+        {
+          "activeChecks": [],
+          "cpe": [
+            {
+              "confidence": "high",
+              "cpe23Uri": "cpe:2.3:a:openbsd:openssh:8.9:*:*:*:*:*:*:*",
+              "method": "nmap",
+              "note": "Prevzato primo z Nmap XML."
+            }
+          ],
+          "cves": [
+            {
+              "cveId": "CVE-2023-38408",
+              "cvss": {
+                "base_score": 8.8,
+                "severity": "HIGH",
+                "version": "3.1"
+              },
+              "exploit_context": null,
+              "references": [
+                "https://nvd.nist.gov/vuln/detail/CVE-2023-38408"
+              ],
+              "retrieved_at": "<TIMESTAMP>",
+              "source": "demo",
+              "summary": "Lokalni RCE pres ssh-agent pri urcitych podminkach."
+            }
+          ],
+          "events": [],
+          "inventory": {
+            "confidence": "high",
+            "detection_source": "probed",
+            "extrainfo": null,
+            "product": "OpenSSH",
+            "service_name": "ssh",
+            "version": "8.9"
+          },
+          "port": 22,
+          "port_state": "open",
+          "priorita": "vysoka",
+          "proto": "tcp",
+          "score": 8.8,
+          "service_id": "svc:192.168.56.30/tcp/22",
+          "service_key": "192.168.56.30/tcp/22",
+          "state_reason": "syn-ack",
+          "webProbe": null
+        }
+      ],
+      "vendor": null
+    }
+  ],
+  "intelMatches": [
+    {
+      "confidence": "medium",
+      "indicator": "T1040",
+      "indicator_type": "technique",
+      "linked_host_key": null,
+      "linked_service_key": null,
+      "match_id": "intel:mitre:T1040",
+      "references": [
+        "https://attack.mitre.org/techniques/T1040/"
+      ],
+      "severity": "low",
+      "source": "MITRE ATT&CK Context",
+      "status": "analytical-context",
+      "summary": "T1040 Network Sniffing: Nešifrované přihlášení je potřeba brát jako riziko odposlechu v lokální síti. MITRE technika je tady vysvětlující rámec, ne důkaz, že útok opravdu proběhl."
+    },
+    {
+      "confidence": "medium",
+      "indicator": "T1049",
+      "indicator_type": "technique",
+      "linked_host_key": null,
+      "linked_service_key": null,
+      "match_id": "intel:mitre:T1049",
+      "references": [
+        "https://attack.mitre.org/techniques/T1049/"
+      ],
+      "severity": "low",
+      "source": "MITRE ATT&CK Context",
+      "status": "analytical-context",
+      "summary": "T1049 System Network Connections Discovery: Podezřelý síťový vzorec má smysl ověřit přes spojení, cíle, objem a opakování v čase. ATT&CK záznam slouží jen jako forenzní orientace pro další kontrolu."
+    },
+    {
+      "confidence": "high",
+      "indicator": "CVE-2021-3618",
+      "indicator_type": "cve",
+      "linked_host_key": null,
+      "linked_service_key": null,
+      "match_id": "intel:osv:CVE-2021-3618",
+      "references": [
+        "https://alpaca-attack.com/",
+        "https://lists.debian.org/debian-lts-announce/2022/11/msg00031.html",
+        "https://bugzilla.redhat.com/show_bug.cgi?id=1975623"
+      ],
+      "severity": "low",
+      "source": "OSV.dev",
+      "status": "referenced",
+      "summary": "ALPACA is an application layer protocol content confusion attack, exploiting TLS servers implementing different protocols but using compatible certificates, such as multi-domain or wildcard certificates. A MiTM attacker having access to victim's traffic at the... Aliasy: BIT-nginx-2021-3618, BIT-nginx-gateway-2021-3618."
+    },
+    {
+      "confidence": "high",
+      "indicator": "CVE-2021-41773",
+      "indicator_type": "cve",
+      "linked_host_key": null,
+      "linked_service_key": null,
+      "match_id": "intel:osv:CVE-2021-41773",
+      "references": [
+        "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-41773",
+        "http://www.openwall.com/lists/oss-security/2021/10/05/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/4",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/5",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/6"
+      ],
+      "severity": "low",
+      "source": "OSV.dev",
+      "status": "referenced",
+      "summary": "A flaw was found in a change made to path normalization in Apache HTTP Server 2.4.49. An attacker could use a path traversal attack to map URLs to files outside the directories configured by Alias-like directives. If files outside of these directories are not ... Aliasy: BIT-apache-2021-41773."
+    },
+    {
+      "confidence": "high",
+      "indicator": "CVE-2021-42013",
+      "indicator_type": "cve",
+      "linked_host_key": null,
+      "linked_service_key": null,
+      "match_id": "intel:osv:CVE-2021-42013",
+      "references": [
+        "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-42013",
+        "http://jvn.jp/en/jp/JVN51106450/index.html",
+        "http://packetstormsecurity.com/files/165089/Apache-HTTP-Server-2.4.50-CVE-2021-42013-Exploitation.html",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/3",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/4"
+      ],
+      "severity": "low",
+      "source": "OSV.dev",
+      "status": "referenced",
+      "summary": "It was found that the fix for CVE-2021-41773 in Apache HTTP Server 2.4.50 was insufficient. An attacker could use a path traversal attack to map URLs to files outside the directories configured by Alias-like directives. If files outside of these directories ar... Aliasy: BIT-apache-2021-42013."
+    },
+    {
+      "confidence": "high",
+      "indicator": "CVE-2023-38408",
+      "indicator_type": "cve",
+      "linked_host_key": null,
+      "linked_service_key": null,
+      "match_id": "intel:osv:CVE-2023-38408",
+      "references": [
+        "http://packetstormsecurity.com/files/173661/OpenSSH-Forwarded-SSH-Agent-Remote-Code-Execution.html",
+        "https://cert-portal.siemens.com/productcert/html/ssa-398330.html",
+        "https://news.ycombinator.com/item?id=36790196",
+        "https://support.apple.com/kb/HT213940",
+        "https://www.openssh.com/security.html",
+        "https://www.openssh.com/txt/release-9.3p2",
+        "https://www.qualys.com/2023/07/19/cve-2023-38408/rce-openssh-forwarded-ssh-agent.txt",
+        "https://www.vicarius.io/vsociety/posts/exploring-opensshs-agent-forwarding-rce-cve-2023-38408"
+      ],
+      "severity": "low",
+      "source": "OSV.dev",
+      "status": "referenced",
+      "summary": "The PKCS#11 feature in ssh-agent in OpenSSH before 9.3p2 has an insufficiently trustworthy search path, leading to remote code execution if an agent is forwarded to an attacker-controlled system. (Code in /usr/lib is not necessarily safe for loading into ssh-a... Aliasy: -."
+    }
+  ],
+  "monitoringLanes": [
+    {
+      "evidence": [
+        "context_activated=true",
+        "audit_sources=true"
+      ],
+      "lane_id": "agent:context-fusion",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "context-fusion",
+      "status": "ok",
+      "summary": "Context agent sjednotil 18 aktiv a 15 vazeb z autorizovaných zdrojů.",
+      "title": "Agent context-fusion"
+    },
+    {
+      "evidence": [
+        "audit_findings=5"
+      ],
+      "lane_id": "agent:correlator",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "correlator",
+      "status": "ok",
+      "summary": "Korelační agent navázal 26 nálezů a 19 doporučených kroků.",
+      "title": "Agent correlator"
+    },
+    {
+      "evidence": [
+        "credential_validation=true",
+        "passive_sources=true"
+      ],
+      "lane_id": "agent:credential-hunter",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "credential-hunter",
+      "status": "ok",
+      "summary": "Credential hunter vytvořil ověřovací úkol pro nešifrované přihlášení bez práce s obsahem hesel.",
+      "title": "Agent credential-hunter"
+    },
+    {
+      "evidence": [
+        "plaintext=192.168.56.10/tcp/80",
+        "plaintext=192.168.56.20/tcp/21",
+        "plaintext=192.168.56.20/tcp/23",
+        "source_action=validation:credential-exposure-agent:<RUN_ID>"
+      ],
+      "lane_id": "agent:dynamic:credential-exposure-validator",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "agent:credential-exposure-validator",
+      "status": "spawned",
+      "summary": "Dynamický agent credential-exposure-validator vznikl z rozhodovací vrstvy, protože běh má konkrétní důkaz a ověřovací úkol.",
+      "title": "Agent agent:credential-exposure-validator"
+    },
+    {
+      "evidence": [
+        "cve=CVE-2021-3618",
+        "cve=CVE-2021-41773",
+        "cve=CVE-2021-42013",
+        "cve=CVE-2023-38408",
+        "source_action=validation:cve-proof-agent:<RUN_ID>"
+      ],
+      "lane_id": "agent:dynamic:cve-proof-agent",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "agent:cve-proof-agent",
+      "status": "spawned",
+      "summary": "Dynamický agent cve-proof-agent vznikl z rozhodovací vrstvy, protože běh má konkrétní důkaz a ověřovací úkol.",
+      "title": "Agent agent:cve-proof-agent"
+    },
+    {
+      "evidence": [
+        "connection_timeout_burst:192.168.56.30/host-only",
+        "correlation_uncertainty:192.168.56.30/host-only",
+        "intel:mitre-att&ck-context:unknown",
+        "external_flow_observed:192.168.56.30",
+        "external_flow_observed:unknown",
+        "external_flow_observed:192.168.56.10",
+        "source_action=decision:identity-verifier:<RUN_ID>"
+      ],
+      "lane_id": "agent:dynamic:identity-verifier",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "agent:identity-verifier",
+      "status": "spawned",
+      "summary": "Dynamický agent identity-verifier vznikl z rozhodovací vrstvy, protože běh má konkrétní důkaz a ověřovací úkol.",
+      "title": "Agent agent:identity-verifier"
+    },
+    {
+      "evidence": [
+        "plaintext_management_protocol:192.168.56.20/tcp/21",
+        "plaintext_management_protocol:192.168.56.20/tcp/23",
+        "source_action=decision:plaintext-passive-hunter:<RUN_ID>"
+      ],
+      "lane_id": "agent:dynamic:passive-credential-hunter",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "agent:passive-credential-hunter",
+      "status": "spawned",
+      "summary": "Dynamický agent passive-credential-hunter vznikl z rozhodovací vrstvy, protože běh má konkrétní důkaz a ověřovací úkol.",
+      "title": "Agent agent:passive-credential-hunter"
+    },
+    {
+      "evidence": [
+        "connection_timeout_burst:192.168.56.30/host-only",
+        "external_flow_observed:192.168.56.30",
+        "external_flow_observed:unknown",
+        "external_flow_observed:192.168.56.10",
+        "external_flow_observed:192.168.56.20",
+        "packet_rate_spike:192.168.56.30/host-only",
+        "source_action=decision:traffic-forensics:<RUN_ID>"
+      ],
+      "lane_id": "agent:dynamic:traffic-forensics",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "agent:traffic-forensics",
+      "status": "spawned",
+      "summary": "Dynamický agent traffic-forensics vznikl z rozhodovací vrstvy, protože běh má konkrétní důkaz a ověřovací úkol.",
+      "title": "Agent agent:traffic-forensics"
+    },
+    {
+      "evidence": [
+        "traffic=connection_timeout_burst target=192.168.56.30/host-only",
+        "traffic=external_flow_observed target=192.168.56.30",
+        "traffic=external_flow_observed target=unknown",
+        "traffic=external_flow_observed target=192.168.56.10",
+        "traffic=external_flow_observed target=192.168.56.20",
+        "traffic=packet_rate_spike target=192.168.56.30/host-only",
+        "source_action=validation:traffic-forensic-agent:<RUN_ID>"
+      ],
+      "lane_id": "agent:dynamic:traffic-pcap-analyst",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "agent:traffic-pcap-analyst",
+      "status": "spawned",
+      "summary": "Dynamický agent traffic-pcap-analyst vznikl z rozhodovací vrstvy, protože běh má konkrétní důkaz a ověřovací úkol.",
+      "title": "Agent agent:traffic-pcap-analyst"
+    },
+    {
+      "evidence": [
+        "high_risk_cve_exposure:192.168.56.10/tcp/443",
+        "high_risk_cve_exposure:192.168.56.10/tcp/80",
+        "high_risk_cve_exposure:192.168.56.30/tcp/22",
+        "source_action=decision:vuln-intel-verifier:<RUN_ID>"
+      ],
+      "lane_id": "agent:dynamic:vuln-intel-verifier",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "agent:vuln-intel-verifier",
+      "status": "spawned",
+      "summary": "Dynamický agent vuln-intel-verifier vznikl z rozhodovací vrstvy, protože běh má konkrétní důkaz a ověřovací úkol.",
+      "title": "Agent agent:vuln-intel-verifier"
+    },
+    {
+      "evidence": [
+        "web_targets=2",
+        "active_checks=0",
+        "source_action=validation:web-pentest-agent:<RUN_ID>"
+      ],
+      "lane_id": "agent:dynamic:web-pentest-agent",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "agent:web-pentest-agent",
+      "status": "spawned",
+      "summary": "Dynamický agent web-pentest-agent vznikl z rozhodovací vrstvy, protože běh má konkrétní důkaz a ověřovací úkol.",
+      "title": "Agent agent:web-pentest-agent"
+    },
+    {
+      "evidence": [
+        "followup=false",
+        "live_nmap_mode=false"
+      ],
+      "lane_id": "agent:followup",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "followup",
+      "status": "limited",
+      "summary": "Follow-up agent ponechal běh bez druhého průchodu (není potřeba nebo není live režim).",
+      "title": "Agent followup"
+    },
+    {
+      "evidence": [
+        "suspicious_targets=3"
+      ],
+      "lane_id": "agent:forensic",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "forensic",
+      "status": "pending",
+      "summary": "Forenzní agent označil další kandidáty, ale hlubší průchod v tomto běhu neproběhl.",
+      "title": "Agent forensic"
+    },
+    {
+      "evidence": [
+        "cves=6",
+        "sources=MITRE ATT&CK Context|OSV.dev"
+      ],
+      "lane_id": "agent:intel",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "intel",
+      "status": "ok",
+      "summary": "Intel agent zpracoval 6 externích matchů, provider demo a veřejný stack používá Vulners jen jako volitelný doplněk.",
+      "title": "Agent intel"
+    },
+    {
+      "evidence": [
+        "followup=false",
+        "forensic=false"
+      ],
+      "lane_id": "agent:inventory",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "inventory",
+      "status": "ok",
+      "summary": "Inventarizační agent zpracoval 3 hostů a 6 služeb.",
+      "title": "Agent inventory"
+    },
+    {
+      "evidence": [
+        "passive_sources=true",
+        "live_sources=true"
+      ],
+      "lane_id": "agent:live-observer",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "live-observer",
+      "status": "ok",
+      "summary": "Live/pasivní vrstva vidí 4 lane a 8 korelovaných událostí.",
+      "title": "Agent live-observer"
+    },
+    {
+      "evidence": [
+        "tooling_coverage_ratio=0.80",
+        "service_identity_ratio=1.00"
+      ],
+      "lane_id": "agent:planner",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "planner",
+      "status": "ok",
+      "summary": "Plánovač seřadil 3 prioritních cílů a rozdělil běh do kroků inventář -> zpřesnění -> korelace -> intel.",
+      "title": "Agent planner"
+    },
+    {
+      "evidence": [
+        "triage_actions=19",
+        "validation_ready=true"
+      ],
+      "lane_id": "agent:remediation",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "remediation",
+      "status": "ok",
+      "summary": "Remediation agent převádí ověřené nálezy na 19 doporučených kroků s důkazy.",
+      "title": "Agent remediation"
+    },
+    {
+      "evidence": [
+        "run_id=<RUN_ID>",
+        "tooling_coverage=0.80"
+      ],
+      "lane_id": "agent:reporter",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "reporter",
+      "status": "ok",
+      "summary": "Report agent sjednotil 20 lane, 26 nálezů a 19 doporučených kroků.",
+      "title": "Agent reporter"
+    },
+    {
+      "evidence": [
+        "traffic_forensics=true",
+        "events=8",
+        "live_lanes=4"
+      ],
+      "lane_id": "agent:traffic-forensics",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "traffic-forensics",
+      "status": "ok",
+      "summary": "Traffic forensics agent má ověřovací úkol pro provozní anomálii a skládá flow/Zeek/Suricata důkazy.",
+      "title": "Agent traffic-forensics"
+    },
+    {
+      "evidence": [
+        "validation_matrix=true",
+        "ai_context_bridge=true"
+      ],
+      "lane_id": "agent:validation",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "validation",
+      "status": "ok",
+      "summary": "Validační agent rozpadl nálezy na důkazní matice a bezpečné ověřovací úkoly.",
+      "title": "Agent validation"
+    },
+    {
+      "evidence": [
+        "http_targets=true",
+        "safe_pentest=true",
+        "aggressive_pentest=false",
+        "active_web_checks=false"
+      ],
+      "lane_id": "agent:web-pentest",
+      "lane_type": "automation",
+      "recommended_tools": [],
+      "source": "web-pentest",
+      "status": "ok",
+      "summary": "Web pentest agent má bezpečnou validační lane nebo aktivní kontrolované checks.",
+      "title": "Agent web-pentest"
+    },
+    {
+      "evidence": [
+        "OpenSSH outdated version 192.168.56.20:22 high"
+      ],
+      "lane_id": "lane:audit:greenbone",
+      "lane_type": "audit",
+      "recommended_tools": [
+        "greenbone",
+        "credentialed-scan"
+      ],
+      "source": "greenbone",
+      "status": "ok",
+      "summary": "Auditních nálezů 1.",
+      "title": "Greenbone / OpenVAS"
+    },
+    {
+      "evidence": [
+        "edge-rtr01 issues=1"
+      ],
+      "lane_id": "lane:audit:napalm",
+      "lane_type": "audit",
+      "recommended_tools": [
+        "napalm",
+        "config-audit"
+      ],
+      "source": "napalm",
+      "status": "ok",
+      "summary": "Zařízení 1, issues 1.",
+      "title": "NAPALM getters"
+    },
+    {
+      "evidence": [
+        "branch-fw01 issues=1"
+      ],
+      "lane_id": "lane:audit:netmiko",
+      "lane_type": "audit",
+      "recommended_tools": [
+        "netmiko",
+        "config-audit"
+      ],
+      "source": "netmiko",
+      "status": "ok",
+      "summary": "Zařízení 1, issues 1.",
+      "title": "Netmiko config audit"
+    },
+    {
+      "evidence": [
+        "branch-sw01 issues=1"
+      ],
+      "lane_id": "lane:audit:scrapli",
+      "lane_type": "audit",
+      "recommended_tools": [
+        "scrapli",
+        "config-audit"
+      ],
+      "source": "scrapli",
+      "status": "ok",
+      "summary": "Zařízení 1, issues 1.",
+      "title": "scrapli config audit"
+    },
+    {
+      "evidence": [
+        "level=9 Weak SSH configuration detected"
+      ],
+      "lane_id": "lane:audit:wazuh",
+      "lane_type": "audit",
+      "recommended_tools": [
+        "wazuh",
+        "agentless",
+        "config-review"
+      ],
+      "source": "wazuh",
+      "status": "ok",
+      "summary": "Alertů 1.",
+      "title": "Wazuh agentless"
+    },
+    {
+      "evidence": [],
+      "lane_id": "lane:context:aruba",
+      "lane_type": "context",
+      "recommended_tools": [
+        "nmap",
+        "snmp",
+        "librenms",
+        "controller-api"
+      ],
+      "source": "aruba",
+      "status": "partial",
+      "summary": "Zařízení 1, klienti 1, vazby 0, VLAN 0, ARP 0, FDB 0, alerty 0.",
+      "title": "Aruba Central"
+    },
+    {
+      "evidence": [
+        "alert=Interface flapping on core-sw01 (Medium)"
+      ],
+      "lane_id": "lane:context:librenms",
+      "lane_type": "context",
+      "recommended_tools": [
+        "nmap",
+        "snmp",
+        "librenms",
+        "controller-api"
+      ],
+      "source": "librenms",
+      "status": "ok",
+      "summary": "Zařízení 2, klienti 0, vazby 1, VLAN 2, ARP 2, FDB 2, alerty 1.",
+      "title": "LibreNMS visibility"
+    },
+    {
+      "evidence": [],
+      "lane_id": "lane:context:meraki",
+      "lane_type": "context",
+      "recommended_tools": [
+        "nmap",
+        "snmp",
+        "librenms",
+        "controller-api"
+      ],
+      "source": "meraki",
+      "status": "ok",
+      "summary": "Zařízení 2, klienti 2, vazby 2, VLAN 0, ARP 0, FDB 0, alerty 0.",
+      "title": "Meraki controller"
+    },
+    {
+      "evidence": [],
+      "lane_id": "lane:context:omada",
+      "lane_type": "context",
+      "recommended_tools": [
+        "nmap",
+        "snmp",
+        "librenms",
+        "controller-api"
+      ],
+      "source": "omada",
+      "status": "partial",
+      "summary": "Zařízení 1, klienti 1, vazby 0, VLAN 0, ARP 0, FDB 0, alerty 0.",
+      "title": "Omada controller"
+    },
+    {
+      "evidence": [],
+      "lane_id": "lane:context:snmp",
+      "lane_type": "context",
+      "recommended_tools": [
+        "nmap",
+        "snmp",
+        "librenms",
+        "controller-api"
+      ],
+      "source": "snmp",
+      "status": "ok",
+      "summary": "Zařízení 2, klienti 0, vazby 2, VLAN 0, ARP 0, FDB 0, alerty 0.",
+      "title": "SNMP + LLDP/CDP + ARP/FDB"
+    },
+    {
+      "evidence": [],
+      "lane_id": "lane:context:unifi",
+      "lane_type": "context",
+      "recommended_tools": [
+        "nmap",
+        "snmp",
+        "librenms",
+        "controller-api"
+      ],
+      "source": "unifi",
+      "status": "ok",
+      "summary": "Zařízení 1, klienti 1, vazby 1, VLAN 0, ARP 0, FDB 0, alerty 0.",
+      "title": "UniFi controller"
+    },
+    {
+      "evidence": [
+        "spawn=vuln-intel-verifier reason=cve-or-exploitability-signal",
+        "spawn=passive-credential-hunter reason=plaintext-management-protocol",
+        "spawn=traffic-forensics reason=traffic-pattern-anomaly",
+        "spawn=identity-verifier reason=low-confidence-or-correlation-gap",
+        "keep=correlator reason=passive-or-flow-context-present"
+      ],
+      "lane_id": "lane:decision:agent-lifecycle",
+      "lane_type": "automation",
+      "recommended_tools": [
+        "scheduler",
+        "resource-budget",
+        "agent-registry"
+      ],
+      "source": "agent-lifecycle",
+      "status": "ok",
+      "summary": "Agent governor vyhodnotil, které role mají běžet, které se mají vytvořit a které je možné nechat vypnuté kvůli slabému signálu.",
+      "title": "agent lifecycle"
+    },
+    {
+      "evidence": [
+        "hypothesis=connection_timeout_burst target=192.168.56.30/host-only",
+        "hypothesis=greenbone_finding target=192.168.56.20",
+        "hypothesis=high_risk_cve_exposure target=192.168.56.10/tcp/443",
+        "hypothesis=high_risk_cve_exposure target=192.168.56.10/tcp/80",
+        "hypothesis=high_risk_cve_exposure target=192.168.56.30/tcp/22",
+        "hypothesis=http_basic_without_tls target=192.168.56.10/tcp/80"
+      ],
+      "lane_id": "lane:decision:hypotheses",
+      "lane_type": "automation",
+      "recommended_tools": [
+        "nmap-forensic",
+        "passive-correlation",
+        "case-memory"
+      ],
+      "source": "decision-hypotheses",
+      "status": "ok",
+      "summary": "Decision engine sestavil 13 hypotéz z prioritních nálezů a oddělil ověření od okamžité mitigace.",
+      "title": "decision hypotheses"
+    },
+    {
+      "evidence": [
+        "deduction=cve-exposure-implies-exploitability-review count=6",
+        "deduction=plaintext-management-implies-credential-risk count=3",
+        "induction=traffic-patterns events=8 anomaly_findings=8 live_lanes=4",
+        "abduction=service-identity-or-correlation-gap hypotheses=12 action=verify-before-mitigate",
+        "decision-frontier target=192.168.56.10/tcp/80 decision=mitigate score=1.00 reasons=plaintext-login|passive-evidence",
+        "context-window hosts=3 services=6 findings=26 triage=0"
+      ],
+      "lane_id": "lane:decision:inference-graph",
+      "lane_type": "automation",
+      "recommended_tools": [
+        "deductive-rules",
+        "inductive-baseline",
+        "abductive-hypotheses"
+      ],
+      "source": "decision-inference-graph",
+      "status": "ok",
+      "summary": "Inference graph oddělil dedukci z pravidel, indukci z provozních vzorců a abdukci pro neověřené hypotézy.",
+      "title": "decision inference graph"
+    },
+    {
+      "evidence": [
+        "score=1.00 decision=mitigate target=192.168.56.10/tcp/80 type=http_basic_without_tls severity=High confidence=High reasons=plaintext-login|passive-evidence",
+        "score=1.00 decision=mitigate target=192.168.56.20/tcp/23 type=plaintext_management_protocol severity=High confidence=High reasons=plaintext-login|passive-evidence",
+        "score=0.96 decision=mitigate target=192.168.56.10/tcp/443 type=high_risk_cve_exposure severity=High confidence=High reasons=cve-intel",
+        "score=0.96 decision=mitigate target=192.168.56.10/tcp/80 type=high_risk_cve_exposure severity=High confidence=High reasons=cve-intel",
+        "score=0.87 decision=verify target=192.168.56.30/host-only type=service_overload_risk severity=High confidence=Low reasons=traffic-pattern|passive-evidence|needs-verification",
+        "score=0.80 decision=investigate target=192.168.56.20 type=greenbone_finding severity=High confidence=High reasons=structured-finding",
+        "score=0.80 decision=investigate target=192.168.56.254 type=netmiko_config_issue severity=High confidence=High reasons=structured-finding",
+        "score=0.76 decision=investigate target=192.168.56.30/tcp/22 type=high_risk_cve_exposure severity=Medium confidence=High reasons=cve-intel"
+      ],
+      "lane_id": "lane:decision:risk-ranking",
+      "lane_type": "automation",
+      "recommended_tools": [
+        "evidence-scoring",
+        "mas-consensus",
+        "case-memory"
+      ],
+      "source": "decision-risk-ranking",
+      "status": "ok",
+      "summary": "Risk scorer seřadil 26 hypotéz podle dopadu, jistoty, pasivních důkazů, CVE signálů a změn proti paměti případů.",
+      "title": "decision risk ranking"
+    },
+    {
+      "evidence": [
+        "provider=demo",
+        "cves=6",
+        "intel_matches=6",
+        "sources=MITRE ATT&CK Context|OSV.dev",
+        "public_source=NVD CVE API",
+        "public_source=CISA Known Exploited Vulnerabilities",
+        "public_source=FIRST EPSS API",
+        "public_source=CIRCL Vulnerability-Lookup",
+        "public_source=OSV.dev",
+        "public_source=MITRE ATT&CK"
+      ],
+      "lane_id": "lane:intel:public-stack:<RUN_ID>",
+      "lane_type": "audit",
+      "recommended_tools": [
+        "nvd",
+        "cisa-kev",
+        "first-epss",
+        "circl",
+        "osv",
+        "vulners-optional"
+      ],
+      "source": "public-intel-stack",
+      "status": "ok",
+      "summary": "Intel agent zkřížil zranitelnosti a indikátory přes 2 veřejných zdrojů; Vulners je volitelný doplněk.",
+      "title": "Veřejný threat intel stack"
+    },
+    {
+      "evidence": [
+        "192.168.56.30 -> 8.8.8.8:53 bytes=2048",
+        "192.168.56.40 -> 1.1.1.1:443 bytes=4096"
+      ],
+      "lane_id": "lane:live:flow",
+      "lane_type": "live",
+      "recommended_tools": [
+        "netflow",
+        "ipfix",
+        "ntopng"
+      ],
+      "source": "netflow-ipfix",
+      "status": "ok",
+      "summary": "Flow záznamů 2.",
+      "title": "NetFlow / IPFIX"
+    },
+    {
+      "evidence": [
+        "192.168.56.10 -> 93.184.216.34:443 https",
+        "192.168.56.20 -> 45.61.49.78:80 http"
+      ],
+      "lane_id": "lane:live:ntopng",
+      "lane_type": "live",
+      "recommended_tools": [
+        "ntopng",
+        "suricata",
+        "zeek"
+      ],
+      "source": "ntopng",
+      "status": "ok",
+      "summary": "Toků 2.",
+      "title": "ntopng live flow telemetry"
+    },
+    {
+      "evidence": [
+        "identity_ratio=1.00",
+        "forensic_ports=0",
+        "findings_per_host=1.00",
+        "weights=0.21/0.20/0.29",
+        "consensus_head=sigmoid(weighted)",
+        "state=review"
+      ],
+      "lane_id": "lane:mas:consensus:<RUN_ID>",
+      "lane_type": "automation",
+      "recommended_tools": [
+        "nmap",
+        "correlation",
+        "triage"
+      ],
+      "source": "mas-consensus",
+      "status": "limited",
+      "summary": "Konsenzus followup/forensic/correlator = 65 % (review)",
+      "title": "Confidence-weighted consensus"
+    },
+    {
+      "evidence": [
+        "<VOLATILE_TIMING_TEXT>",
+        "queue_wait_ms_avg=0.00",
+        "agent_sla_ratio=1.00",
+        "<VOLATILE_TIMING_TEXT>",
+        "<VOLATILE_TIMING_TEXT>",
+        "<VOLATILE_TIMING_TEXT>",
+        "<VOLATILE_TIMING_TEXT>",
+        "<VOLATILE_TIMING_TEXT>",
+        "<VOLATILE_TIMING_TEXT>",
+        "<VOLATILE_TIMING_TEXT>",
+        "<VOLATILE_TIMING_TEXT>"
+      ],
+      "lane_id": "lane:mas:scheduler:<RUN_ID>",
+      "lane_type": "automation",
+      "recommended_tools": [
+        "runtime-metrics",
+        "nmap",
+        "suricata"
+      ],
+      "source": "mas-scheduler",
+      "status": "ok",
+      "summary": "<VOLATILE_TIMING_TEXT>",
+      "title": "Adaptivní scheduling agentů"
+    },
+    {
+      "evidence": [
+        "suricata=<TMP>\\zakladni\\suricata\\eve.json"
+      ],
+      "lane_id": "lane:passive:suricata:<RUN_ID>",
+      "lane_type": "live",
+      "recommended_tools": [
+        "suricata",
+        "zeek"
+      ],
+      "source": "suricata",
+      "status": "ok",
+      "summary": "Suricata zdroj byl načten, korelovaných událostí v okně: 8.",
+      "title": "Suricata pasivní telemetry"
+    },
+    {
+      "evidence": [
+        "zeek=<TMP>\\zakladni\\zeek"
+      ],
+      "lane_id": "lane:passive:zeek:<RUN_ID>",
+      "lane_type": "live",
+      "recommended_tools": [
+        "zeek",
+        "suricata"
+      ],
+      "source": "zeek",
+      "status": "ok",
+      "summary": "Zeek zdroj byl načten, korelovaných událostí v okně: 8.",
+      "title": "Zeek pasivní telemetry"
+    },
+    {
+      "evidence": [
+        "findings=26",
+        "lanes=16",
+        "intel_matches=6",
+        "triage_actions=0"
+      ],
+      "lane_id": "lane:validation:ai-context:<RUN_ID>",
+      "lane_type": "automation",
+      "recommended_tools": [
+        "ollama",
+        "context-json",
+        "selected-node-context",
+        "evidence-sources"
+      ],
+      "source": "ai-context-bridge",
+      "status": "ok",
+      "summary": "AI dostává souhrn běhu, vybraný host/službu/nález, top rizika, agentní lane, doporučené nástroje a zdroje místo pevného statického textu.",
+      "title": "Dynamický kontext pro Skokyho"
+    },
+    {
+      "evidence": [
+        "validation_score=0.24",
+        "cves=4",
+        "exploit_context=0",
+        "active_checks=0",
+        "internal_pentest_checks=0",
+        "aggressive_pentest_checks=0",
+        "plaintext_findings=3",
+        "traffic_findings=8"
+      ],
+      "lane_id": "lane:validation:matrix:<RUN_ID>",
+      "lane_type": "automation",
+      "recommended_tools": [
+        "nmap",
+        "bakula-internal-pentest",
+        "httpx-optional",
+        "nuclei-controlled-optional",
+        "zeek",
+        "suricata",
+        "greenbone"
+      ],
+      "source": "validation-matrix",
+      "status": "pending",
+      "summary": "Validační vrstva spočítala důkazní skóre 24 % z CVE kontextu, interního pentestu, aktivních checků, nešifrovaného přihlášení a provozní forenziky.",
+      "title": "Důkazní validační matice"
+    },
+    {
+      "evidence": [
+        "web_targets=2",
+        "web_probes=0",
+        "active_checks=0",
+        "internal_pentest_checks=0",
+        "aggressive_pentest_checks=0",
+        "cves=4",
+        "traffic_findings=8",
+        "policy=non-destructive-authorized"
+      ],
+      "lane_id": "lane:validation:safe-pentest:<RUN_ID>",
+      "lane_type": "automation",
+      "recommended_tools": [
+        "bakula-internal-pentest",
+        "bakula-tcp-probe",
+        "bakula-http-prober",
+        "nmap-safe-scripts",
+        "greenbone-authenticated"
+      ],
+      "source": "safe-pentest-validator",
+      "status": "limited",
+      "summary": "Program má cíle pro bezpečný pentest, ale v tomto běhu zatím nemá aktivní potvrzení odpovědi cíle.",
+      "title": "Bezpečný pentest validátor"
+    }
+  ],
+  "networkAssets": [
+    {
+      "asset_id": "aruba:aruba-ap-01",
+      "asset_type": "access-point",
+      "confidence": "high",
+      "ip": "192.168.56.12",
+      "linked_host_key": null,
+      "location": null,
+      "mac": "22:33:44:55:66:77",
+      "model": "AP-515",
+      "name": "Aruba-AP-Office",
+      "observations": [],
+      "serial": null,
+      "source": "aruba",
+      "status": "up",
+      "vendor": "Aruba"
+    },
+    {
+      "asset_id": "aruba:client:aruba-client-01",
+      "asset_type": "wireless-client",
+      "confidence": "medium",
+      "ip": "192.168.56.71",
+      "linked_host_key": null,
+      "location": "GuestWiFi",
+      "mac": "aa:00:bb:11:cc:22",
+      "model": null,
+      "name": "Telefon host",
+      "observations": [],
+      "serial": null,
+      "source": "aruba",
+      "status": null,
+      "vendor": "Apple"
+    },
+    {
+      "asset_id": "librenms:1",
+      "asset_type": "switch",
+      "confidence": "high",
+      "ip": "192.168.56.2",
+      "linked_host_key": null,
+      "location": "HQ-F1",
+      "mac": "00:11:22:33:44:55",
+      "model": "C9300",
+      "name": "core-sw01",
+      "observations": [
+        "ports_total=48",
+        "os=ios-xe",
+        "vlan=10 (Users)",
+        "vlan=20 (Servers)"
+      ],
+      "serial": "FDO1234",
+      "source": "librenms",
+      "status": "up",
+      "vendor": "Cisco"
+    },
+    {
+      "asset_id": "librenms:2",
+      "asset_type": "router",
+      "confidence": "high",
+      "ip": "192.168.56.1",
+      "linked_host_key": null,
+      "location": "HQ-Rack",
+      "mac": "00:11:22:aa:bb:cc",
+      "model": "ISR",
+      "name": "dist-rtr01",
+      "observations": [
+        "os=ios-xe"
+      ],
+      "serial": "ISR1234",
+      "source": "librenms",
+      "status": "up",
+      "vendor": "Cisco"
+    },
+    {
+      "asset_id": "librenms:endpoint:aabbcc000025",
+      "asset_type": "endpoint",
+      "confidence": "medium",
+      "ip": "192.168.56.25",
+      "linked_host_key": null,
+      "location": "10",
+      "mac": "aa:bb:cc:00:00:25",
+      "model": null,
+      "name": "192.168.56.25",
+      "observations": [
+        "port=Gi1/0/10",
+        "vlan=10",
+        "learned_via=arp"
+      ],
+      "serial": null,
+      "source": "librenms",
+      "status": null,
+      "vendor": null
+    },
+    {
+      "asset_id": "librenms:endpoint:aabbcc000040",
+      "asset_type": "endpoint",
+      "confidence": "medium",
+      "ip": "192.168.56.40",
+      "linked_host_key": null,
+      "location": "20",
+      "mac": "aa:bb:cc:00:00:40",
+      "model": null,
+      "name": "192.168.56.40",
+      "observations": [
+        "port=Gi1/0/22",
+        "vlan=20",
+        "learned_via=arp"
+      ],
+      "serial": null,
+      "source": "librenms",
+      "status": null,
+      "vendor": null
+    },
+    {
+      "asset_id": "meraki:Q2XX-AP01",
+      "asset_type": "access-point",
+      "confidence": "high",
+      "ip": "192.168.56.20",
+      "linked_host_key": "192.168.56.20",
+      "location": "Lobby",
+      "mac": "00:11:22:33:44:55",
+      "model": "MR46",
+      "name": "AP-Lobby",
+      "observations": [
+        "tag=wifi",
+        "tag=guest",
+        "notes=Guest Wi-Fi coverage"
+      ],
+      "serial": "Q2XX-AP01",
+      "source": "meraki",
+      "status": "online",
+      "vendor": "Cisco Meraki"
+    },
+    {
+      "asset_id": "meraki:Q2XX-SW01",
+      "asset_type": "switch",
+      "confidence": "high",
+      "ip": "192.168.56.21",
+      "linked_host_key": null,
+      "location": "Floor 1 closet",
+      "mac": "00:11:22:33:44:66",
+      "model": "MS225",
+      "name": "Switch-Floor1",
+      "observations": [
+        "tag=access"
+      ],
+      "serial": "Q2XX-SW01",
+      "source": "meraki",
+      "status": "online",
+      "vendor": "Cisco Meraki"
+    },
+    {
+      "asset_id": "meraki:client:k1",
+      "asset_type": "wireless-client",
+      "confidence": "medium",
+      "ip": "192.168.56.101",
+      "linked_host_key": null,
+      "location": "Office",
+      "mac": "AA:BB:CC:DD:EE:01",
+      "model": "Windows",
+      "name": "Notebook recepce",
+      "observations": [
+        "ssid=Office",
+        "vlan=20",
+        "ap_name=AP-Lobby"
+      ],
+      "serial": null,
+      "source": "meraki",
+      "status": "online",
+      "vendor": "Dell"
+    },
+    {
+      "asset_id": "meraki:client:k2",
+      "asset_type": "wireless-client",
+      "confidence": "medium",
+      "ip": "192.168.56.102",
+      "linked_host_key": null,
+      "location": "Guest",
+      "mac": "AA:BB:CC:DD:EE:02",
+      "model": "iOS",
+      "name": "Telefon host",
+      "observations": [
+        "ssid=Guest",
+        "vlan=30",
+        "ap_name=AP-Lobby"
+      ],
+      "serial": null,
+      "source": "meraki",
+      "status": "online",
+      "vendor": "Apple"
+    },
+    {
+      "asset_id": "omada:client:omada-client-01",
+      "asset_type": "wireless-client",
+      "confidence": "medium",
+      "ip": "192.168.56.72",
+      "linked_host_key": null,
+      "location": "WarehouseWiFi",
+      "mac": "de:ad:be:ef:00:01",
+      "model": null,
+      "name": "Tablet sklad",
+      "observations": [],
+      "serial": null,
+      "source": "omada",
+      "status": null,
+      "vendor": "Samsung"
+    },
+    {
+      "asset_id": "omada:omada-ap-01",
+      "asset_type": "access-point",
+      "confidence": "high",
+      "ip": "192.168.56.13",
+      "linked_host_key": null,
+      "location": null,
+      "mac": "33:44:55:66:77:88",
+      "model": "EAP620",
+      "name": "Omada-AP-Branch",
+      "observations": [],
+      "serial": null,
+      "source": "omada",
+      "status": "connected",
+      "vendor": "TP-Link"
+    },
+    {
+      "asset_id": "snmp:inferred:inferred:AP-Lobby",
+      "asset_type": "network-device",
+      "confidence": "low",
+      "ip": null,
+      "linked_host_key": null,
+      "location": null,
+      "mac": null,
+      "model": null,
+      "name": "inferred:AP-Lobby",
+      "observations": [
+        "Inferred from topology evidence."
+      ],
+      "serial": null,
+      "source": "snmp",
+      "status": null,
+      "vendor": null
+    },
+    {
+      "asset_id": "snmp:r-edge-1",
+      "asset_type": "router",
+      "confidence": "high",
+      "ip": "192.168.56.1",
+      "linked_host_key": null,
+      "location": "rack-a",
+      "mac": null,
+      "model": "CCR2004",
+      "name": "EdgeRouter",
+      "observations": [
+        "wan=present"
+      ],
+      "serial": "MKT1234ABCD",
+      "source": "snmp",
+      "status": "up",
+      "vendor": "MikroTik"
+    },
+    {
+      "asset_id": "snmp:sw-core-1",
+      "asset_type": "switch",
+      "confidence": "high",
+      "ip": "192.168.56.2",
+      "linked_host_key": null,
+      "location": "serverovna",
+      "mac": null,
+      "model": "C9300",
+      "name": "CoreSwitch",
+      "observations": [
+        "stack=1",
+        "role=distribution"
+      ],
+      "serial": "FCW1234567A",
+      "source": "snmp",
+      "status": "up",
+      "vendor": "Cisco"
+    },
+    {
+      "asset_id": "unifi:client:unifi-client-01",
+      "asset_type": "wireless-client",
+      "confidence": "medium",
+      "ip": "192.168.56.70",
+      "linked_host_key": null,
+      "location": "OfficeWiFi",
+      "mac": "44:55:66:77:88:99",
+      "model": null,
+      "name": "Notebook CEO",
+      "observations": [],
+      "serial": null,
+      "source": "unifi",
+      "status": null,
+      "vendor": "Dell"
+    },
+    {
+      "asset_id": "unifi:inferred:1",
+      "asset_type": "network-device",
+      "confidence": "low",
+      "ip": null,
+      "linked_host_key": null,
+      "location": null,
+      "mac": null,
+      "model": null,
+      "name": "1",
+      "observations": [
+        "Inferred from topology evidence."
+      ],
+      "serial": null,
+      "source": "unifi",
+      "status": null,
+      "vendor": null
+    },
+    {
+      "asset_id": "unifi:unifi-ap-01",
+      "asset_type": "access-point",
+      "confidence": "high",
+      "ip": "192.168.56.11",
+      "linked_host_key": null,
+      "location": null,
+      "mac": "10:20:30:40:50:60",
+      "model": "U6-Lite",
+      "name": "UAP-Lobby",
+      "observations": [
+        "site=HQ"
+      ],
+      "serial": null,
+      "source": "unifi",
+      "status": "online",
+      "vendor": "Ubiquiti"
+    }
+  ],
+  "run": {
+    "enrichment_mode": "live",
+    "finished_at": "<TIMESTAMP>",
+    "nazev": "Full visibility stack",
+    "passive_window": {
+      "end": "<TIMESTAMP>",
+      "start": "<TIMESTAMP>",
+      "time_window_s": 3600
+    },
+    "ports": [
+      21,
+      22,
+      23,
+      80,
+      443,
+      8080
+    ],
+    "profile": "bezny",
+    "provider": "demo",
+    "run_id": "<RUN_ID>",
+    "scope": [
+      "192.168.56.0/24"
+    ],
+    "sources": {
+      "aruba_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\aruba_demo_snapshot.json",
+      "flow_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\flow_demo_snapshot.json",
+      "greenbone_report": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\greenbone_demo_report.json",
+      "librenms_base_url": null,
+      "librenms_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\librenms_demo_snapshot.json",
+      "meraki_network_id": null,
+      "meraki_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\meraki_demo_snapshot.json",
+      "napalm_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\napalm_demo_snapshot.json",
+      "netmiko_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\netmiko_demo_snapshot.json",
+      "nmap_followup_xml": null,
+      "nmap_forensic_xml": null,
+      "nmap_mode": "replay",
+      "nmap_xml": "<TMP>\\zakladni\\nmap.xml",
+      "ntopng_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\ntopng_demo_snapshot.json",
+      "omada_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\omada_demo_snapshot.json",
+      "scrapli_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\scrapli_demo_snapshot.json",
+      "snmp_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\snmp_demo_snapshot.json",
+      "suricata_eve": "<TMP>\\zakladni\\suricata\\eve.json",
+      "unifi_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\unifi_demo_snapshot.json",
+      "wazuh_report": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\wazuh_demo_report.json",
+      "zeek_dir": "<TMP>\\zakladni\\zeek"
+    },
+    "started_at": "<TIMESTAMP>"
+  },
+  "schemaVersion": "1.0",
+  "summary": {
+    "active_checks_total": 0,
+    "audit_findings_total": 5,
+    "audit_lanes_total": 6,
+    "automation_agents_total": 22,
+    "automation_rounds_total": 3,
+    "cves_total": 6,
+    "events_total": 8,
+    "findings_total": 26,
+    "forensic_targets_total": 3,
+    "hosts_total": 3,
+    "intel_matches_total": 6,
+    "live_lanes_total": 4,
+    "mas_agent_sla_ratio": 1.0,
+    "mas_consensus_score": 0.65,
+    "mas_consensus_state": "review",
+    "mas_parallelism_ratio": "<VOLATILE>",
+    "mas_queue_wait_ms_avg": 0.0,
+    "monitoring_lanes_total": 47,
+    "network_assets_total": 18,
+    "periodic_cycles_total": 1,
+    "realtime_sources_total": 3,
+    "service_identity_coverage_ratio": 1.0,
+    "service_identity_high_confidence_total": 5,
+    "services_high_priority": 3,
+    "services_total": 6,
+    "tooling_coverage_ratio": 0.8,
+    "topology_edges_total": 15,
+    "triage_actions_total": 19,
+    "unmapped_events_total": 0,
+    "web_probes_total": 0,
+    "wireless_clients_total": 5
+  },
+  "topologyEdges": [
+    {
+      "confidence": "high",
+      "details": [
+        "ssid=GuestWiFi",
+        "vlan=?"
+      ],
+      "edge_id": "edge:aruba:client:aruba:client:aruba-client-01:aruba:aruba-ap-01",
+      "relation": "client_of",
+      "source": "aruba",
+      "source_asset_id": "aruba:client:aruba-client-01",
+      "target_asset_id": "aruba:aruba-ap-01"
+    },
+    {
+      "confidence": "high",
+      "details": [
+        "local_port=Gi1/0/48",
+        "remote_port=Gi0/0/0",
+        "protocol=?"
+      ],
+      "edge_id": "edge:librenms:1:2:lldp",
+      "relation": "lldp",
+      "source": "librenms",
+      "source_asset_id": "librenms:1",
+      "target_asset_id": "librenms:2"
+    },
+    {
+      "confidence": "medium",
+      "details": [
+        "port=Gi1/0/10",
+        "vlan=10"
+      ],
+      "edge_id": "edge:librenms:arp:1:aabbcc000025",
+      "relation": "arp_seen",
+      "source": "librenms",
+      "source_asset_id": "librenms:1",
+      "target_asset_id": "librenms:endpoint:aabbcc000025"
+    },
+    {
+      "confidence": "medium",
+      "details": [
+        "port=Gi1/0/22",
+        "vlan=20"
+      ],
+      "edge_id": "edge:librenms:arp:1:aabbcc000040",
+      "relation": "arp_seen",
+      "source": "librenms",
+      "source_asset_id": "librenms:1",
+      "target_asset_id": "librenms:endpoint:aabbcc000040"
+    },
+    {
+      "confidence": "low",
+      "details": [
+        "port=Gi1/0/10",
+        "vlan=10"
+      ],
+      "edge_id": "edge:librenms:fdb:1:aabbcc000025",
+      "relation": "mac_learned_on",
+      "source": "librenms",
+      "source_asset_id": "librenms:1",
+      "target_asset_id": "librenms:endpoint:aabbcc000025"
+    },
+    {
+      "confidence": "low",
+      "details": [
+        "port=Gi1/0/22",
+        "vlan=20"
+      ],
+      "edge_id": "edge:librenms:fdb:1:aabbcc000040",
+      "relation": "mac_learned_on",
+      "source": "librenms",
+      "source_asset_id": "librenms:1",
+      "target_asset_id": "librenms:endpoint:aabbcc000040"
+    },
+    {
+      "confidence": "medium",
+      "details": [
+        "local_port=eth0",
+        "remote_port=1",
+        "protocol=lldp"
+      ],
+      "edge_id": "edge:meraki:Q2XX-AP01:Q2XX-SW01:lldp",
+      "relation": "lldp",
+      "source": "meraki",
+      "source_asset_id": "meraki:Q2XX-AP01",
+      "target_asset_id": "meraki:Q2XX-SW01"
+    },
+    {
+      "confidence": "medium",
+      "details": [
+        "local_port=1",
+        "remote_port=eth0",
+        "protocol=lldp"
+      ],
+      "edge_id": "edge:meraki:Q2XX-SW01:Q2XX-AP01:lldp",
+      "relation": "lldp",
+      "source": "meraki",
+      "source_asset_id": "meraki:Q2XX-SW01",
+      "target_asset_id": "meraki:Q2XX-AP01"
+    },
+    {
+      "confidence": "high",
+      "details": [
+        "ssid=Office",
+        "vlan=20"
+      ],
+      "edge_id": "edge:meraki:client:meraki:client:k1:meraki:Q2XX-AP01",
+      "relation": "client_of",
+      "source": "meraki",
+      "source_asset_id": "meraki:client:k1",
+      "target_asset_id": "meraki:Q2XX-AP01"
+    },
+    {
+      "confidence": "high",
+      "details": [
+        "ssid=Guest",
+        "vlan=30"
+      ],
+      "edge_id": "edge:meraki:client:meraki:client:k2:meraki:Q2XX-AP01",
+      "relation": "client_of",
+      "source": "meraki",
+      "source_asset_id": "meraki:client:k2",
+      "target_asset_id": "meraki:Q2XX-AP01"
+    },
+    {
+      "confidence": "high",
+      "details": [
+        "ssid=WarehouseWiFi",
+        "vlan=?"
+      ],
+      "edge_id": "edge:omada:client:omada:client:omada-client-01:omada:omada-ap-01",
+      "relation": "client_of",
+      "source": "omada",
+      "source_asset_id": "omada:client:omada-client-01",
+      "target_asset_id": "omada:omada-ap-01"
+    },
+    {
+      "confidence": "medium",
+      "details": [
+        "local_port=Gi1/0/12",
+        "remote_port=eth0",
+        "protocol=?"
+      ],
+      "edge_id": "edge:snmp:sw-core-1:inferred:AP-Lobby:lldp",
+      "relation": "lldp",
+      "source": "snmp",
+      "source_asset_id": "snmp:sw-core-1",
+      "target_asset_id": "snmp:inferred:inferred:AP-Lobby"
+    },
+    {
+      "confidence": "medium",
+      "details": [
+        "local_port=Gi1/0/48",
+        "remote_port=ether1",
+        "protocol=?"
+      ],
+      "edge_id": "edge:snmp:sw-core-1:r-edge-1:lldp",
+      "relation": "lldp",
+      "source": "snmp",
+      "source_asset_id": "snmp:sw-core-1",
+      "target_asset_id": "snmp:r-edge-1"
+    },
+    {
+      "confidence": "high",
+      "details": [
+        "ssid=OfficeWiFi",
+        "vlan=10"
+      ],
+      "edge_id": "edge:unifi:client:unifi:client:unifi-client-01:unifi:unifi-ap-01",
+      "relation": "client_of",
+      "source": "unifi",
+      "source_asset_id": "unifi:client:unifi-client-01",
+      "target_asset_id": "unifi:unifi-ap-01"
+    },
+    {
+      "confidence": "medium",
+      "details": [
+        "local_port=eth0",
+        "remote_port=Gi1/0/23",
+        "protocol=?"
+      ],
+      "edge_id": "edge:unifi:unifi-ap-01:1:uplink",
+      "relation": "uplink",
+      "source": "unifi",
+      "source_asset_id": "unifi:unifi-ap-01",
+      "target_asset_id": "unifi:inferred:1"
+    }
+  ],
+  "triageActions": [
+    {
+      "action_id": "triage:service:192.168.56.10/tcp/80",
+      "action_type": "deep-service-review",
+      "evidence": [
+        "cve=CVE-2021-41773",
+        "cve=CVE-2021-42013"
+      ],
+      "priority": "high",
+      "rationale": "Služba kombinuje vysokou prioritu se zjištěními, která zaslouží credentialed nebo detailnější ověření.",
+      "recommended_tools": [
+        "greenbone",
+        "httpx",
+        "nuclei",
+        "config-review"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.10/tcp/80",
+      "title": "Hlubší audit služby 192.168.56.10/tcp/80"
+    },
+    {
+      "action_id": "triage:service:192.168.56.10/tcp/443",
+      "action_type": "deep-service-review",
+      "evidence": [
+        "cve=CVE-2021-41773",
+        "cve=CVE-2021-42013"
+      ],
+      "priority": "high",
+      "rationale": "Služba kombinuje vysokou prioritu se zjištěními, která zaslouží credentialed nebo detailnější ověření.",
+      "recommended_tools": [
+        "greenbone",
+        "httpx",
+        "nuclei",
+        "config-review"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.10/tcp/443",
+      "title": "Hlubší audit služby 192.168.56.10/tcp/443"
+    },
+    {
+      "action_id": "triage:service:192.168.56.30/tcp/22",
+      "action_type": "deep-service-review",
+      "evidence": [
+        "cve=CVE-2023-38408"
+      ],
+      "priority": "high",
+      "rationale": "Služba kombinuje vysokou prioritu se zjištěními, která zaslouží credentialed nebo detailnější ověření.",
+      "recommended_tools": [
+        "greenbone",
+        "httpx",
+        "nuclei",
+        "config-review"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.30/tcp/22",
+      "title": "Hlubší audit služby 192.168.56.30/tcp/22"
+    },
+    {
+      "action_id": "triage:traffic-overload-mitigation",
+      "action_type": "aggressive-mitigation",
+      "evidence": [
+        "connection_timeout_burst:192.168.56.30/host-only",
+        "packet_rate_spike:192.168.56.30/host-only",
+        "service_overload_risk:192.168.56.30/host-only"
+      ],
+      "priority": "high",
+      "rationale": "Detekce ukazuje timeouty/rate spike nebo přímé riziko přetížení; bez okamžité mitigace hrozí degradace nebo nedostupnost služby.",
+      "recommended_tools": [
+        "rate-limit",
+        "traffic-shaping",
+        "waf",
+        "firewall"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.30/host-only",
+      "title": "Aktivovat agresivnější ochranu proti přetížení"
+    },
+    {
+      "action_id": "validation:cve-proof-agent:<RUN_ID>",
+      "action_type": "spawn-agent:cve-proof-agent",
+      "evidence": [
+        "cve=CVE-2021-3618",
+        "cve=CVE-2021-41773",
+        "cve=CVE-2021-42013",
+        "cve=CVE-2023-38408"
+      ],
+      "priority": "high",
+      "rationale": "CVE záznam sám nestačí. Agent má bez destruktivního exploitu spojit CPE, verzi, NVD, KEV, EPSS, CIRCL/OSV, dostupnost služby a případný řízený web check.",
+      "recommended_tools": [
+        "nvd",
+        "cisa-kev",
+        "first-epss",
+        "circl",
+        "osv",
+        "greenbone",
+        "nuclei-controlled"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.10/tcp/443",
+      "title": "Ověřit CVE bezpečným důkazním průchodem"
+    },
+    {
+      "action_id": "validation:credential-exposure-agent:<RUN_ID>",
+      "action_type": "spawn-agent:credential-exposure-validator",
+      "evidence": [
+        "plaintext=192.168.56.10/tcp/80",
+        "plaintext=192.168.56.20/tcp/21",
+        "plaintext=192.168.56.20/tcp/23"
+      ],
+      "priority": "high",
+      "rationale": "Nešifrovaný protokol je potřeba ověřit proti pasivním důkazům, zdrojům, portům a opakování v čase. Agent nemá číst hesla, ale potvrdit, zda takový provoz skutečně existuje.",
+      "recommended_tools": [
+        "zeek",
+        "suricata",
+        "pcap-metadata-review",
+        "firewall-scope-check"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.10/tcp/80",
+      "title": "Potvrdit riziko nešifrovaného přihlášení"
+    },
+    {
+      "action_id": "validation:traffic-forensic-agent:<RUN_ID>",
+      "action_type": "spawn-agent:traffic-pcap-analyst",
+      "evidence": [
+        "traffic=connection_timeout_burst target=192.168.56.30/host-only",
+        "traffic=external_flow_observed target=192.168.56.30",
+        "traffic=external_flow_observed target=unknown",
+        "traffic=external_flow_observed target=192.168.56.10",
+        "traffic=external_flow_observed target=192.168.56.20",
+        "traffic=packet_rate_spike target=192.168.56.30/host-only",
+        "traffic=service_overload_risk target=192.168.56.30/host-only",
+        "traffic=unexpected_traffic target=192.168.56.30/host-only"
+      ],
+      "priority": "high",
+      "rationale": "Provozní anomálie potřebuje časový kontext, objemy, směry, timeouty a vazbu na běžné služby. Agent má porovnat flow, Zeek a Suricata důkazy a říct, co je fakt a co hypotéza.",
+      "recommended_tools": [
+        "zeek",
+        "suricata",
+        "netflow-ipfix",
+        "ntopng",
+        "baseline-profiler"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.30/host-only",
+      "title": "Forenzně ověřit podezřelé síťové vzorce"
+    },
+    {
+      "action_id": "decision:forensic-plan:<RUN_ID>",
+      "action_type": "forensic-decision-plan",
+      "evidence": [
+        "connection_timeout_burst:192.168.56.30/host-only",
+        "greenbone_finding:192.168.56.20",
+        "high_risk_cve_exposure:192.168.56.10/tcp/443",
+        "high_risk_cve_exposure:192.168.56.10/tcp/80",
+        "high_risk_cve_exposure:192.168.56.30/tcp/22",
+        "http_basic_without_tls:192.168.56.10/tcp/80",
+        "napalm_config_issue:192.168.56.1",
+        "netmiko_config_issue:192.168.56.254"
+      ],
+      "priority": "high",
+      "rationale": "Nálezy nejsou brané jen jako shoda textu. Decision engine z nich skládá hypotézy a chce je potvrdit dalším zdrojem: aktivním follow-upem, pasivní telemetrií nebo autorizovaným kontextem.",
+      "recommended_tools": [
+        "nmap-forensic",
+        "zeek",
+        "suricata",
+        "controller-context"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.30/host-only",
+      "title": "Spustit rozhodovací forenzní plán"
+    },
+    {
+      "action_id": "decision:vuln-intel-verifier:<RUN_ID>",
+      "action_type": "spawn-agent:vuln-intel-verifier",
+      "evidence": [
+        "high_risk_cve_exposure:192.168.56.10/tcp/443",
+        "high_risk_cve_exposure:192.168.56.10/tcp/80",
+        "high_risk_cve_exposure:192.168.56.30/tcp/22"
+      ],
+      "priority": "high",
+      "rationale": "U zranitelností nestačí bannerová shoda. Agent má porovnat verzi, CPE, CVE, KEV/EPSS a reálnou síťovou expozici, aby oddělil teoretickou zranitelnost od praktického rizika.",
+      "recommended_tools": [
+        "nvd",
+        "cisa-kev",
+        "first-epss",
+        "circl",
+        "osv",
+        "vulners-optional",
+        "vendor-advisory"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.10/tcp/443",
+      "title": "Vytvořit agenta pro ověření CVE a exploitability"
+    },
+    {
+      "action_id": "decision:plaintext-passive-hunter:<RUN_ID>",
+      "action_type": "spawn-agent:passive-credential-hunter",
+      "evidence": [
+        "plaintext_management_protocol:192.168.56.20/tcp/21",
+        "plaintext_management_protocol:192.168.56.20/tcp/23"
+      ],
+      "priority": "high",
+      "rationale": "Nešifrovaný Telnet nebo FTP je potřeba ověřit v pasivních datech, protože aktivní sken ukáže port, ale pasivní provoz ukáže, jestli přes něj opravdu tečou relace.",
+      "recommended_tools": [
+        "zeek",
+        "suricata",
+        "pcap-review",
+        "firewall"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.20/tcp/21",
+      "title": "Vytvořit agenta pro nešifrované přihlášení"
+    },
+    {
+      "action_id": "decision:traffic-forensics:<RUN_ID>",
+      "action_type": "spawn-agent:traffic-forensics",
+      "evidence": [
+        "connection_timeout_burst:192.168.56.30/host-only",
+        "external_flow_observed:192.168.56.30",
+        "external_flow_observed:unknown",
+        "external_flow_observed:192.168.56.10",
+        "external_flow_observed:192.168.56.20",
+        "packet_rate_spike:192.168.56.30/host-only",
+        "service_overload_risk:192.168.56.30/host-only",
+        "unexpected_traffic:192.168.56.30/host-only"
+      ],
+      "priority": "high",
+      "rationale": "U provozních anomálií je důležitý kontext v čase. Agent má porovnat cíle, zdroje, objem, timeouty a vazbu na běžné služby.",
+      "recommended_tools": [
+        "netflow-ipfix",
+        "ntopng",
+        "zeek",
+        "baseline-profiler"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.30/host-only",
+      "title": "Vytvořit agenta pro vzorce provozu"
+    },
+    {
+      "action_id": "triage:asset-link:aruba:aruba-ap-01",
+      "action_type": "inventory-gap",
+      "evidence": [
+        "source=aruba",
+        "confidence=medium"
+      ],
+      "priority": "medium",
+      "rationale": "Asset je vidět z autorizovaného zdroje, ale není spárovaný s aktivním inventářem hostů.",
+      "recommended_tools": [
+        "snmp",
+        "lldp",
+        "nmap"
+      ],
+      "target_asset_id": "aruba:aruba-ap-01",
+      "target_service_key": null,
+      "title": "Doplnit vazbu pro asset Aruba-AP-Office"
+    },
+    {
+      "action_id": "triage:asset-link:librenms:1",
+      "action_type": "inventory-gap",
+      "evidence": [
+        "source=librenms",
+        "confidence=medium"
+      ],
+      "priority": "medium",
+      "rationale": "Asset je vidět z autorizovaného zdroje, ale není spárovaný s aktivním inventářem hostů.",
+      "recommended_tools": [
+        "snmp",
+        "lldp",
+        "nmap"
+      ],
+      "target_asset_id": "librenms:1",
+      "target_service_key": null,
+      "title": "Doplnit vazbu pro asset core-sw01"
+    },
+    {
+      "action_id": "triage:asset-link:meraki:Q2XX-SW01",
+      "action_type": "inventory-gap",
+      "evidence": [
+        "source=meraki",
+        "confidence=medium"
+      ],
+      "priority": "medium",
+      "rationale": "Asset je vidět z autorizovaného zdroje, ale není spárovaný s aktivním inventářem hostů.",
+      "recommended_tools": [
+        "snmp",
+        "lldp",
+        "nmap"
+      ],
+      "target_asset_id": "meraki:Q2XX-SW01",
+      "target_service_key": null,
+      "title": "Doplnit vazbu pro asset Switch-Floor1"
+    },
+    {
+      "action_id": "triage:asset-link:omada:omada-ap-01",
+      "action_type": "inventory-gap",
+      "evidence": [
+        "source=omada",
+        "confidence=medium"
+      ],
+      "priority": "medium",
+      "rationale": "Asset je vidět z autorizovaného zdroje, ale není spárovaný s aktivním inventářem hostů.",
+      "recommended_tools": [
+        "snmp",
+        "lldp",
+        "nmap"
+      ],
+      "target_asset_id": "omada:omada-ap-01",
+      "target_service_key": null,
+      "title": "Doplnit vazbu pro asset Omada-AP-Branch"
+    },
+    {
+      "action_id": "triage:asset-link:snmp:sw-core-1",
+      "action_type": "inventory-gap",
+      "evidence": [
+        "source=snmp",
+        "confidence=medium"
+      ],
+      "priority": "medium",
+      "rationale": "Asset je vidět z autorizovaného zdroje, ale není spárovaný s aktivním inventářem hostů.",
+      "recommended_tools": [
+        "snmp",
+        "lldp",
+        "nmap"
+      ],
+      "target_asset_id": "snmp:sw-core-1",
+      "target_service_key": null,
+      "title": "Doplnit vazbu pro asset CoreSwitch"
+    },
+    {
+      "action_id": "triage:asset-link:unifi:unifi-ap-01",
+      "action_type": "inventory-gap",
+      "evidence": [
+        "source=unifi",
+        "confidence=medium"
+      ],
+      "priority": "medium",
+      "rationale": "Asset je vidět z autorizovaného zdroje, ale není spárovaný s aktivním inventářem hostů.",
+      "recommended_tools": [
+        "snmp",
+        "lldp",
+        "nmap"
+      ],
+      "target_asset_id": "unifi:unifi-ap-01",
+      "target_service_key": null,
+      "title": "Doplnit vazbu pro asset UAP-Lobby"
+    },
+    {
+      "action_id": "validation:web-pentest-agent:<RUN_ID>",
+      "action_type": "spawn-agent:web-pentest-agent",
+      "evidence": [
+        "web_targets=2",
+        "active_checks=0"
+      ],
+      "priority": "medium",
+      "rationale": "Běh vidí HTTP/HTTPS služby, ale nemá potvrzené aktivní web checks. Agent má spustit pouze kontrolované nedestruktivní šablony a uložit přesný důkaz.",
+      "recommended_tools": [
+        "httpx",
+        "nuclei-controlled",
+        "tls-grab",
+        "headers-review"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.10/tcp/80",
+      "title": "Doplnit řízený web pentest pro HTTP služby"
+    },
+    {
+      "action_id": "decision:identity-verifier:<RUN_ID>",
+      "action_type": "spawn-agent:identity-verifier",
+      "evidence": [
+        "connection_timeout_burst:192.168.56.30/host-only",
+        "correlation_uncertainty:192.168.56.30/host-only",
+        "intel:mitre-att&ck-context:unknown",
+        "external_flow_observed:192.168.56.30",
+        "external_flow_observed:unknown",
+        "external_flow_observed:192.168.56.10",
+        "external_flow_observed:192.168.56.20",
+        "packet_rate_spike:192.168.56.30/host-only"
+      ],
+      "priority": "medium",
+      "rationale": "Některé závěry mají nižší jistotu nebo chybí přesná identita služby. Agent má doplnit banner, CPE, controller inventář a pasivní relace, aby se nerozhodovalo jen podle hrubé shody.",
+      "recommended_tools": [
+        "nmap-followup",
+        "service-banner",
+        "controller-context",
+        "case-memory"
+      ],
+      "target_asset_id": null,
+      "target_service_key": "192.168.56.30/host-only",
+      "title": "Vytvořit agenta pro ověření identity služby"
+    }
+  ],
+  "unmappedEvents": []
+}
