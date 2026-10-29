@@ -1178,6 +1178,122 @@ mod tests {
         );
     }
 
+    /// Deliverable 23 (audit finding N6 - bounded fix): `estimated_information_gain`/
+    /// `estimated_network_cost`/`estimated_runtime_ms` u `inspect_metrics_content`
+    /// prestavaji byt rucne vybranou konstantou volajiciho (0.6/0.02/500 v Deliverable 8
+    /// a 11) a jsou nahrazeny prumerem z 5 REALNE zmerenych behu stejne akce proti
+    /// stejnemu labu - `crate::case_history::derive_candidate_from_samples`. Jen tenhle
+    /// jeden kandidat je ted data-driven, ne vsechny tri (broad_nuclei_rescan zustava
+    /// odhad - zadna historie pro nej jeste nebyla zmerena, zapsano honestne, ne
+    /// zamlceno).
+    #[test]
+    fn verification_candidate_derived_from_repeated_real_measurements_not_a_guessed_constant() {
+        let _guard = LAB_PORT_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let lab = start_juice_shop_lab().expect("start juice shop lab");
+
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let scan = run_active_scan_against_lab(
+            temp.path(),
+            "lab-d23-run",
+            httpx_bin(),
+            nuclei_bin(),
+            nuclei_templates_dir(),
+        );
+        let scan = match scan {
+            Ok(scan) => scan,
+            Err(error) => {
+                stop_lab(lab);
+                panic!("aktivni sken proti lab cili: {error}");
+            }
+        };
+        let pipeline =
+            build_hypotheses_from_lab_scan(scan, "lab-d23-run").expect("build hypotheses");
+        let (_, hypothesis) = pipeline
+            .hypotheses
+            .iter()
+            .find(|(finding, _)| finding.finding_type.contains("prometheus-metrics-exposed"))
+            .expect("pipeline musi vyprodukovat Finding pro realny nuclei nalez");
+
+        const REPS: usize = 5;
+        let mut samples = Vec::with_capacity(REPS);
+        for _ in 0..REPS {
+            let start = Instant::now();
+            let outcome = execute_inspect_metrics_content("http://127.0.0.1:3000");
+            let elapsed_ms = start.elapsed().as_millis() as u64;
+            let outcome = match outcome {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    stop_lab(lab);
+                    panic!("vykonani inspect_metrics_content: {error}");
+                }
+            };
+            // Informacni prinos: normalizovany pocet citlive vyhlizejicich metrik ze
+            // SKUTECNE odpovedi (ne odhad) - stejne skore pro vsech 5 opakovani, protoze
+            // jde o stejnou staticku stranku, ale pocita se ze ZMERENE odpovedi, ne
+            // z predem napsane konstanty.
+            let information_gain =
+                (outcome.sensitive_looking_metric_names.len() as f64 / 10.0).min(1.0);
+            // Sitovy naklad: proporcni k velikosti skutecne stazene odpovedi (radky),
+            // ne natvrdo 0.02 jako v Deliverable 8/11.
+            let network_cost = (outcome.body_line_count as f64 / 10_000.0).min(1.0) * 0.05;
+            samples.push(crate::case_history::ExecutionSample {
+                runtime_ms: elapsed_ms,
+                network_cost,
+                information_gain,
+            });
+        }
+
+        let derived_candidate = crate::case_history::derive_candidate_from_samples(
+            "inspect_metrics_content",
+            &samples,
+            0.0,
+            false,
+        );
+
+        println!(
+            "Deliverable 23: {} realnych mereni, runtime_ms={} (jednotliva: {:?}) network_cost={:.4} information_gain={:.2} | puvodni rucne zvolena konstanta (D8/D11): 500ms/0.02/0.6",
+            REPS,
+            derived_candidate.estimated_runtime_ms,
+            samples
+                .iter()
+                .map(|sample| sample.runtime_ms)
+                .collect::<Vec<_>>(),
+            derived_candidate.estimated_network_cost,
+            derived_candidate.estimated_information_gain,
+        );
+
+        // Druhy kandidat zustava odhad (zadna historie jeste nebyla zmerena) - zapsano
+        // explicitne jako "estimated", ne tise prejmenovano na "derived".
+        let candidates = vec![
+            derived_candidate.clone(),
+            crate::verification_planner::VerificationCandidate {
+                method: "broad_nuclei_rescan_full_template_set".to_string(),
+                estimated_information_gain: 0.5,
+                estimated_network_cost: 0.3,
+                estimated_runtime_ms: 60_000,
+                disruption_risk: 0.1,
+                requires_approval: false,
+            },
+        ];
+        let plan = crate::verification_planner::plan_verification(hypothesis, candidates);
+        stop_lab(lab);
+
+        let chosen = plan
+            .chosen
+            .expect("planner musi vybrat kandidata")
+            .candidate;
+        assert_eq!(
+            chosen.method, "inspect_metrics_content",
+            "planner musi zvolit levny/rychly kandidat i kdyz jeho vstupy jsou ted odvozene z dat, ne z rucne zvolene konstanty"
+        );
+        assert!(
+            derived_candidate.estimated_runtime_ms > 0,
+            "odvozeny runtime nesmi byt nulovy - over, ze mereni skutecne probehlo"
+        );
+    }
+
     /// Deliverable 12 - prvni skutecne zmerena cast hypotezy H1 (navrh sekce 11:
     /// "spojeni pasivni a aktivni telemetrie zvysi kvalitu rozhodnuti proti samotne
     /// pasivni vrstve za definovanych nakladu"). "Pasivni" tu znamena nmap+httpx bez

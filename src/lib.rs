@@ -2,6 +2,7 @@ pub mod ai;
 pub mod assistant;
 pub mod automation;
 pub mod broker;
+pub mod case_history;
 pub mod config;
 pub mod context;
 pub mod correlation;
