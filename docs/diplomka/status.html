@@ -21,7 +21,7 @@
     color: var(--fg);
     margin: 0;
     padding: 2rem 1.25rem 4rem;
-    max-width: 920px;
+    max-width: 960px;
     margin-inline: auto;
     line-height: 1.5;
   }
@@ -29,6 +29,7 @@
   .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
   .meta code { background: var(--gray-bg); padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.85rem; }
   h2 { font-size: 1.1rem; margin-top: 2.5rem; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+  p.hint { color: var(--muted); font-size: 0.85rem; margin-top: -0.3rem; margin-bottom: 1rem; }
   table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
   th, td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.02em; }
@@ -45,18 +46,165 @@
   .num-card .label { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.3rem; }
   .num-card .value { font-size: 1.15rem; font-weight: 700; }
   .num-card .sub { font-size: 0.78rem; color: var(--muted); margin-top: 0.2rem; }
+
+  .stage {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 0.6rem;
+    overflow: hidden;
+  }
+  .stage > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 0.7rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 600;
+  }
+  .stage > summary::-webkit-details-marker { display: none; }
+  .stage > summary::before {
+    content: "▸";
+    color: var(--muted);
+    font-size: 0.8rem;
+    transition: transform 0.15s ease;
+  }
+  .stage[open] > summary::before { transform: rotate(90deg); }
+  .stage .stage-title { flex: 1; }
+  .stage .stage-sub { font-weight: 400; color: var(--muted); font-size: 0.85rem; }
+  .stage-body { padding: 0 1rem 0.9rem 1rem; }
+  ul.items { list-style: none; margin: 0; padding: 0; }
+  ul.items li {
+    display: flex; gap: 0.55rem; align-items: baseline;
+    padding: 0.35rem 0; border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  ul.items li:first-child { border-top: none; }
+  .mini { font-size: 0.72rem; padding: 0.08rem 0.45rem; }
+  code.file { background: var(--gray-bg); padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.82rem; }
+
+  .outscope { border: 1px dashed var(--border); border-radius: 10px; padding: 0.8rem 1rem; }
+  .outscope ul { margin: 0.4rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.88rem; }
+
   footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; }
-  code.file { background: var(--gray-bg); padding: 0.1rem 0.35rem; border-radius: 4px; }
 </style>
 </head>
 <body>
 
 <h1>Bakula — stav diplomky</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 15:09</strong> ·
-  commit <code>eaf8680</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 15:45</strong> ·
+  commit <code>5190714</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="dalsi-postup-master-plan.md">master plán</a>
+</div>
+
+<h2>Jádro (v rozsahu diplomky) — stage po stagi, s jednotlivými položkami</h2>
+<p class="hint">Klikni na stage pro rozbalení konkrétních hotových/nehotových kroků pod ní.</p>
+
+<details class="stage" open>
+  <summary><span class="badge badge-green">hotovo a testováno</span> <span class="stage-title">Ingest</span> <span class="stage-sub">2 datasetové rodiny, 5 scénářů celkem</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> IoT-23 parser (Zeek <code class="file">conn.log.labeled</code>), label-leakage-safe — <code class="file">src/eval/sources/iot23.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> CTU-13 parser (NetFlow binetflow, jiná modalita) — <code class="file">src/eval/sources/ctu13.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> CTU-13 rozšířeno na 3 scénáře / 2 rodiny (Virut, Rbot, Neris) — <code class="file">dataset-registry.md</code></li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage">
+  <summary><span class="badge badge-yellow">postaveno, neověřeno na reálu</span> <span class="stage-title">Identita</span> <span class="stage-sub">MAC-aware cross-run resolver</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> DHCP renewal, NAT/swap jako Ambiguous, no-MAC fallback — <code class="file">src/identity.rs</code></li>
+      <li><span class="badge badge-red mini">chybí</span> validace na reálných vícedenních datech (jen syntetické sekvence)</li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage">
+  <summary><span class="badge badge-yellow">postaveno, honestně negativní výsledek</span> <span class="stage-title">Korelace (temporal/graph)</span> <span class="stage-sub">okénkování, multi-scale</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> ablace B/C (tumbling okna, graph-linking) — <code class="file">src/correlation_v2.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> ablace D (multi-scale union), fragmentační hypotéza potvrzena sweepem</li>
+      <li><span class="badge badge-red mini">mimo rozsah</span> skutečná multi-senzorová fúze s korekcí závislosti zdrojů (H2 doslovně) — single-sensor datasety to ani neumí testovat</li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage">
+  <summary><span class="badge badge-green">hotovo a testováno</span> <span class="stage-title">Hypotézy</span> <span class="stage-sub">typovaná nejistota, 6 typů</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> <code class="file">TypedUncertainty</code>, žádná fabrikace chybějících hodnot — <code class="file">src/hypothesis.rs</code></li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage">
+  <summary><span class="badge badge-yellow">selekce hotová, vstupy ne</span> <span class="stage-title">Verification Planner</span> <span class="stage-sub">VOI, EVOI</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> <code class="file">plan_verification()</code>, ranking kandidátů — <code class="file">src/verification_planner.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> skutečné vykonání vybraného kandidáta (ne jen výběr)</li>
+      <li><span class="badge badge-red mini">otevřeno</span> <code class="file">estimated_information_gain</code> je stále konstanta od volajícího, ne odvozená z dat</li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage">
+  <summary><span class="badge badge-green">hotovo a prokázáno (H3)</span> <span class="stage-title">Active verification</span> <span class="stage-sub">reálný Docker lab, VOI vs. blanket</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> Juice Shop lab, reálný nuclei nález (prometheus-metrics-exposed)</li>
+      <li><span class="badge badge-green mini">hotovo</span> multiservice lab (4 cíle) — <code class="file">src/lab.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> H3 měřeno: VOI 16× méně kontrol, 2/3 nálezů správně</li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage">
+  <summary><span class="badge badge-green">základ hotov</span> <span class="stage-title">Statistický aparát</span> <span class="stage-sub">bootstrap CI</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> seedovaný percentilový bootstrap — <code class="file">src/eval/stats.rs</code></li>
+      <li><span class="badge badge-yellow mini">omezeno</span> jen CI uvnitř scénáře, ne signifikance mezi scénáři (N=3 nestačí)</li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage">
+  <summary><span class="badge badge-green">částečně potvrzeno (H4)</span> <span class="stage-title">Kalibrace</span> <span class="stage-sub">izotonická regrese, LOSO</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> <code class="file">IsotonicCalibrator</code> (PAVA od nuly) — <code class="file">src/eval/calibration.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> Brier skóre zlepšeno na 3/3 held-out foldech</li>
+      <li><span class="badge badge-red mini">mimo rozsah</span> plný Case Memory (verzování, poisoning guard)</li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage">
+  <summary><span class="badge badge-green">hotovo a testováno</span> <span class="stage-title">Broker + bezpečnostní opravy</span> <span class="stage-sub">3 P0 bugy, crash recovery</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> anonymous-readonly bypass odstraněn (fail-closed)</li>
+      <li><span class="badge badge-green mini">hotovo</span> <code class="file">claim_due_job</code> + 2 další funkce nereagovaly na crashed 'running' joby</li>
+      <li><span class="badge badge-green mini">hotovo</span> broker XAUTOCLAIM/pending recovery, testováno proti reálnému Redis</li>
+    </ul>
+  </div>
+</details>
+
+<h2>Mimo rozsah (vědomě, ne zapomenuto)</h2>
+<div class="outscope">
+  Stejná kategorie rozhodnutí u všech — nová infrastruktura neúměrná jedné diplomce, zdůvodněno v <code class="file">dalsi-postup-master-plan.md</code>, ne ignorováno.
+  <ul>
+    <li>H5 — distribuované škálování workerů (žádná multi-node infrastruktura)</li>
+    <li>Firewall / DNS / IPS enforcement</li>
+    <li>Multi-tenant izolace, HA/DR, Supply chain</li>
+  </ul>
 </div>
 
 <h2>Výzkumné hypotézy H1–H5</h2>
@@ -87,23 +235,6 @@
     <td><span class="badge badge-gray">mimo rozsah</span></td>
     <td>Rozhodnuto vědomě — stejná kategorie jako firewall/DNS/IPS.</td>
   </tr>
-</table>
-
-<h2>Testovací matice (vrstvy systému)</h2>
-<table>
-  <tr><th>Vrstva</th><th>Stav</th><th>Poznámka</th></tr>
-  <tr><td>Ingest (Zeek/CTU-13)</td><td><span class="badge badge-green">hotovo</span></td><td>3 reálné datasety, label-leakage-safe</td></tr>
-  <tr><td>Identita (DHCP/MAC/NAT)</td><td><span class="badge badge-yellow">postaveno</span></td><td>Jen syntetické scénáře, ne reálná data</td></tr>
-  <tr><td>Korelace (temporal/graph)</td><td><span class="badge badge-yellow">postaveno</span></td><td>Honestně negativní výsledek proti baseline</td></tr>
-  <tr><td>Hypotézy (typovaná nejistota)</td><td><span class="badge badge-green">hotovo</span></td><td>Žádná fabrikace chybějících hodnot</td></tr>
-  <tr><td>Planner (VOI)</td><td><span class="badge badge-green">hotovo</span></td><td>Viz H3</td></tr>
-  <tr><td>Active (nmap/httpx/nuclei)</td><td><span class="badge badge-green">hotovo</span></td><td>Reálný Docker lab, reálné nálezy</td></tr>
-  <tr><td>Broker (joby/crash recovery)</td><td><span class="badge badge-green">hotovo</span></td><td>Testováno proti reálnému Redis</td></tr>
-  <tr><td>Database/API-UI</td><td><span class="badge badge-yellow">částečně</span></td><td>3 P0 bezpečnostní opravy, ne celá matice</td></tr>
-  <tr><td>Statistický aparát</td><td><span class="badge badge-green">základ hotov</span></td><td>Bootstrap CI, jen uvnitř scénáře</td></tr>
-  <tr><td>Case Learning</td><td><span class="badge badge-red">nepostaveno</span></td><td>Case Memory se nestaví</td></tr>
-  <tr><td>Firewall / DNS / IPS</td><td><span class="badge badge-gray">mimo rozsah</span></td><td>Explicitní rozhodnutí</td></tr>
-  <tr><td>Multi-tenant / HA-DR / Supply chain</td><td><span class="badge badge-gray">mimo rozsah</span></td><td>Explicitní rozhodnutí</td></tr>
 </table>
 
 <h2>Klíčová čísla</h2>
@@ -141,7 +272,8 @@
 </div>
 
 <footer>
-  Tahle stránka se aktualizuje po každém pushnutí. Otevři jako soubor v prohlížeči (<code class="file">docs/diplomka/status.html</code>) nebo přes raw GitHub link.
+  Aktualizuje se před každým pushnutím, které mění stav/výsledky. Otevři jako soubor v prohlížeči
+  (<code class="file">docs/diplomka/status.html</code>).
 </footer>
 
 </body>
