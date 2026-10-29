@@ -62,6 +62,10 @@ pub fn stop_lab(handle: LabHandle) {
     drop(handle);
 }
 
+/// Lab bezi vzdy na pevnem portu 3000 (Juice Shop uvnitr kontejneru na nem nasloucha).
+/// Dusledek: testy v tomto modulu NESMI bezet paralelne (`cargo test -- --test-threads=1`
+/// nebo spoustet jednotlive) - jinak si dva testy soutezi o stejny host port. To je
+/// zdokumentovane omezeni, ne skryty predpoklad.
 pub fn start_juice_shop_lab() -> Result<LabHandle> {
     let container_name = format!("bakula-lab-juiceshop-{}", uuid::Uuid::new_v4());
     let status = Command::new("docker")
@@ -77,8 +81,15 @@ pub fn start_juice_shop_lab() -> Result<LabHandle> {
         .status()
         .map_err(|error| BakulaError::Processing(format!("docker run selhal: {error}")))?;
     if !status.success() {
+        // `docker run` muze kontejner VYTVORIT (napr. v stavu "Created") i kdyz
+        // selze start (napr. kolize portu) - bez LabHandle by nikdy neprobehl
+        // cleanup a kontejner by osiral navzdy. Smazat ho tady eplicitne, driv
+        // nez se vrati chyba.
+        let _ = Command::new("docker")
+            .args(["rm", "-f", &container_name])
+            .status();
         return Err(BakulaError::Processing(
-            "docker run pro juice-shop lab se nepodarilo spustit.".to_string(),
+            "docker run pro juice-shop lab se nepodarilo spustit (mozna kolize portu 3000 - lab testy nesmi bezet paralelne).".to_string(),
         ));
     }
 
@@ -211,7 +222,15 @@ pub fn build_hypotheses_from_lab_scan(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
+
+    /// `cargo test` spousti testy v ramci jednoho binary vicevlaknove by default -
+    /// bez tohoto zamku by si dva lab testy soutezily o stejny host port 3000
+    /// (presne tak se to stalo, nez byl tenhle zamek pridan). Zamek se drzi po celou
+    /// dobu testu (`_guard` zivotnost), ne jen pri startu kontejneru.
+    static LAB_PORT_LOCK: Mutex<()> = Mutex::new(());
 
     /// Cesty k realnym ProjectDiscovery binarkam (ne systemovy PATH - viz modulova
     /// dokumentace k mismatchi s jinym `httpx`). Prepsatelne env promennymi pro CI/jine
@@ -240,6 +259,9 @@ mod tests {
     /// dobehl bez erroru".
     #[test]
     fn real_nmap_and_httpx_scan_finds_juice_shop_http_service() {
+        let _guard = LAB_PORT_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let lab = start_juice_shop_lab().expect("start juice shop lab");
 
         let temp = tempfile::TempDir::new().expect("tempdir");
@@ -292,6 +314,9 @@ mod tests {
     /// presne to je duvod delat aktivni overeni, ne jen teoreticky odhadovat.
     #[test]
     fn nuclei_finds_real_exposed_prometheus_metrics_endpoint_on_juice_shop() {
+        let _guard = LAB_PORT_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let lab = start_juice_shop_lab().expect("start juice shop lab");
 
         let temp = tempfile::TempDir::new().expect("tempdir");
@@ -324,6 +349,9 @@ mod tests {
     /// kalibrovane - presne stejna disciplina jako ve `verification_planner.rs` testech.
     #[test]
     fn full_pipeline_plans_next_verification_for_real_metrics_exposure_finding() {
+        let _guard = LAB_PORT_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let lab = start_juice_shop_lab().expect("start juice shop lab");
 
         let temp = tempfile::TempDir::new().expect("tempdir");
