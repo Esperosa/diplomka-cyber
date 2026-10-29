@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<title>Bakula — stav diplomky</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --green-bg: #e7f6ec; --green-fg: #15803d;
+    --yellow-bg: #fef6e7; --yellow-fg: #a16207;
+    --red-bg: #fdecec; --red-fg: #b91c1c;
+    --gray-bg: #f1f2f4; --gray-fg: #4b5563;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    margin: 0;
+    padding: 2rem 1.25rem 4rem;
+    max-width: 920px;
+    margin-inline: auto;
+    line-height: 1.5;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+  .meta code { background: var(--gray-bg); padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.85rem; }
+  h2 { font-size: 1.1rem; margin-top: 2.5rem; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.02em; }
+  .badge {
+    display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px;
+    font-size: 0.8rem; font-weight: 600; white-space: nowrap;
+  }
+  .badge-green  { background: var(--green-bg);  color: var(--green-fg); }
+  .badge-yellow { background: var(--yellow-bg); color: var(--yellow-fg); }
+  .badge-red    { background: var(--red-bg);    color: var(--red-fg); }
+  .badge-gray   { background: var(--gray-bg);   color: var(--gray-fg); }
+  .numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.75rem; margin-top: 0.5rem; }
+  .num-card { border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem 1rem; }
+  .num-card .label { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.3rem; }
+  .num-card .value { font-size: 1.15rem; font-weight: 700; }
+  .num-card .sub { font-size: 0.78rem; color: var(--muted); margin-top: 0.2rem; }
+  footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; }
+  code.file { background: var(--gray-bg); padding: 0.1rem 0.35rem; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<h1>Bakula — stav diplomky</h1>
+<div class="meta">
+  Poslední aktualizace: <strong>29. 10. 2026, 15:09</strong> ·
+  commit <code>eaf8680</code> ·
+  <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
+  <a href="dalsi-postup-master-plan.md">master plán</a>
+</div>
+
+<h2>Výzkumné hypotézy H1–H5</h2>
+<table>
+  <tr><th>Hypotéza</th><th>Stav</th><th>Co je skutečně prokázáno</th></tr>
+  <tr>
+    <td><strong>H1</strong><br><span style="color:var(--muted)">pasivní+aktivní &gt; pasivní</span></td>
+    <td><span class="badge badge-yellow">náhradní měření</span></td>
+    <td>Lehký aktivní sken vs. hlubší aktivní ověření — hlubší najde věci, co lehký nemůže. H1 v doslovném znění (reálná pasivní telemetrie) zatím nezměřena.</td>
+  </tr>
+  <tr>
+    <td><strong>H2</strong><br><span style="color:var(--muted)">graph fusion s korekcí zdrojů</span></td>
+    <td><span class="badge badge-red">netestováno</span></td>
+    <td>Kód umí jen okénkování jedné heuristiky, ne multi-senzorovou fúzi. Vědomě mimo rozsah.</td>
+  </tr>
+  <tr>
+    <td><strong>H3</strong><br><span style="color:var(--muted)">VOI planner ≤ blanket scan</span></td>
+    <td><span class="badge badge-green">prokázáno</span></td>
+    <td>VOI použil 16× méně kontrol (2 vs. 32), správně zacílil 2 ze 3 nálezů na multiservice labu.</td>
+  </tr>
+  <tr>
+    <td><strong>H4</strong><br><span style="color:var(--muted)">kalibrace zlepší přenositelnost</span></td>
+    <td><span class="badge badge-green">částečně prokázáno</span></td>
+    <td>Izotonická kalibrace zlepšila Brier skóre na 3/3 scénářích (leave-one-out), 0.683→0.434.</td>
+  </tr>
+  <tr>
+    <td><strong>H5</strong><br><span style="color:var(--muted)">sharding škáluje propustnost</span></td>
+    <td><span class="badge badge-gray">mimo rozsah</span></td>
+    <td>Rozhodnuto vědomě — stejná kategorie jako firewall/DNS/IPS.</td>
+  </tr>
+</table>
+
+<h2>Testovací matice (vrstvy systému)</h2>
+<table>
+  <tr><th>Vrstva</th><th>Stav</th><th>Poznámka</th></tr>
+  <tr><td>Ingest (Zeek/CTU-13)</td><td><span class="badge badge-green">hotovo</span></td><td>3 reálné datasety, label-leakage-safe</td></tr>
+  <tr><td>Identita (DHCP/MAC/NAT)</td><td><span class="badge badge-yellow">postaveno</span></td><td>Jen syntetické scénáře, ne reálná data</td></tr>
+  <tr><td>Korelace (temporal/graph)</td><td><span class="badge badge-yellow">postaveno</span></td><td>Honestně negativní výsledek proti baseline</td></tr>
+  <tr><td>Hypotézy (typovaná nejistota)</td><td><span class="badge badge-green">hotovo</span></td><td>Žádná fabrikace chybějících hodnot</td></tr>
+  <tr><td>Planner (VOI)</td><td><span class="badge badge-green">hotovo</span></td><td>Viz H3</td></tr>
+  <tr><td>Active (nmap/httpx/nuclei)</td><td><span class="badge badge-green">hotovo</span></td><td>Reálný Docker lab, reálné nálezy</td></tr>
+  <tr><td>Broker (joby/crash recovery)</td><td><span class="badge badge-green">hotovo</span></td><td>Testováno proti reálnému Redis</td></tr>
+  <tr><td>Database/API-UI</td><td><span class="badge badge-yellow">částečně</span></td><td>3 P0 bezpečnostní opravy, ne celá matice</td></tr>
+  <tr><td>Statistický aparát</td><td><span class="badge badge-green">základ hotov</span></td><td>Bootstrap CI, jen uvnitř scénáře</td></tr>
+  <tr><td>Case Learning</td><td><span class="badge badge-red">nepostaveno</span></td><td>Case Memory se nestaví</td></tr>
+  <tr><td>Firewall / DNS / IPS</td><td><span class="badge badge-gray">mimo rozsah</span></td><td>Explicitní rozhodnutí</td></tr>
+  <tr><td>Multi-tenant / HA-DR / Supply chain</td><td><span class="badge badge-gray">mimo rozsah</span></td><td>Explicitní rozhodnutí</td></tr>
+</table>
+
+<h2>Klíčová čísla</h2>
+<div class="numbers">
+  <div class="num-card">
+    <div class="label">CTU-13 ablace A, F1</div>
+    <div class="value">0.306</div>
+    <div class="sub">95% CI [0.271, 0.342] · pod triviálním baseline 0.965</div>
+  </div>
+  <div class="num-card">
+    <div class="label">CTU-13, 3 scénáře / 2 rodiny</div>
+    <div class="value">0/3</div>
+    <div class="sub">ablace A porazila triviální baseline</div>
+  </div>
+  <div class="num-card">
+    <div class="label">H4 kalibrace, Brier skóre</div>
+    <div class="value">0.683 → 0.434</div>
+    <div class="sub">průměr přes 3 LOSO foldy, zlepšení 3/3</div>
+  </div>
+  <div class="num-card">
+    <div class="label">H3 VOI vs. blanket</div>
+    <div class="value">2/32 kontrol</div>
+    <div class="sub">16× méně, 2 ze 3 nálezů správně</div>
+  </div>
+  <div class="num-card">
+    <div class="label">Testy (lib, bez broker/lab)</div>
+    <div class="value">81 / 81</div>
+    <div class="sub">0 selhání</div>
+  </div>
+  <div class="num-card">
+    <div class="label">Lab testy (Docker)</div>
+    <div class="value">7 / 7</div>
+    <div class="sub">0 selhání</div>
+  </div>
+</div>
+
+<footer>
+  Tahle stránka se aktualizuje po každém pushnutí. Otevři jako soubor v prohlížeči (<code class="file">docs/diplomka/status.html</code>) nebo přes raw GitHub link.
+</footer>
+
+</body>
+</html>
