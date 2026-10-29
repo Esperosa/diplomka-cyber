@@ -33,6 +33,7 @@ pub mod storage;
 pub mod triage;
 pub mod validation;
 pub mod verification;
+pub mod verification_planner;
 pub mod vuln;
 pub mod webscan;
 
