@@ -18,6 +18,7 @@ pub mod dataset_replay;
 pub mod ground_truth;
 pub mod source;
 pub mod sources;
+pub mod stats;
 
 #[cfg(test)]
 mod tests {

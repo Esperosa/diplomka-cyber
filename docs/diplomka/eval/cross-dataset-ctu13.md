@@ -18,6 +18,7 @@
 | **Ablace A precision** | 0.250 | **0.767** |
 | **Ablace A recall** | 0.667 | **0.192** |
 | **Ablace A F1** | 0.364 | **0.306** |
+| **Ablace A F1, 95% bootstrap CI (CTU-13)** | — | **[0.271, 0.342]** (Deliverable 20, `bootstrap-confidence-intervals.md`) |
 | **Triviální baseline "vše=malicious" F1** | **0.462** | **0.965** |
 
 **Klíčové a humbling zjištění (nové, díky doplněnému triviálnímu baseline — návrh N2 z auditu):** na **obou** datasetech triviální klasifikátor "označ vše jako malicious" **poráží ablaci A na F1** (0.462 > 0.364 na IoT-23; 0.965 > 0.306 na CTU-13). Bez tohoto srovnání vypadala čísla ablace A jako "rozumná detekce" — ve skutečnosti aktuální heuristika na obou datasetech **nepřekonává nejhloupější možný klasifikátor**. Tohle je přesně ten "missing baseline" pitfall, který metodologická literatura k ML v bezpečnosti (Arp et al., USENIX Security 2022) jmenuje jako nejčastější chybu.

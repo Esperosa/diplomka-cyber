@@ -1,4 +1,4 @@
-# Souhrn výsledků (Deliverables 1–19) a vztah k výzkumným hypotézám H1–H5
+# Souhrn výsledků (Deliverables 1–20) a vztah k výzkumným hypotézám H1–H5
 
 **Status: konsolidace k 29. 10. 2026, OPRAVENO po nezávislém master-plan auditu (3 agenti, Opus + pragmatik + skeptik).** Návrhový dokument (sekce 11) definuje 5 výzkumných hypotéz pro diplomku. Tento dokument mapuje, co z dosavadních deliverables tyto hypotézy skutečně testuje — **honestně**, včetně částečně negativních výsledků, ne jako seznam úspěchů.
 
@@ -35,6 +35,7 @@
 | 17 | Model hrozeb (konsolidace, návrh sekce 11 jmenuje jako povinný výstup) + regresní asserty na IoT-23 baseline čísla | `docs/diplomka/threat-model.md`, `src/eval/dataset_replay.rs` | Hotovo |
 | 18 | CTU-13 rozšířeno ze 1 na 3 scénáře/2 rodiny (Virut, Rbot, Neris) — ablace A prohrává s triviálním baseline 0/3, ne 0/1 | `src/eval/dataset_replay.rs`, `docs/diplomka/eval/ctu13-three-scenarios-dataset-sufficiency.md` | Hotovo |
 | 19 | H4 poprvé částečně potvrzeno — izotonická kalibrace zlepšila Brier skóre na 3/3 LOSO foldech (průměr 0.683→0.434) | `src/eval/calibration.rs`, `src/passive/anomaly.rs`, `docs/diplomka/eval/h4-isotonic-calibration-loso.md` | Hotovo |
+| 20 | Statistický aparát — bootstrap 95% CI na ablaci A/CTU-13 (F1 0.306 [0.271, 0.342], mimo dosah triviálního baseline) | `src/eval/stats.rs`, `docs/diplomka/eval/bootstrap-confidence-intervals.md` | Hotovo |
 | 14 | Oprava CTU-13 label bugu + triviální baseline + hash fix (nezávislý audit, kolo 1) | `src/eval/ground_truth.rs`, `src/eval/dataset_replay.rs` | Hotovo |
 | 15 | Oprava Virut/RBot, H1 terminologie, IoT-23 stejná třída chyby jako bod 14.1, regresní asserty na CTU-13 čísla (nezávislý audit, kolo 2) | `src/eval/sources/iot23.rs`, `docs/diplomka/eval/h1-passive-vs-active.md` | Hotovo |
 

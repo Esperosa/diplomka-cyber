@@ -111,6 +111,9 @@ pub(crate) struct BaselineResult {
     /// Jake typy utoku (`detailed_label`) jsou v malicious flows zastoupeny - kontext
     /// pro baseline report, ne vstup do rozhodovani (viz label-leakage zaruka vyse).
     pub(crate) malicious_detailed_labels: BTreeSet<String>,
+    /// (predicted, actual) pro kazdy "known evidence" klic, presne ty, co vstupuji do
+    /// `confusion` - Deliverable 20, umoznuje bootstrap CI bez ztraty granularity.
+    pub(crate) per_key_predictions: Vec<(bool, bool)>,
 }
 
 /// Ablace A (zpetna kompatibilita s existujicimi testy/volajicimi) - tenky wrapper nad
@@ -204,6 +207,10 @@ pub(crate) fn run_ablation(
 
     let mut confusion = ConfusionMatrix::default();
     let mut excluded_unknown_keys = 0usize;
+    // Deliverable 20 (statisticky aparat): stejna (predicted, actual) dvojice, ktera
+    // jde do confusion matrix nize, zaznamenana i per-klic - umoznuje bootstrap
+    // resampling (`eval::stats`) bez duplikace teto derivace ground truth.
+    let mut per_key_predictions: Vec<(bool, bool)> = Vec::new();
     for key in &all_keys {
         if !key_has_known_evidence.contains(key) {
             excluded_unknown_keys += 1;
@@ -211,6 +218,7 @@ pub(crate) fn run_ablation(
         }
         let predicted = predicted_positive.contains(key);
         let actual = ground_truth_positive.contains(key);
+        per_key_predictions.push((predicted, actual));
         match (predicted, actual) {
             (true, true) => confusion.true_positive += 1,
             (true, false) => confusion.false_positive += 1,
@@ -259,6 +267,7 @@ pub(crate) fn run_ablation(
         decision_action_count,
         confusion,
         malicious_detailed_labels,
+        per_key_predictions,
     }
 }
 
@@ -565,6 +574,23 @@ mod tests {
         let (trivial_p, trivial_r, trivial_f1) = a.confusion.trivial_always_positive_baseline();
         println!(
             "CTU-13 trivialni baseline (vse=malicious): precision={trivial_p:.3} recall={trivial_r:.3} f1={trivial_f1:.3} (srovnej s ablaci A vyse)"
+        );
+
+        // Deliverable 20 (chybejici statisticky aparat, audit N4): bootstrap 95% CI
+        // na ablaci A - nejistota UVNITR tohoto scenare (resampling 885 known klicu),
+        // ne signifikance rozdilu mezi scenari (na to N=3 nestaci, viz stats.rs doc).
+        let f1_ci = crate::eval::stats::bootstrap_metric_ci(
+            &a.per_key_predictions,
+            2000,
+            42,
+            ConfusionMatrix::f1,
+        );
+        println!(
+            "CTU-13 ablace A F1 95% bootstrap CI: {:.3} [{:.3}, {:.3}] (n={}, 2000 resamplu, seed=42)",
+            f1_ci.point_estimate,
+            f1_ci.lower_95,
+            f1_ci.upper_95,
+            a.per_key_predictions.len(),
         );
 
         // Regresni asserty (N10 nezavisleho auditu, 29.10.2026): cisla citovana v
