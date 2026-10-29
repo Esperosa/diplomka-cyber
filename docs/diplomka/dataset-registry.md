@@ -19,8 +19,8 @@ Registr datových zdrojů pro `src/eval/` (replay a baseline měření korelačn
 
 | Scénář | Cesta v repu | Velikost | SHA-256 | Flows | Malicious | Benign |
 |---|---|---|---|---|---|---|
-| CTU-IoT-Malware-Capture-44-1 | `labs/datasets/iot23/CTU-IoT-Malware-Capture-44-1/conn.log.labeled` | 31 179 B | `12cd99bcda78140dd5f31cf3d786642f150e42e0ebc3599190f35314e406f71` | 237 | 26 (C&C, C&C-FileDownload, DDoS) | 211 |
-| CTU-Honeypot-Capture-7-1 / Somfy-01 | `labs/datasets/iot23/CTU-Honeypot-Capture-7-1-Somfy-01/conn.log.labeled` | 18 024 B | `fb37fb38393c48b064d3afd373b075ffe31063d4924a2df1c5d13fc490b830c` | 130 | 0 | 130 |
+| CTU-IoT-Malware-Capture-44-1 | `labs/datasets/iot23/CTU-IoT-Malware-Capture-44-1/conn.log.labeled` | 31 179 B | `12cd99bcda78140dd5f31cf3d786642f150e42e0ebc3599190f35314e406f71f` | 237 | 26 (C&C, C&C-FileDownload, DDoS) | 211 |
+| CTU-Honeypot-Capture-7-1 / Somfy-01 | `labs/datasets/iot23/CTU-Honeypot-Capture-7-1-Somfy-01/conn.log.labeled` | 18 024 B | `fb37fb38393c48b064d3afd373b075ffe31063d4924a2df1c5d13fc490b830cc` | 130 | 0 | 130 |
 
 **Zdroj souborů:** staženo přímo z mirroru `mcfp.felk.cvut.cz/publicDatasets/IoT-23-Dataset/IndividualScenarios/` (odkaz z homepage datasetu výše), konkrétně `.../CTU-IoT-Malware-Capture-44-1/bro/conn.log.labeled` a `.../CTU-Honeypot-Capture-7-1/Somfy-01/bro/conn.log.labeled`, dne 29. 10. 2026.
 
@@ -35,7 +35,7 @@ Registr datových zdrojů pro `src/eval/` (replay a baseline měření korelačn
 | `url` | https://www.stratosphereips.org/datasets-ctu13 |
 | `license` | CC BY-NC-SA 4.0, pro výzkum |
 | `modalities` | NetFlow-style bidirekční flow CSV (`binetflow`) — **jiná modalita než IoT-23's Zeek conn.log**, vlastní parser (`src/eval/sources/ctu13.rs`), žádné sdílení s `passive::zeek` |
-| `label_schema` | `Label` pole `flow=From-Botnet-...`/`flow=Background`/`flow=Normal-...` — 3 kategorie, normalizováno na binární `Malicious`/`Benign` pro kompatibilitu se sdíleným `is_malicious()` (Background→Benign je zjednodušení, zdokumentováno v `ctu13.rs`) |
+| `label_schema` | `Label` pole `flow=From-Botnet-...`/`flow=Background`/`flow=Normal-...` — 3 kategorie, normalizováno na `Malicious`/`Benign`/**`Unknown`** (ne binárně — oprava 29.10.2026, `Background` = neověřený provoz, `is_unknown()` v `ground_truth.rs`, vyřazeno z confusion matrix, ne počítáno jako Benign) |
 | `known_leakage_risks` | Stejná strukturní záruka jako IoT-23 (paralelní `Vec`). Navíc: `State` pole je NetFlow notace ("FPA_FPA", "CON"), ne Zeek `conn_state` slovník ("S0", "REJ") — heuristiky v `passive::anomaly`/`correlation_v2` laděné na Zeek vokabulář na CTU-13 nefungují stejně (změřeno, viz níže) |
 | `wave` | 1 |
 
@@ -43,7 +43,9 @@ Registr datových zdrojů pro `src/eval/` (replay a baseline měření korelačn
 
 | Scénář | Cesta (lokální, gitignored) | Velikost | SHA-256 | Flows | Malicious |
 |---|---|---|---|---|---|
-| CTU-Malware-Capture-Botnet-54 (RBot), prvních 30 MB | `labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv` | 31 457 281 B | `e53331ede25cb047e65ed814b7e34dd49f3926e8585d4ea6294aba4cccf336b` | 229 653 | 6 185 |
+| CTU-Malware-Capture-Botnet-54 (RBot), prvních 30 MB | `labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv` | 31 457 281 B | `e53331ede25cb047e65ed814b7e34dd49f3926e8585d4ea6294aba4cccf336b6` | 229 653 | 6 185 |
+
+**Oprava 29.10.2026:** všechny tři SHA-256 hashe v této tabulce byly dřív useknuté o 1 hex znak (63 místo 64) — chyba při přepisu z `sha256sum` výstupu, odhalená nezávislou kontrolou (Opus Plan agent). Opraveno zde na skutečné hashe.
 
 **Reprodukce stažení** (HTTP Range request — "reprezentativní výřez", ne bezhlavé stažení celého 251MB souboru, per návrh sekce 7):
 ```
