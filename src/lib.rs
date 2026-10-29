@@ -15,6 +15,7 @@ pub mod eval;
 pub mod evaluation;
 pub mod external_sql;
 pub mod findings;
+pub mod fusion;
 pub mod hypothesis;
 pub mod identity;
 pub mod identity_lab;
