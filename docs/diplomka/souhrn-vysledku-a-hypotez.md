@@ -1,6 +1,12 @@
-# Souhrn výsledků (Deliverables 1–10) a vztah k výzkumným hypotézám H1–H5
+# Souhrn výsledků (Deliverables 1–13) a vztah k výzkumným hypotézám H1–H5
 
-**Status: konsolidace k 29. 10. 2026.** Návrhový dokument (sekce 11) definuje 5 výzkumných hypotéz pro diplomku. Tento dokument mapuje, co z deseti dosavadních deliverables tyto hypotézy skutečně testuje, co potvrzuje, co vyvrací, a co ještě čeká na ověření — **honestně**, včetně částečně negativních výsledků, ne jako seznam úspěchů.
+**Status: konsolidace k 29. 10. 2026, OPRAVENO po nezávislém master-plan auditu (3 agenti, Opus + pragmatik + skeptik).** Návrhový dokument (sekce 11) definuje 5 výzkumných hypotéz pro diplomku. Tento dokument mapuje, co z dosavadních deliverables tyto hypotézy skutečně testuje — **honestně**, včetně částečně negativních výsledků, ne jako seznam úspěchů.
+
+**Oprava 29.10.2026 (Deliverable 14):** nezávislý audit (Opus Plan agent) odhalil a ověřil přímo v datech/kódu konkrétní chyby v předchozí verzi tohoto dokumentu a navazujících eval reportů:
+1. **CTU-13 "Background" se chybně počítal jako "Benign"** — opraveno na tříhodnotový label (Malicious/Benign/**Unknown**), `Unknown`-only klíče se teď vyřazují z confusion matrix. Přesná oprava: `docs/diplomka/eval/cross-dataset-ctu13.md`.
+2. **Chyběl triviální baseline** ("klasifikuj vše jako malicious") — doplněno (`ConfusionMatrix::trivial_always_positive_baseline()`). Výsledek je humbling: tenhle triviální klasifikátor **poráží ablaci A na F1 na obou datasetech** (IoT-23 0.462 vs 0.364, CTU-13 0.965 vs 0.306 po opravě bodu 1).
+3. **Ablace B/C/D v kódu neodpovídají ablacím B/C/D/E z návrhu** (sekce 9.1) — kódové B/C/D jsou všechny podvarianty návrhové ablace C (temporal/graph), návrhové B (aktivní signály) a E (kalibrace) nikdy neběžely v tomhle harnessu. H2 status níže je proto opraven na konzervativnější "netestováno", ne "částečně vyvráceno".
+4. **Hashe v `dataset-registry.md` byly useknuté o 1 znak** — opraveno, doplněn automatický test (`eval::tests::committed_iot23_files_match_hashes_recorded_in_dataset_registry`).
 
 ## Co bylo postaveno (Deliverables 1–10, chronologicky)
 
@@ -19,6 +25,7 @@
 | 11 | Skutečné vykonání vybrané verifikace (ne jen výběr) | `src/lab.rs` | Hotovo |
 | 12 | H1 poprvé reálně změřeno (pasivní vs. pasivní+aktivní) | `src/lab.rs` | Hotovo |
 | 13 | H3 měření zablokováno potvrzeným strukturním důvodem (ne domněnkou) | `docs/diplomka/eval/h3-measurement-difficulty.md` | Hotovo |
+| 14 | Oprava CTU-13 label bugu + triviální baseline + hash fix (nezávislý audit) | `src/eval/ground_truth.rs`, `src/eval/dataset_replay.rs` | Hotovo |
 
 ## Vztah k H1–H5
 
@@ -28,7 +35,7 @@
 
 ### H2: temporal/graph evidence fusion s korekcí závislosti zdrojů sníží falešné incidenty oproti prostému scoringu eventů.
 
-**Status: ČÁSTEČNĚ VYVRÁCENO naivní implementací, a to je důležitý výsledek.** Ablace B/C/D (Deliverable 3, 9, 10) jsou přímý test téhle hypotézy — a naivní temporal windowing (bez korekce závislosti zdrojů, bez adaptace na typ signálu) **nesnížilo** falešné incidenty, na CTU-13 je dokonce zhoršilo (F1 0.115→0.057 při 300s okně). Teprve multi-scale union (D) vrátil výkon na úroveň A, ne nad ní. **To neznamená, že H2 je vyvrácená obecně** — znamená to, že "temporal fusion" bez korekce závislosti zdrojů (přesně to, co H2 explicitně požaduje a co ještě nebylo implementováno — `graph` část H2, propojení přes assety/služby/uživatele, ne jen okénkování jedné metriky) je nedostatečné. Graph-linking (ablace C) byl implementován jen jako naivní multi-target heuristika bez baseline-awareness a prokazatelně generuje FP na legitimním provozu (NTP fan-out, Deliverable 3). **Korektní test H2 vyžaduje dokončit "korekci závislosti zdrojů"**, která v návrhu (sekce 5.1: "stejný tok pozorovaný Suricatou, Zeekem a firewallem nejsou tři nezávislé důkazy") ještě nebyla postavena.
+**Status: NETESTOVÁNO (opraveno z "částečně vyvráceno" po auditu).** Ablace B/C/D (Deliverable 3, 9, 10) testují jen **okénkování** jedné pasivní heuristiky (`passive::anomaly`), ne temporal/graph fúzi s korekcí závislosti zdrojů, kterou H2 explicitně žádá (návrh sekce 5.1: "stejný tok pozorovaný Suricatou, Zeekem a firewallem nejsou tři nezávislé důkazy"). Dataset má navíc jediný zdroj evidence (jen Zeek/NetFlow), takže "závislost zdrojů" v něm ani nemůže nastat — žádná verze ablace B/C/D proto H2 testovat nemůže, dokud nebude multi-senzorová fúze (Community ID deduplikace mezi Zeek/Suricata) skutečně postavena. Měřeno bylo: naivní temporal windowing na jediném zdroji dat (bez fúze) nesnižuje falešné incidenty (po opravě label bugu: F1 0.306→0.124 na CTU-13 při 300s okně) — to je validní, hodnotný dílčí nález o oknech samotných, ale **neodpovídá H2** ve znění, jaké má. Graph-linking (ablace C) byl implementován jen jako naivní multi-target heuristika bez baseline-awareness a prokazatelně generuje FP na legitimním provozu (NTP fan-out, Deliverable 3).
 
 ### H3: typovaná nejistota a VOI-based planner dosáhne stejné či vyšší přesnosti s menším počtem aktivních kontrol oproti pravidelnému plošnému skenu.
 
@@ -36,7 +43,7 @@
 
 ### H4: verzované učení a kalibrace z ověřených případů zlepší přenositelnost na neviděná data oproti statickým heuristikám.
 
-**Status: NEOVĚŘITELNÉ BEZ CASE MEMORY, které ještě neexistuje.** `hypothesis.rs` vědomě nepočítá `probability`/kalibraci (dokumentováno jako limitace). Deliverable 9 ALE už změřila přesně tu "přenositelnost na neviděná data" část H4 nepřímo — **statické heuristiky (ablace A) ztratily přes 2/3 F1 skóre při přechodu na jiný dataset** (0.364→0.115). To je přesný baseline, proti kterému by budoucí kalibrace/Case Memory musela prokázat zlepšení, aby H4 potvrdila.
+**Status: NEOVĚŘITELNÉ BEZ CASE MEMORY, které ještě neexistuje.** `hypothesis.rs` vědomě nepočítá `probability`/kalibraci (dokumentováno jako limitace). Deliverable 9 ALE už změřila přesně tu "přenositelnost na neviděná data" část H4 nepřímo — po opravě N1 je obraz jemnější než se původně tvrdilo: **statické heuristiky (ablace A) neztrácejí drtivou většinu F1 při přechodu na jiný dataset** (F1 0.364 na IoT-23 → 0.306 na CTU-13, pokles ~16 %, ne přes 2/3 jak se chybně uvádělo v původní verzi), ale **na obou datasetech zůstávají pod triviálním baseline "vše=malicious"** (0.462 na IoT-23, 0.965 na CTU-13 — viz `docs/diplomka/eval/cross-dataset-ctu13.md`). To je přesnější a náročnější baseline, proti kterému by budoucí kalibrace/Case Memory musela prokázat zlepšení, aby H4 potvrdila: nejde jen o "neztratit F1 při přechodu na jiný dataset", ale především o "překonat nejhloupější možný klasifikátor na obou datasetech".
 
 ### H5: rozdělení workerů a stavu umožní s přidáním hardwaru zvýšit propustnost bez disproporčního růstu latence.
 
