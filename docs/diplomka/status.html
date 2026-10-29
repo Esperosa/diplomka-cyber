@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 16:27</strong> ·
-  commit <code>07b4c34</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 17:44</strong> ·
+  commit <code>23ab96b</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -208,8 +208,10 @@
   <summary><span class="badge badge-yellow">fáze 1 — probíhá</span> <span class="stage-title">H5 korektnost + H2 fúze</span> <span class="stage-sub">bounded, dny až 2 týdny</span></summary>
   <div class="stage-body">
     <ul class="items">
-      <li><span class="badge badge-yellow mini">probíhá</span> H5: <code class="file">claimed_by</code> fencing, lease navázaný na config, DLQ, connection pooling — <code class="file">src/platform.rs</code>, <code class="file">src/broker.rs</code></li>
-      <li><span class="badge badge-yellow mini">probíhá</span> H5: test se 2 reálnými worker procesy proti 1 Redis+DB</li>
+      <li><span class="badge badge-green mini">hotovo</span> H5: <code class="file">claimed_by</code> fencing opraven (split-brain bug), lease navázaný na config — <code class="file">src/platform.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> H5: reálný souběžný test (4 vlákna, 20 jobů, 0 double-claimů) — potvrzuje `TransactionBehavior::Immediate` funguje</li>
+      <li><span class="badge badge-yellow mini">probíhá</span> H5: DLQ, connection pooling — <code class="file">src/broker.rs</code></li>
+      <li><span class="badge badge-yellow mini">probíhá</span> H5: test se 2 oddělenými OS procesy (vlákna už hotová, procesy jsou další krok)</li>
       <li><span class="badge badge-yellow mini">probíhá</span> H2: Community ID join-key mezi Zeek/Suricata — <code class="file">src/passive/community_id.rs</code></li>
       <li><span class="badge badge-yellow mini">probíhá</span> H2: dependency-aware fúzní vrstva — nový <code class="file">src/fusion.rs</code></li>
     </ul>
@@ -274,7 +276,7 @@
   <tr>
     <td><strong>H5</strong><br><span style="color:var(--muted)">sharding škáluje propustnost</span></td>
     <td><span class="badge badge-yellow">zpět v rozsahu, probíhá</span></td>
-    <td>Broker primitivy solidní a testované, ale platform.rs je SQLite-only (nejde sdílet přes síť) + chybí claimed_by fencing/DLQ. Opravuju korektnost nejdřív, multi-host je další fáze.</td>
+    <td>Broker primitivy solidní a testované. claimed_by fencing opraven (byl to reálný split-brain bug), souběžnost ověřena 4 reálnými vlákny. platform.rs je stále SQLite-only (nejde sdílet přes síť) — multi-host čeká na Postgres migraci.</td>
   </tr>
 </table>
 
@@ -312,8 +314,8 @@
   </div>
   <div class="num-card">
     <div class="label">Testy (lib, bez broker/lab)</div>
-    <div class="value">83 / 83</div>
-    <div class="sub">0 selhání</div>
+    <div class="value">85 / 85</div>
+    <div class="sub">0 selhání, vč. 1 reálného souběžného testu</div>
   </div>
   <div class="num-card">
     <div class="label">Lab testy (Docker)</div>
