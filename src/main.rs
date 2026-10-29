@@ -869,7 +869,7 @@ fn main() -> anyhow::Result<()> {
                     &display_name,
                     &capabilities,
                 )?;
-                let message = broker::claim_one(&broker_config, &args.node_id, 500)?;
+                let message = broker::claim_one(&broker_config, &args.node_id, 500, 30_000)?;
                 let run_id = if let Some(message) = message {
                     if let Some(job) = platform::claim_job_by_id(
                         &args.db,
@@ -1014,7 +1014,7 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Broker(BrokerCommand::WorkerRun(args)) => {
             let config = broker::RedisBrokerConfig::for_uri(&args.broker_uri);
-            let message = broker::claim_one(&config, &args.node_id, 500)?;
+            let message = broker::claim_one(&config, &args.node_id, 500, 30_000)?;
             println!("{}", serde_json::to_string_pretty(&message)?);
         }
         Command::ExternalSql(ExternalSqlCommand::Init(args)) => {
