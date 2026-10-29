@@ -19,3 +19,7 @@
 
 tools/projectdiscovery/**/httpx.exe
 tools/projectdiscovery/**/nuclei.exe
+
+# Vlna 1+ datasety jsou prilis velke pro commit (na rozdil od malych IoT-23 vyrezu
+# ve wave 0) - viz docs/diplomka/dataset-registry.md pro presny stahovaci prikaz a hash.
+labs/datasets/ctu13/

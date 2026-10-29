@@ -26,8 +26,32 @@ Registr datových zdrojů pro `src/eval/` (replay a baseline měření korelačn
 
 **Proč committed, ne `.gitignore`:** jde o malé (desítky KB) labelované výřezy, ne o celý korpus — licence CC BY-NC-SA 4.0 pro výzkum to umožňuje a reprodukovatelnost testu na čistém klonu to vyžaduje (`src/eval/sources/iot23.rs` i `src/eval/dataset_replay.rs` mají `#[cfg(test)]` testy, které tyto soubory čtou). Pokud se v další vlně přidají větší scénáře/datasety, ty už patří mimo git (stahovací skript + hash v registru, ne commit).
 
+## Vlna 1 — CTU-13
+
+| Pole | Hodnota |
+|---|---|
+| `dataset_id` | `ctu13` |
+| `source` | Stratosphere IPS / CTU (ČVUT) |
+| `url` | https://www.stratosphereips.org/datasets-ctu13 |
+| `license` | CC BY-NC-SA 4.0, pro výzkum |
+| `modalities` | NetFlow-style bidirekční flow CSV (`binetflow`) — **jiná modalita než IoT-23's Zeek conn.log**, vlastní parser (`src/eval/sources/ctu13.rs`), žádné sdílení s `passive::zeek` |
+| `label_schema` | `Label` pole `flow=From-Botnet-...`/`flow=Background`/`flow=Normal-...` — 3 kategorie, normalizováno na binární `Malicious`/`Benign` pro kompatibilitu se sdíleným `is_malicious()` (Background→Benign je zjednodušení, zdokumentováno v `ctu13.rs`) |
+| `known_leakage_risks` | Stejná strukturní záruka jako IoT-23 (paralelní `Vec`). Navíc: `State` pole je NetFlow notace ("FPA_FPA", "CON"), ne Zeek `conn_state` slovník ("S0", "REJ") — heuristiky v `passive::anomaly`/`correlation_v2` laděné na Zeek vokabulář na CTU-13 nefungují stejně (změřeno, viz níže) |
+| `wave` | 1 |
+
+**Stažený výřez (NE committed — 30 MB, nad limit pro git, viz `.gitignore`):**
+
+| Scénář | Cesta (lokální, gitignored) | Velikost | SHA-256 | Flows | Malicious |
+|---|---|---|---|---|---|
+| CTU-Malware-Capture-Botnet-54 (RBot), prvních 30 MB | `labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv` | 31 457 281 B | `e53331ede25cb047e65ed814b7e34dd49f3926e8585d4ea6294aba4cccf336b` | 229 653 | 6 185 |
+
+**Reprodukce stažení** (HTTP Range request — "reprezentativní výřez", ne bezhlavé stažení celého 251MB souboru, per návrh sekce 7):
+```
+curl -s -r 0-31457280 "https://mcfp.felk.cvut.cz/publicDatasets/CTU-Malware-Capture-Botnet-54/detailed-bidirectional-flow-labels/capture20110815-3.binetflow" -o labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv
+```
+
 ## Budoucí vlny (naplánováno, ne implementováno)
 
-- **Vlna 1:** CTU-13 (C2/multi-stage), CICIDS2017/2018, CICIoT2023, UNSW-NB15 — každý jako nová `ScenarioSource` implementace v `src/eval/sources/`.
+- **Vlna 1 (zbytek):** CICIDS2017/2018, CICIoT2023, UNSW-NB15 — každý jako nová `ScenarioSource` implementace v `src/eval/sources/`.
 - **Vlna 2:** threat intel enrichment (NVD/KEV/EPSS, URLhaus, ThreatFox, OTX).
 - **Vlna 3:** Mininet/Containerlab generátor syntetických scénářů — zdroj prakticky neomezeného objemu kontrolovaných scénářů (DHCP/NAT churn, vlastní firewall/DNS/IPS politiky), včetně identity-churn scénářů, které IoT-23 ani CTU-13 nepokrývají.

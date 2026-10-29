@@ -206,6 +206,7 @@ mod tests {
 
     use super::*;
     use crate::eval::source::ScenarioSource;
+    use crate::eval::sources::ctu13::Ctu13Source;
     use crate::eval::sources::iot23::Iot23Source;
 
     fn dataset_path(relative: &str) -> PathBuf {
@@ -379,5 +380,47 @@ mod tests {
         assert_eq!(info.wave, 0);
         assert_eq!(info.url, "https://www.stratosphereips.org/datasets-iot23");
         assert!(info.license.contains("CC BY-NC-SA"));
+    }
+
+    /// Vlna 1, cross-dataset generalizace: `#[ignore]` protoze 30MB vyrez neni
+    /// commitnuty do gitu (viz `.gitignore`, `docs/diplomka/dataset-registry.md` pro
+    /// presny stahovaci prikaz a hash) - stejna konvence jako stavajici `#[ignore]`
+    /// testy vyzadujici nepublikovane fixtury. Spustit rucne po stazeni:
+    /// `cargo test --lib ctu13_cross_dataset -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "vyzaduje stazeny CTU-13 vyrez, viz docs/diplomka/dataset-registry.md"]
+    fn ctu13_cross_dataset_ablation_a_b_c_generalization_check() {
+        let dataset = Ctu13Source
+            .load(&dataset_path(
+                "labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv",
+            ))
+            .expect("parse ctu13 excerpt");
+
+        let malicious_flow_count = dataset
+            .labels
+            .iter()
+            .filter(|label| label.is_malicious())
+            .count();
+        assert_eq!(malicious_flow_count, 6185);
+
+        let a = run_ablation(&dataset, 300, AblationVariant::A);
+        let b = run_ablation(&dataset, 300, AblationVariant::B);
+        let c = run_ablation(&dataset, 300, AblationVariant::C);
+
+        for (label, result) in [("A", &a), ("B", &b), ("C", &c)] {
+            println!(
+                "CTU-13 ablace {label} (events={}, observations={}): TP={} FP={} FN={} TN={} precision={:.3} recall={:.3} f1={:.3} findings={}",
+                result.correlated_event_count,
+                result.observation_count,
+                result.confusion.true_positive,
+                result.confusion.false_positive,
+                result.confusion.false_negative,
+                result.confusion.true_negative,
+                result.confusion.precision(),
+                result.confusion.recall(),
+                result.confusion.f1(),
+                result.finding_count,
+            );
+        }
     }
 }
