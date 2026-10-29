@@ -5,6 +5,7 @@ pub mod broker;
 pub mod config;
 pub mod context;
 pub mod correlation;
+pub mod correlation_v2;
 pub mod cpe;
 pub mod decision;
 pub mod diff;

@@ -3,12 +3,23 @@ use std::collections::{BTreeSet, HashSet};
 use chrono::Utc;
 
 use crate::correlation::correlate_events;
+use crate::correlation_v2::{detect_windowed_anomalies, detect_windowed_anomalies_linked};
 use crate::decision;
 use crate::eval::ground_truth::LabeledDataset;
 use crate::findings;
 use crate::model::{CorrelatedEvent, PassiveWindow, RunReport, SourceMetadata};
 use crate::passive::detect_connection_anomalies;
 use crate::report::build_report;
+
+/// A = soucasny nezmeneny engine (`passive::anomaly`, zadne okenkovani).
+/// B = `correlation_v2::detect_windowed_anomalies` (stejne prahy, tumbling okna).
+/// C = B + graph-linking stejneho `src_ip` pres ruzne cile ve stejnem okne.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AblationVariant {
+    A,
+    B,
+    C,
+}
 
 type AggKey = (String, String, u16);
 
@@ -65,16 +76,40 @@ pub(crate) struct BaselineResult {
     pub(crate) malicious_detailed_labels: BTreeSet<String>,
 }
 
-/// Spusti nezmeneny soucasny engine (anomaly detekce -> correlate_events -> findings ->
-/// decision) nad `dataset.observations` a zmeri vysledek proti `dataset.labels`
-/// (ablace A: zadny aktivni host inventar, `hosts: &[]`, viz sekce 9.1 navrhu).
-///
-/// Label-leakage zaruka: do `detect_connection_anomalies`/`correlate_events` se posila
-/// VYHRADNE `dataset.observations` (klonovane, beze zmeny typu/obsahu). `dataset.labels`
-/// se cte poprve az pri stavbe ground-truth mnoziny nize, nikdy pred tim.
+/// Ablace A (zpetna kompatibilita s existujicimi testy/volajicimi) - tenky wrapper nad
+/// `run_ablation(..., AblationVariant::A)`.
 pub(crate) fn run_baseline(dataset: &LabeledDataset, time_window_s: i64) -> BaselineResult {
+    run_ablation(dataset, time_window_s, AblationVariant::A)
+}
+
+/// Spusti vybranou ablaci (anomaly/korelacni detekce -> correlate_events -> findings ->
+/// decision) nad `dataset.observations` a zmeri vysledek proti `dataset.labels`
+/// (zadny aktivni host inventar, `hosts: &[]`, viz sekce 9.1 navrhu). Jedina cast, ktera
+/// se mezi variantami lisi, je volba detektoru anomalii - zbytek pipeline (correlate_events,
+/// findings, decision) je pro A/B/C stejny, aby srovnani izolovalo prave tu jednu promennou.
+///
+/// Label-leakage zaruka: do detektoru/`correlate_events` se posila VYHRADNE
+/// `dataset.observations` (klonovane, beze zmeny typu/obsahu). `dataset.labels` se cte
+/// poprve az pri stavbe ground-truth mnoziny nize, nikdy pred tim.
+pub(crate) fn run_ablation(
+    dataset: &LabeledDataset,
+    time_window_s: i64,
+    variant: AblationVariant,
+) -> BaselineResult {
     let known_services: HashSet<AggKey> = HashSet::new();
-    let events = detect_connection_anomalies(dataset.observations.clone(), &known_services);
+    let events = match variant {
+        AblationVariant::A => {
+            detect_connection_anomalies(dataset.observations.clone(), &known_services)
+        }
+        AblationVariant::B => {
+            detect_windowed_anomalies(dataset.observations.clone(), &known_services, time_window_s)
+        }
+        AblationVariant::C => detect_windowed_anomalies_linked(
+            dataset.observations.clone(),
+            &known_services,
+            time_window_s,
+        ),
+    };
     let correlated: Vec<CorrelatedEvent> = correlate_events(&[], events, time_window_s);
 
     let predicted_positive: HashSet<AggKey> = correlated
@@ -246,6 +281,94 @@ mod tests {
             result.confusion.true_negative,
             result.finding_count,
             result.decision_action_count,
+        );
+    }
+
+    #[test]
+    fn ablation_b_c_vs_a_on_iot23_malware_scenario() {
+        let dataset = Iot23Source
+            .load(&dataset_path(
+                "labs/datasets/iot23/CTU-IoT-Malware-Capture-44-1/conn.log.labeled",
+            ))
+            .expect("parse iot23 scenario 44-1");
+
+        let a = run_ablation(&dataset, 300, AblationVariant::A);
+        let b = run_ablation(&dataset, 300, AblationVariant::B);
+        let c = run_ablation(&dataset, 300, AblationVariant::C);
+
+        // Stejna ground truth pro vsechny varianty - jen detektor anomalii se lisi.
+        assert_eq!(a.malicious_flow_count, b.malicious_flow_count);
+        assert_eq!(a.malicious_flow_count, c.malicious_flow_count);
+
+        for (label, result) in [("A", &a), ("B", &b), ("C", &c)] {
+            println!(
+                "ablace {label} na {} (events={}): TP={} FP={} FN={} TN={} precision={:.3} recall={:.3} f1={:.3} findings={}",
+                result.dataset_id,
+                result.correlated_event_count,
+                result.confusion.true_positive,
+                result.confusion.false_positive,
+                result.confusion.false_negative,
+                result.confusion.true_negative,
+                result.confusion.precision(),
+                result.confusion.recall(),
+                result.confusion.f1(),
+                result.finding_count,
+            );
+        }
+
+        // Ablace C pridava multi_target_pattern nalezy s dst_port=None, ktere confusion
+        // matrix (klicovana (dst_ip,proto,port)) nikdy nezachyti jako predicted_positive -
+        // proto C a B musi mit STEJNOU confusion matrix, jen C muze mit vic findings/events.
+        assert_eq!(b.confusion.true_positive, c.confusion.true_positive);
+        assert_eq!(b.confusion.false_positive, c.confusion.false_positive);
+        assert_eq!(b.confusion.false_negative, c.confusion.false_negative);
+        assert!(
+            c.correlated_event_count >= b.correlated_event_count,
+            "ablace C muze jen pridavat multi_target_pattern nalezy navic k B, ne jich mit min"
+        );
+    }
+
+    /// Charakterizacni test (ne jen diagnostika) - potvrzuje konkretni znamou limitaci
+    /// ablace C popsanou v docs/diplomka/eval/ablation-b-c-iot23.md: naivni multi-target
+    /// heuristika (stejny src_ip, >=2 cile ve stejnem okne) na tomto scenari vetsinou
+    /// chytne legitimni periodicky NTP fan-out (udp/123 na vice standardnich NTP serveru),
+    /// ne utok. Pokud tento test v budoucnu zacne padat (napr. po pridani baseline/allowlist
+    /// filtrovani), je to ZLEPSENI - je potreba test aktualizovat, ne ho "opravit" zpet.
+    #[test]
+    fn multi_target_pattern_on_iot23_malware_scenario_is_mostly_ntp_false_positive() {
+        let dataset = Iot23Source
+            .load(&dataset_path(
+                "labs/datasets/iot23/CTU-IoT-Malware-Capture-44-1/conn.log.labeled",
+            ))
+            .expect("parse iot23 scenario 44-1");
+
+        let events =
+            detect_windowed_anomalies_linked(dataset.observations.clone(), &HashSet::new(), 300);
+        let multi_target: Vec<_> = events
+            .iter()
+            .filter(|event| event.event_type == "multi_target_pattern")
+            .collect();
+        assert!(
+            !multi_target.is_empty(),
+            "scenar musi produkovat alespon jeden multi_target_pattern nalez"
+        );
+
+        let ntp_only_windows = multi_target
+            .iter()
+            .filter(|event| event.message.contains("udp/123") && !event.message.contains("tcp/80"))
+            .count();
+
+        println!(
+            "multi_target_pattern celkem={}, cisty-NTP-bez-utoku={}",
+            multi_target.len(),
+            ntp_only_windows
+        );
+
+        // Vetsina oken (ne vsechna - prvni okno obsahuje i skutecny C2 cil 46.101.251.172
+        // tcp/80 smichany s NTP) je cista NTP falesna detekce - presne znama limitace.
+        assert!(
+            ntp_only_windows * 2 >= multi_target.len(),
+            "ocekavana vetsina multi_target_pattern oken je cisty NTP fan-out, ne utok"
         );
     }
 
