@@ -25,9 +25,7 @@ pub fn build_decision_bundle(report: &RunReport) -> DecisionBundle {
         .findings
         .iter()
         .filter(|finding| {
-            finding.confidence != Confidence::High
-                || finding.finding_type == "identification_gap"
-                || finding.finding_type == "correlation_uncertainty"
+            finding.confidence != Confidence::High || is_uncertain_finding_type(finding)
         })
         .collect::<Vec<_>>();
     let plaintext = report
@@ -530,9 +528,7 @@ fn inference_graph_evidence(report: &RunReport, ranked: &[RankedDecision]) -> Ve
         .findings
         .iter()
         .filter(|finding| {
-            finding.confidence != Confidence::High
-                || finding.finding_type == "identification_gap"
-                || finding.finding_type == "correlation_uncertainty"
+            finding.confidence != Confidence::High || is_uncertain_finding_type(finding)
         })
         .count();
     let changed_services = diff_changed_services_total(report);
@@ -623,10 +619,7 @@ pub(crate) fn rank_finding(
         score += 0.12;
         reasons.push("changed-since-baseline".to_string());
     }
-    if finding.finding_type == "identification_gap"
-        || finding.finding_type == "correlation_uncertainty"
-        || finding.confidence != Confidence::High
-    {
+    if is_uncertain_finding_type(finding) || finding.confidence != Confidence::High {
         score += 0.05;
         reasons.push("needs-verification".to_string());
     }
@@ -635,21 +628,21 @@ pub(crate) fn rank_finding(
     }
 
     let score = score.clamp(0.0, 1.0);
-    let decision = if finding.confidence != Confidence::High
-        || finding.finding_type == "identification_gap"
-        || finding.finding_type == "correlation_uncertainty"
-    {
-        "verify"
-    } else if finding.severity == Severity::High
-        && (is_cve_signal(finding) || is_plaintext_signal(finding) || is_traffic_signal(finding))
-    {
-        "mitigate"
-    } else if finding.severity >= Severity::Medium {
-        "investigate"
-    } else {
-        "watch"
-    }
-    .to_string();
+    let decision =
+        if finding.confidence != Confidence::High || is_uncertain_finding_type(finding) {
+            "verify"
+        } else if finding.severity == Severity::High
+            && (is_cve_signal(finding)
+                || is_plaintext_signal(finding)
+                || is_traffic_signal(finding))
+        {
+            "mitigate"
+        } else if finding.severity >= Severity::Medium {
+            "investigate"
+        } else {
+            "watch"
+        }
+        .to_string();
 
     RankedDecision {
         score,
@@ -733,6 +726,15 @@ fn is_traffic_signal(finding: &Finding) -> bool {
             | "service_overload_risk"
             | "inductive_volume_anomaly"
     )
+}
+
+/// `identification_gap`/`correlation_uncertainty` check - dřív 4x doslovně
+/// opsaný v tomhle souboru (`uncertain`/`uncertain_count` filtry, "needs-
+/// verification" bonus, "verify" rozhodnutí), ve dvou z nich navíc
+/// kombinovaný s `confidence != High`. Faze 2, produkcni-plan.md.
+fn is_uncertain_finding_type(finding: &Finding) -> bool {
+    finding.finding_type == "identification_gap"
+        || finding.finding_type == "correlation_uncertainty"
 }
 
 fn has_passive_evidence(finding: &Finding) -> bool {
