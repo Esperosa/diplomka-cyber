@@ -892,7 +892,7 @@ pub fn claim_due_job(
             SELECT id, name, spec_json, schedule_interval_s
             FROM jobs
             WHERE next_run_at <= ?1
-              AND status IN ('queued', 'scheduled', 'failed')
+              AND status IN ('queued', 'scheduled', 'failed', 'running')
               AND (claim_until IS NULL OR claim_until <= ?1)
               AND (?2 = 1 OR schedule_interval_s IS NULL)
             ORDER BY next_run_at ASC, id ASC
@@ -952,7 +952,7 @@ pub fn list_due_job_ids(path: &Path) -> Result<Vec<i64>> {
             SELECT id
             FROM jobs
             WHERE next_run_at <= ?1
-              AND status IN ('queued', 'scheduled', 'failed')
+              AND status IN ('queued', 'scheduled', 'failed', 'running')
               AND (claim_until IS NULL OR claim_until <= ?1)
             ORDER BY next_run_at ASC, id ASC
             ",
@@ -982,7 +982,7 @@ pub fn claim_job_by_id(
             FROM jobs
             WHERE id = ?1
               AND next_run_at <= ?2
-              AND status IN ('queued', 'scheduled', 'failed')
+              AND status IN ('queued', 'scheduled', 'failed', 'running')
               AND (claim_until IS NULL OR claim_until <= ?2)
             ",
             params![job_id, format_dt(now)],
@@ -1364,4 +1364,135 @@ fn default_urlhaus_auth_env() -> String {
 
 fn default_abuseipdb_key_env() -> String {
     "ABUSEIPDB_API_KEY".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Jen 6 poli `PipelineJobSpec` nema `#[serde(default...)]` (workspace_root, nazev,
+    /// scope, nmap_xml, suricata_eve, zeek_dir) - zbytek serde defaultuje, proto staci
+    /// minimalni JSON, ne rucni vypis ~40 poli.
+    fn minimal_spec() -> PipelineJobSpec {
+        serde_json::from_str(
+            r#"{"workspace_root":"ws","nazev":"test","scope":[],"nmap_xml":null,"suricata_eve":null,"zeek_dir":null}"#,
+        )
+        .expect("minimalni PipelineJobSpec")
+    }
+
+    /// Regresni test na bezpecnostni bug: `claim_due_job` drive nevybiral joby ve
+    /// stavu `running` (chybely v `status IN (...)`), i kdyz jejich `claim_until`
+    /// davno vyprsel - job zasekly po padu workeru mezi claim a dokoncenim zustal
+    /// navzdy nedostupny. Oprava doplnila `'running'` do seznamu stavu.
+    #[test]
+    fn claim_due_job_recovers_running_job_after_expired_lease() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db_path = temp.path().join("platform.sqlite");
+        init_database(&db_path).expect("init db");
+
+        let job_id =
+            enqueue_job(&db_path, "test-job", &minimal_spec(), None, None).expect("enqueue");
+
+        let first_claim = claim_due_job(&db_path, "node-a", 60, true)
+            .expect("claim ok")
+            .expect("prvni claim musi najit job");
+        assert_eq!(first_claim.id, job_id);
+
+        // Simulace padu workeru: job zustava ve stavu 'running', ale jeho claim_until
+        // je davno v minulosti - presne stav, ktery se pred opravou nikdy nezotavil.
+        let conn = open_connection(&db_path).expect("open connection");
+        let expired = Utc::now() - chrono::Duration::seconds(120);
+        conn.execute(
+            "UPDATE jobs SET claim_until = ?1 WHERE id = ?2",
+            params![format_dt(expired), job_id],
+        )
+        .expect("force-expire claim");
+        drop(conn);
+
+        let recovered = claim_due_job(&db_path, "node-b", 60, true).expect("claim ok");
+        assert!(
+            recovered.is_some(),
+            "job zasekly v 'running' s vyprselym claim_until musi byt znovu nalezen"
+        );
+        assert_eq!(recovered.unwrap().id, job_id);
+    }
+
+    #[test]
+    fn claim_due_job_does_not_reclaim_job_with_still_valid_lease() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db_path = temp.path().join("platform.sqlite");
+        init_database(&db_path).expect("init db");
+
+        enqueue_job(&db_path, "test-job", &minimal_spec(), None, None).expect("enqueue");
+        claim_due_job(&db_path, "node-a", 300, true)
+            .expect("claim ok")
+            .expect("prvni claim musi najit job");
+
+        // claim_until je 300s v budoucnu - job prave bezi, nesmi se dat nikomu jinemu.
+        let not_reclaimed = claim_due_job(&db_path, "node-b", 300, true).expect("claim ok");
+        assert!(
+            not_reclaimed.is_none(),
+            "job se stale platnym claim_until se nesmi znovu rozdat"
+        );
+    }
+
+    /// Stejny bug (chybejici `'running'` v `status IN (...)`) byl i v `list_due_job_ids`
+    /// - zaseknuty job by se nikdy neobjevil ani v seznamu "due" jobu k monitoringu.
+    #[test]
+    fn list_due_job_ids_includes_running_job_with_expired_lease() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db_path = temp.path().join("platform.sqlite");
+        init_database(&db_path).expect("init db");
+
+        let job_id =
+            enqueue_job(&db_path, "test-job", &minimal_spec(), None, None).expect("enqueue");
+        claim_due_job(&db_path, "node-a", 60, true)
+            .expect("claim ok")
+            .expect("prvni claim musi najit job");
+
+        let conn = open_connection(&db_path).expect("open connection");
+        let expired = Utc::now() - chrono::Duration::seconds(120);
+        conn.execute(
+            "UPDATE jobs SET claim_until = ?1 WHERE id = ?2",
+            params![format_dt(expired), job_id],
+        )
+        .expect("force-expire claim");
+        drop(conn);
+
+        let due_ids = list_due_job_ids(&db_path).expect("list due jobs");
+        assert!(
+            due_ids.contains(&job_id),
+            "zasekly running job s vyprselym claim_until musi byt v seznamu due jobu"
+        );
+    }
+
+    /// Stejny bug byl i v `claim_job_by_id` - rucni znovu-naroky konkretniho zasekleho
+    /// jobu (napr. operatorsky zasah) by take nikdy nenaslo job ve stavu 'running'.
+    #[test]
+    fn claim_job_by_id_recovers_running_job_after_expired_lease() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db_path = temp.path().join("platform.sqlite");
+        init_database(&db_path).expect("init db");
+
+        let job_id =
+            enqueue_job(&db_path, "test-job", &minimal_spec(), None, None).expect("enqueue");
+        claim_due_job(&db_path, "node-a", 60, true)
+            .expect("claim ok")
+            .expect("prvni claim musi najit job");
+
+        let conn = open_connection(&db_path).expect("open connection");
+        let expired = Utc::now() - chrono::Duration::seconds(120);
+        conn.execute(
+            "UPDATE jobs SET claim_until = ?1 WHERE id = ?2",
+            params![format_dt(expired), job_id],
+        )
+        .expect("force-expire claim");
+        drop(conn);
+
+        let recovered = claim_job_by_id(&db_path, job_id, "node-b", 60).expect("claim ok");
+        assert!(
+            recovered.is_some(),
+            "claim_job_by_id musi umoznit rucni znovu-naroky zasekleho 'running' jobu"
+        );
+    }
 }
