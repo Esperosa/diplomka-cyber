@@ -16,12 +16,14 @@
 | 8 | Zavření smyčky Observation→Finding→Hypothesis→Planner na reálném nálezu | `src/lab.rs` | Hotovo |
 | 9 | Vlna 1 — CTU-13, cross-dataset generalizace + potvrzená fragmentační hypotéza | `src/eval/sources/ctu13.rs` | Hotovo |
 | 10 | Ablace D (multi-scale), honest "safety net", ne tvrzené zlepšení | `src/correlation_v2.rs` | Hotovo |
+| 11 | Skutečné vykonání vybrané verifikace (ne jen výběr) | `src/lab.rs` | Hotovo |
+| 12 | H1 poprvé reálně změřeno (pasivní vs. pasivní+aktivní) | `src/lab.rs` | Hotovo |
 
 ## Vztah k H1–H5
 
 ### H1: spojení pasivní a aktivní telemetrie zvýší kvalitu rozhodnutí proti samotné pasivní vrstvě za definovaných nákladů.
 
-**Status: NEOVĚŘENO.** Deliverable 7/8 ukázaly, že aktivní verifikace (nmap+httpx+nuclei) funguje end-to-end a najde reálné věci (prometheus-metrics-exposed na Juice Shopu), ale **nebylo změřeno srovnání** "jen pasivní rozhodnutí" vs. "pasivní+aktivní rozhodnutí" na stejném cíli s definovanou cenou. To je přesně další krok: vzít hypotézu z pasivního nálezu, spočítat VOI pro aktivní kontrolu (Deliverable 5 to umí), skutečně ji provést (Deliverable 7/8 to umí), a změřit rozdíl v kvalitě rozhodnutí před/po. Infrastruktura na to existuje, měření H1 samo ještě ne.
+**Status: POPRVÉ ZMĚŘENO (Deliverable 12), na jednom lab cíli.** `docs/diplomka/eval/h1-passive-vs-active.md`: na stejných datech ze stejného běhu má "pasivní+aktivní" varianta víc findings (2 vs 1) a víc decision akcí (4 vs 3) než čistě pasivní, s malým, změřeným dodatečným nákladem (1 nuclei sken + 1 GET). Klíčové: nález exponovaného `/metrics` (a jeho 7 konkrétních citlivých metrik, Deliverable 11) **vůbec nevznikne** bez aktivní kontroly — to je strukturní, ne jen statistický rozdíl. **Omezení**: jeden lab cíl, jeden typ zranitelnosti — nedokazuje H1 obecně, dokazuje ji na jednom reprodukovatelném případu. Zobecnění vyžaduje víc lab scénářů.
 
 ### H2: temporal/graph evidence fusion s korekcí závislosti zdrojů sníží falešné incidenty oproti prostému scoringu eventů.
 
@@ -41,4 +43,4 @@
 
 ## Co z tohoto plyne pro další postup
 
-**Nejsilněji podložená, nejcennější část dosavadní práce je k H2 a H4** — oba mají reálná, měřená, explicitně honest čísla (včetně negativních/částečných výsledků), ne jen implementovanou strukturu. **H1 a H3 mají hotovou infrastrukturu, ale chybí jim samotné srovnávací měření** — to je nejbližší smysluplný další krok, protože nevyžaduje novou infrastrukturu, jen propojení už existujících kusů (lab + planner + baseline srovnání). **H5 je zatím zcela netknutá** a vyžaduje distribuovanou infrastrukturu, kterou projekt ještě nemá.
+**H1, H2 a H4 mají teď reálná, měřená čísla** (H1 na jednom lab cíli, H2/H4 na cross-dataset ablacích) — včetně honest negativních/částečných výsledků, ne jen implementovanou strukturu. **H3 má hotovou infrastrukturu (planner i exekuce), ale chybí jí srovnávací měření proti plošnému skenu** — to je nejbližší smysluplný další krok, protože nevyžaduje novou infrastrukturu, jen definici "blanket scan" protikladu a srovnání nákladu/přesnosti. **H5 je zatím zcela netknutá** a vyžaduje distribuovanou infrastrukturu, kterou projekt ještě nemá.

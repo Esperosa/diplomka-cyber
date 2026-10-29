@@ -538,4 +538,91 @@ mod tests {
             outcome.sensitive_looking_metric_names
         );
     }
+
+    /// Deliverable 12 - prvni skutecne zmerena cast hypotezy H1 (navrh sekce 11:
+    /// "spojeni pasivni a aktivni telemetrie zvysi kvalitu rozhodnuti proti samotne
+    /// pasivni vrstve za definovanych nakladu"). "Pasivni" tu znamena nmap+httpx bez
+    /// nuclei (jediny zdroj `active_checks` v tomhle skenu) - realne porovnani na
+    /// stejnych datech ze stejneho behu, ne syntetický protiklad.
+    #[test]
+    fn h1_active_checks_increase_decision_quality_over_passive_only() {
+        let _guard = LAB_PORT_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let lab = start_juice_shop_lab().expect("start juice shop lab");
+
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let scan = run_active_scan_against_lab(
+            temp.path(),
+            "lab-h1-run",
+            httpx_bin(),
+            nuclei_bin(),
+            nuclei_templates_dir(),
+        );
+        stop_lab(lab);
+        let scan = scan.expect("aktivni sken proti lab cili");
+
+        // "Pasivni" varianta: stejna data ze stejneho behu, jen s odstranenymi
+        // active_checks (ktere pochazeji vyhradne z nuclei - viz webscan.rs
+        // `attach_nuclei_checks`). Nmap/httpx vysledky (otevreny port, HTTP titulek)
+        // zustavaji - to je presne hranice "pasivni vs. +aktivni" v tomto kroku.
+        let mut passive_only_hosts = scan.hosts.clone();
+        for host in &mut passive_only_hosts {
+            for service in &mut host.services {
+                service.active_checks.clear();
+            }
+        }
+
+        let passive_only_scan = LabScanResult {
+            hosts: passive_only_hosts,
+            web_artifacts: WebScanArtifacts::default(),
+        };
+        let active_scan = LabScanResult {
+            hosts: scan.hosts,
+            web_artifacts: scan.web_artifacts,
+        };
+
+        let passive_pipeline = build_hypotheses_from_lab_scan(passive_only_scan, "lab-h1-passive")
+            .expect("passive pipeline");
+        let active_pipeline =
+            build_hypotheses_from_lab_scan(active_scan, "lab-h1-active").expect("active pipeline");
+
+        let passive_actions = crate::decision::build_decision_bundle(&passive_pipeline.report)
+            .actions
+            .len();
+        let active_actions = crate::decision::build_decision_bundle(&active_pipeline.report)
+            .actions
+            .len();
+
+        println!(
+            "H1: pasivni findings={} akce={} | pasivni+aktivni findings={} akce={} (dodatecny naklad: 1 nuclei sken s 8 kurátorovanymi sablonami + 1 GET pozadavek)",
+            passive_pipeline.report.findings.len(),
+            passive_actions,
+            active_pipeline.report.findings.len(),
+            active_actions,
+        );
+
+        // Bez aktivniho overeni (nuclei) tento konkretni nalez (exponovany /metrics)
+        // vubec nevznikne - nmap/httpx samy o sobe nemaji zpusob, jak ho detekovat.
+        assert!(
+            active_pipeline
+                .report
+                .findings
+                .iter()
+                .any(|finding| finding.finding_type.contains("prometheus-metrics-exposed")),
+            "pasivni+aktivni varianta musi obsahovat nalez z aktivni kontroly"
+        );
+        assert!(
+            passive_pipeline
+                .report
+                .findings
+                .iter()
+                .all(|finding| !finding.finding_type.contains("prometheus-metrics-exposed")),
+            "pasivni varianta (bez nuclei) nesmi obsahovat nalez, ktery umi detekovat jen aktivni kontrola"
+        );
+        assert!(
+            active_pipeline.report.findings.len() > passive_pipeline.report.findings.len(),
+            "aktivni telemetrie musi zvysit pocet findings oproti pasivni variante na stejnych datech"
+        );
+    }
 }
