@@ -220,6 +220,49 @@ pub fn build_hypotheses_from_lab_scan(
     Ok(LabPipelineResult { report, hypotheses })
 }
 
+/// Vysledek skutecneho vykonani vybraneho `VerificationCandidate` - ne odhad, realna
+/// data z realneho HTTP pozadavku.
+#[derive(Debug, Clone)]
+pub struct InspectionOutcome {
+    pub status_code: u16,
+    pub body_line_count: usize,
+    /// Konkretni nazvy metrik, ktere vypadaji citlive/interni (ne jen "je endpoint
+    /// dostupny" - to uz potvrdil nuclei nalez v Deliverable 7/8; tohle je DALSI
+    /// informace, kterou vykonani kandidata ma prinest).
+    pub sensitive_looking_metric_names: Vec<String>,
+}
+
+/// Vykona kandidata `"inspect_metrics_content"` vybraneho `plan_verification()` v
+/// Deliverable 8 - prvni SKUTECNE provedena akce z planneru v cele diplomce, ne jen
+/// jeho vyber. Zamerne jednoduche: GET na `/metrics`, bez dalsiho skenovani/nastroje -
+/// presne odpovida odhadovanemu nizkemu `estimated_network_cost`/`estimated_runtime_ms`
+/// kandidata, ktery kvuli temto odhadum vyhral v `plan_verification()`.
+pub fn execute_inspect_metrics_content(base_url: &str) -> Result<InspectionOutcome> {
+    let response = reqwest::blocking::get(format!("{base_url}/metrics"))
+        .map_err(|error| BakulaError::Processing(format!("GET /metrics selhal: {error}")))?;
+    let status_code = response.status().as_u16();
+    let body = response.text().map_err(|error| {
+        BakulaError::Processing(format!("cteni odpovedi /metrics selhalo: {error}"))
+    })?;
+
+    let sensitive_looking_metric_names = body
+        .lines()
+        .filter(|line| line.starts_with("# HELP"))
+        .filter_map(|line| line.split_whitespace().nth(2))
+        .filter(|name| {
+            let lower = name.to_ascii_lowercase();
+            lower.contains("token") || lower.contains("upload") || lower.contains("llm")
+        })
+        .map(ToString::to_string)
+        .collect();
+
+    Ok(InspectionOutcome {
+        status_code,
+        body_line_count: body.lines().count(),
+        sensitive_looking_metric_names,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
@@ -414,5 +457,85 @@ mod tests {
         // ktera ma nejnizsi odhadovany information gain ze vsech tri.
         assert_eq!(chosen.candidate.method, "inspect_metrics_content");
         assert!(!requires_approval);
+    }
+
+    /// Deliverable 11: navazujici krok explicitne odlozeny v Deliverable 8 ("vybrany
+    /// kandidat se v tomto kroku nevykonava") - ted se SKUTECNE vykona. Poprve v cele
+    /// diplomce je cely cyklus Observation -> Finding -> Hypothesis -> Planner ->
+    /// EXEKUCE uzavren na realnych datech, ne jen navrzen.
+    #[test]
+    fn executing_planners_chosen_candidate_reveals_real_sensitive_metric_names() {
+        let _guard = LAB_PORT_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let lab = start_juice_shop_lab().expect("start juice shop lab");
+
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let scan = run_active_scan_against_lab(
+            temp.path(),
+            "lab-execution-run",
+            httpx_bin(),
+            nuclei_bin(),
+            nuclei_templates_dir(),
+        );
+        let scan = match scan {
+            Ok(scan) => scan,
+            Err(error) => {
+                stop_lab(lab);
+                panic!("aktivni sken proti lab cili: {error}");
+            }
+        };
+        let pipeline =
+            build_hypotheses_from_lab_scan(scan, "lab-execution-run").expect("build hypotheses");
+
+        let (_, hypothesis) = pipeline
+            .hypotheses
+            .iter()
+            .find(|(finding, _)| finding.finding_type.contains("prometheus-metrics-exposed"))
+            .expect("pipeline musi vyprodukovat Finding pro realny nuclei nalez");
+
+        let candidates = vec![
+            crate::verification_planner::VerificationCandidate {
+                method: "inspect_metrics_content".to_string(),
+                estimated_information_gain: 0.6,
+                estimated_network_cost: 0.02,
+                estimated_runtime_ms: 500,
+                disruption_risk: 0.0,
+                requires_approval: false,
+            },
+            crate::verification_planner::VerificationCandidate {
+                method: "broad_nuclei_rescan_full_template_set".to_string(),
+                estimated_information_gain: 0.5,
+                estimated_network_cost: 0.3,
+                estimated_runtime_ms: 60_000,
+                disruption_risk: 0.1,
+                requires_approval: false,
+            },
+        ];
+        let plan = crate::verification_planner::plan_verification(hypothesis, candidates);
+        let chosen = plan
+            .chosen
+            .expect("planner musi vybrat kandidata")
+            .candidate;
+        assert_eq!(chosen.method, "inspect_metrics_content");
+
+        // Skutecne vykonani vybraneho kandidata - ne dalsi odhad.
+        let outcome = execute_inspect_metrics_content("http://127.0.0.1:3000");
+
+        stop_lab(lab);
+        let outcome = outcome.expect("vykonani inspect_metrics_content");
+
+        assert_eq!(outcome.status_code, 200);
+        assert!(outcome.body_line_count > 0);
+        assert!(
+            !outcome.sensitive_looking_metric_names.is_empty(),
+            "ocekavam alespon jednu citlive vyhlizejici metriku (token/upload/llm), dostal jsem {:?}",
+            outcome.sensitive_looking_metric_names
+        );
+        println!(
+            "Deliverable 11: vykonani inspect_metrics_content nalezlo {} citlivych metrik: {:?}",
+            outcome.sensitive_looking_metric_names.len(),
+            outcome.sensitive_looking_metric_names
+        );
     }
 }

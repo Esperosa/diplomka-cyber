@@ -28,7 +28,10 @@ Plný síťový emulační lab (návrh sekce 8.2) je velká infrastrukturní inv
 - Test `full_pipeline_plans_next_verification_for_real_metrics_exposure_finding` postaví hypotézu z reálného `prometheus-metrics-exposed` nálezu a definuje 3 kandidáty na další ověření (přečíst obsah endpointu / širší nuclei rescan / eskalovat na člověka — čísla jsou poctivé odhady, ne měřená, přesně stejná disciplína jako ve `verification_planner.rs`).
 - `plan_verification()` správně vybral nejlevnější a nejinformativnější krok (`inspect_metrics_content`) před pomalejším rescanem a před eskalací s nejnižším odhadovaným information gain.
 
+## Deliverable 11 — skutečné vykonání vybraného kandidáta
+
+`execute_inspect_metrics_content()` skutečně provede GET na `/metrics` (ne odhad) a extrahuje konkrétní citlivě vyhlížející metriky. **Poprvé v celé diplomce je celý cyklus Observation → Finding → Hypothesis → Planner → EXEKUCE uzavřen na reálných datech**, ne jen navržen. Naměřeno: 7 citlivých metrik (`juiceshop_llm_input_tokens_total`, `file_uploads_count`, `file_upload_errors` a další) — konkrétní, čitelný důkaz hodnoty vybrané verifikace, ne jen "endpoint je dostupný" (to už potvrdil nuclei v Deliverable 7).
+
 ## Rozsah (vědomě odloženo)
 
-- **Vybraný kandidát se v tomto kroku nevykonává** — planner vybral, co by se mělo udělat dál, ale skutečné přečtení obsahu `/metrics` endpointu (další aktivní krok) je navazující práce.
 - **Nezapojeno do CI** — vyžaduje Docker + nainstalované nmap/httpx/nuclei binárky, nastavení v CI by bylo netriviální (stahování Docker image, nmap capabilities v CI sandboxu) pro to, co je explicitně předstupeň, ne finální architektura. Lokální test, podobně jako broker/Redis testy, ale bez CI service kontejneru.
