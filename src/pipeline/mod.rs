@@ -811,6 +811,7 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
                             passive_window.start,
                             passive_window.end,
                             hosts_ref,
+                            &passive::LegacyAnomalyDetector,
                         )
                         .map_err(|error| {
                             anyhow::Error::new(error).context("Pasivni import selhal")

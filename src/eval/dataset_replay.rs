@@ -3,15 +3,13 @@ use std::collections::{BTreeSet, HashSet};
 use chrono::Utc;
 
 use crate::correlation::correlate_events;
-use crate::correlation_v2::{
-    detect_multiscale_windowed_anomalies, detect_windowed_anomalies,
-    detect_windowed_anomalies_linked,
-};
 use crate::decision;
 use crate::eval::ground_truth::LabeledDataset;
 use crate::findings;
 use crate::model::{CorrelatedEvent, PassiveWindow, RunReport, SourceMetadata};
-use crate::passive::detect_connection_anomalies;
+use crate::passive::detector::{
+    ConnectionDetector, LegacyAnomalyDetector, LinkedDetector, MultiscaleDetector, WindowedDetector,
+};
 use crate::report::build_report;
 
 /// A = soucasny nezmeneny engine (`passive::anomaly`, zadne okenkovani).
@@ -137,27 +135,22 @@ pub(crate) fn run_ablation(
     variant: AblationVariant,
 ) -> BaselineResult {
     let known_services: HashSet<AggKey> = HashSet::new();
-    let events = match variant {
-        AblationVariant::A => {
-            detect_connection_anomalies(dataset.observations.clone(), &known_services)
-        }
-        AblationVariant::B => {
-            detect_windowed_anomalies(dataset.observations.clone(), &known_services, time_window_s)
-        }
-        AblationVariant::C => detect_windowed_anomalies_linked(
-            dataset.observations.clone(),
-            &known_services,
-            time_window_s,
-        ),
+    // Stejny trait (`passive::detector::ConnectionDetector`), stejne implementace, jako
+    // pouziva produkcni `passive::load_and_normalize` - eval teda meri presne to, co by
+    // beze zmeny vychoziho detektoru beselo v produkci, ne oddelenou kopii stejne logiky
+    // (Faze 2, produkcni-plan.md).
+    let detector: Box<dyn ConnectionDetector> = match variant {
+        AblationVariant::A => Box::new(LegacyAnomalyDetector),
+        AblationVariant::B => Box::new(WindowedDetector { time_window_s }),
+        AblationVariant::C => Box::new(LinkedDetector { time_window_s }),
         // Skaly voleny tak, aby pokryly obe strany trade-offu zmerenou ve sweepu:
         // kratka (burst, IoT-23-like) i dlouha (sustained beaconing, CTU-13-like).
         // `time_window_s` parametr funkce se tu neuplatnuje - D ma svou vlastni sadu.
-        AblationVariant::D => detect_multiscale_windowed_anomalies(
-            dataset.observations.clone(),
-            &known_services,
-            &[60, 300, 1800, 7200],
-        ),
+        AblationVariant::D => Box::new(MultiscaleDetector {
+            window_scales: vec![60, 300, 1800, 7200],
+        }),
     };
+    let events = detector.detect(dataset.observations.clone(), &known_services);
     let correlated: Vec<CorrelatedEvent> = correlate_events(&[], events, time_window_s);
 
     let predicted_positive: HashSet<AggKey> = correlated
@@ -491,8 +484,8 @@ mod tests {
             ))
             .expect("parse iot23 scenario 44-1");
 
-        let events =
-            detect_windowed_anomalies_linked(dataset.observations.clone(), &HashSet::new(), 300);
+        let events = LinkedDetector { time_window_s: 300 }
+            .detect(dataset.observations.clone(), &HashSet::new());
         let multi_target: Vec<_> = events
             .iter()
             .filter(|event| event.event_type == "multi_target_pattern")

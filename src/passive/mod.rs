@@ -10,14 +10,20 @@ use crate::{
 
 mod anomaly;
 mod community_id;
+pub(crate) mod detector;
 mod suricata;
 mod zeek;
 
 // Re-exporty pro src/eval (dataset replay baseline) - beze zmeny viditelnosti celych modulu.
+// Faze 2: produkcni cesta (`load_and_normalize`) i `eval::dataset_replay::run_ablation` uz
+// jdou pres `ConnectionDetector`/`LegacyAnomalyDetector` nize - tenhle re-export zustava
+// jen kvuli `src/lab.rs`'s `#[cfg(test)]` modulu, ktery `cargo check` (bez --tests) nevidi.
+#[allow(unused_imports)]
 pub(crate) use anomaly::detect_connection_anomalies;
 pub(crate) use anomaly::score_connection_keys;
 #[allow(unused_imports)]
 pub(crate) use anomaly::score_source_hosts;
+pub(crate) use detector::{ConnectionDetector, LegacyAnomalyDetector};
 pub(crate) use zeek::parse_zeek_log;
 pub use zeek::{ZeekParseResult, parse_zeek_dir};
 
@@ -27,12 +33,13 @@ pub struct PassiveSources {
     pub zeek_dir: Option<PathBuf>,
 }
 
-pub fn load_and_normalize(
+pub(crate) fn load_and_normalize(
     sources: &PassiveSources,
     scope: &[IpNet],
     start: DateTime<Utc>,
     end: DateTime<Utc>,
     hosts: &[HostReport],
+    detector: &dyn ConnectionDetector,
 ) -> Result<Vec<NormalizedEvent>> {
     let mut events = Vec::new();
     if let Some(path) = &sources.suricata_eve {
@@ -56,10 +63,7 @@ pub fn load_and_normalize(
         })
         .collect::<HashSet<_>>();
 
-    events.extend(anomaly::detect_connection_anomalies(
-        connections,
-        &known_services,
-    ));
+    events.extend(detector.detect(connections, &known_services));
 
     events.sort_by(|left, right| left.timestamp.cmp(&right.timestamp));
     Ok(events)
