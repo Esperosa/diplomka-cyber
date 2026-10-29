@@ -17,6 +17,7 @@ pub mod findings;
 pub mod hypothesis;
 pub mod identity;
 pub mod intel;
+pub mod lab;
 pub mod lanes;
 pub mod model;
 pub mod narrative;
