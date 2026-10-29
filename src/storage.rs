@@ -31,6 +31,35 @@ struct StoredFile {
     sha256: String,
 }
 
+/// Fáze 1 (produkční plán, framework-style wiring): nahrazuje 21 pozičních
+/// parametrů `save_run` mělo dřív - stejná sada vstupních souborů/výstupů,
+/// jen jako pojmenovaná struktura. Čistě mechanická změna, beze změny
+/// chování (ověřeno golden-snapshot testem).
+#[derive(Debug)]
+pub struct RunArtifacts<'a> {
+    pub nmap_path: &'a Path,
+    pub nmap_followup_path: Option<&'a Path>,
+    pub nmap_forensic_path: Option<&'a Path>,
+    pub suricata_path: Option<&'a Path>,
+    pub zeek_dir: Option<&'a Path>,
+    pub httpx_output_jsonl: Option<&'a str>,
+    pub nuclei_output_jsonl: Option<&'a str>,
+    pub pentest_output_jsonl: Option<&'a str>,
+    pub snmp_snapshot_json: Option<&'a str>,
+    pub librenms_snapshot_json: Option<&'a str>,
+    pub meraki_snapshot_json: Option<&'a str>,
+    pub unifi_snapshot_json: Option<&'a str>,
+    pub aruba_snapshot_json: Option<&'a str>,
+    pub omada_snapshot_json: Option<&'a str>,
+    pub ntopng_json: Option<&'a str>,
+    pub flow_json: Option<&'a str>,
+    pub greenbone_json: Option<&'a str>,
+    pub wazuh_json: Option<&'a str>,
+    pub napalm_json: Option<&'a str>,
+    pub netmiko_json: Option<&'a str>,
+    pub scrapli_json: Option<&'a str>,
+}
+
 impl Workspace {
     pub fn open(root: &Path) -> Result<Self> {
         fs::create_dir_all(root)?;
@@ -48,31 +77,7 @@ impl Workspace {
         &self.root
     }
 
-    pub fn save_run(
-        &self,
-        report: &RunReport,
-        nmap_path: &Path,
-        nmap_followup_path: Option<&PathBuf>,
-        nmap_forensic_path: Option<&PathBuf>,
-        suricata_path: Option<&PathBuf>,
-        zeek_dir: Option<&PathBuf>,
-        httpx_output_jsonl: Option<&str>,
-        nuclei_output_jsonl: Option<&str>,
-        pentest_output_jsonl: Option<&str>,
-        snmp_snapshot_json: Option<&str>,
-        librenms_snapshot_json: Option<&str>,
-        meraki_snapshot_json: Option<&str>,
-        unifi_snapshot_json: Option<&str>,
-        aruba_snapshot_json: Option<&str>,
-        omada_snapshot_json: Option<&str>,
-        ntopng_json: Option<&str>,
-        flow_json: Option<&str>,
-        greenbone_json: Option<&str>,
-        wazuh_json: Option<&str>,
-        napalm_json: Option<&str>,
-        netmiko_json: Option<&str>,
-        scrapli_json: Option<&str>,
-    ) -> Result<()> {
+    pub fn save_run(&self, report: &RunReport, artifacts: &RunArtifacts) -> Result<()> {
         let run_dir = self.root.join("runs").join(&report.run.run_id);
         let raw_dir = run_dir.join("raw");
         fs::create_dir_all(&raw_dir)?;
@@ -88,17 +93,17 @@ impl Workspace {
             run_dir.join("report.txt"),
             narrative::report_to_text(report),
         )?;
-        fs::copy(nmap_path, raw_dir.join("nmap.xml"))?;
-        if let Some(path) = nmap_followup_path {
+        fs::copy(artifacts.nmap_path, raw_dir.join("nmap.xml"))?;
+        if let Some(path) = artifacts.nmap_followup_path {
             fs::copy(path, raw_dir.join("nmap-followup.xml"))?;
         }
-        if let Some(path) = nmap_forensic_path {
+        if let Some(path) = artifacts.nmap_forensic_path {
             fs::copy(path, raw_dir.join("nmap-forensic.xml"))?;
         }
-        if let Some(path) = suricata_path {
+        if let Some(path) = artifacts.suricata_path {
             fs::copy(path, raw_dir.join("suricata-eve.json"))?;
         }
-        if let Some(dir) = zeek_dir {
+        if let Some(dir) = artifacts.zeek_dir {
             let zeek_target = raw_dir.join("zeek");
             fs::create_dir_all(&zeek_target)?;
             for entry in fs::read_dir(dir)? {
@@ -108,52 +113,52 @@ impl Workspace {
                 }
             }
         }
-        if let Some(output) = httpx_output_jsonl {
+        if let Some(output) = artifacts.httpx_output_jsonl {
             fs::write(raw_dir.join("httpx.jsonl"), output)?;
         }
-        if let Some(output) = nuclei_output_jsonl {
+        if let Some(output) = artifacts.nuclei_output_jsonl {
             fs::write(raw_dir.join("nuclei.jsonl"), output)?;
         }
-        if let Some(output) = pentest_output_jsonl {
+        if let Some(output) = artifacts.pentest_output_jsonl {
             fs::write(raw_dir.join("internal-pentest.jsonl"), output)?;
         }
-        if let Some(output) = snmp_snapshot_json {
+        if let Some(output) = artifacts.snmp_snapshot_json {
             fs::write(raw_dir.join("snmp-snapshot.json"), output)?;
         }
-        if let Some(output) = librenms_snapshot_json {
+        if let Some(output) = artifacts.librenms_snapshot_json {
             fs::write(raw_dir.join("librenms-snapshot.json"), output)?;
         }
-        if let Some(output) = meraki_snapshot_json {
+        if let Some(output) = artifacts.meraki_snapshot_json {
             fs::write(raw_dir.join("meraki-snapshot.json"), output)?;
         }
-        if let Some(output) = unifi_snapshot_json {
+        if let Some(output) = artifacts.unifi_snapshot_json {
             fs::write(raw_dir.join("unifi-snapshot.json"), output)?;
         }
-        if let Some(output) = aruba_snapshot_json {
+        if let Some(output) = artifacts.aruba_snapshot_json {
             fs::write(raw_dir.join("aruba-snapshot.json"), output)?;
         }
-        if let Some(output) = omada_snapshot_json {
+        if let Some(output) = artifacts.omada_snapshot_json {
             fs::write(raw_dir.join("omada-snapshot.json"), output)?;
         }
-        if let Some(output) = ntopng_json {
+        if let Some(output) = artifacts.ntopng_json {
             fs::write(raw_dir.join("ntopng-snapshot.json"), output)?;
         }
-        if let Some(output) = flow_json {
+        if let Some(output) = artifacts.flow_json {
             fs::write(raw_dir.join("flow-snapshot.json"), output)?;
         }
-        if let Some(output) = greenbone_json {
+        if let Some(output) = artifacts.greenbone_json {
             fs::write(raw_dir.join("greenbone-report.json"), output)?;
         }
-        if let Some(output) = wazuh_json {
+        if let Some(output) = artifacts.wazuh_json {
             fs::write(raw_dir.join("wazuh-report.json"), output)?;
         }
-        if let Some(output) = napalm_json {
+        if let Some(output) = artifacts.napalm_json {
             fs::write(raw_dir.join("napalm-snapshot.json"), output)?;
         }
-        if let Some(output) = netmiko_json {
+        if let Some(output) = artifacts.netmiko_json {
             fs::write(raw_dir.join("netmiko-snapshot.json"), output)?;
         }
-        if let Some(output) = scrapli_json {
+        if let Some(output) = artifacts.scrapli_json {
             fs::write(raw_dir.join("scrapli-snapshot.json"), output)?;
         }
 

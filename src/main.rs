@@ -12,7 +12,7 @@ use bakula_program::{
     external_sql, findings, intel, lanes,
     model::{AppConfig, MonitoringLane, NormalizedEvent, RunReport, Severity, TriageAction},
     nmap, passive, paths, pentest, platform, readiness, report, server, simulation,
-    storage::Workspace,
+    storage::{RunArtifacts, Workspace},
     triage, validation, verification, vuln, webscan,
 };
 use chrono::Utc;
@@ -2608,27 +2608,33 @@ fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
 
     workspace.save_run(
         &report,
-        &nmap_path,
-        followup_scan.as_ref().map(|item| &item.output_path),
-        forensic_scan.as_ref().map(|item| &item.output_path),
-        args.suricata_eve.as_ref(),
-        args.zeek_dir.as_ref(),
-        web_artifacts.httpx_output_jsonl.as_deref(),
-        web_artifacts.nuclei_output_jsonl.as_deref(),
-        pentest_artifacts.output_jsonl.as_deref(),
-        context_bundle.artifacts.snmp_snapshot_json.as_deref(),
-        context_bundle.artifacts.librenms_snapshot_json.as_deref(),
-        context_bundle.artifacts.meraki_snapshot_json.as_deref(),
-        context_bundle.artifacts.unifi_snapshot_json.as_deref(),
-        context_bundle.artifacts.aruba_snapshot_json.as_deref(),
-        context_bundle.artifacts.omada_snapshot_json.as_deref(),
-        lane_bundle.artifacts.ntopng_json.as_deref(),
-        lane_bundle.artifacts.flow_json.as_deref(),
-        lane_bundle.artifacts.greenbone_json.as_deref(),
-        lane_bundle.artifacts.wazuh_json.as_deref(),
-        lane_bundle.artifacts.napalm_json.as_deref(),
-        lane_bundle.artifacts.netmiko_json.as_deref(),
-        lane_bundle.artifacts.scrapli_json.as_deref(),
+        &RunArtifacts {
+            nmap_path: &nmap_path,
+            nmap_followup_path: followup_scan
+                .as_ref()
+                .map(|item| item.output_path.as_path()),
+            nmap_forensic_path: forensic_scan
+                .as_ref()
+                .map(|item| item.output_path.as_path()),
+            suricata_path: args.suricata_eve.as_deref(),
+            zeek_dir: args.zeek_dir.as_deref(),
+            httpx_output_jsonl: web_artifacts.httpx_output_jsonl.as_deref(),
+            nuclei_output_jsonl: web_artifacts.nuclei_output_jsonl.as_deref(),
+            pentest_output_jsonl: pentest_artifacts.output_jsonl.as_deref(),
+            snmp_snapshot_json: context_bundle.artifacts.snmp_snapshot_json.as_deref(),
+            librenms_snapshot_json: context_bundle.artifacts.librenms_snapshot_json.as_deref(),
+            meraki_snapshot_json: context_bundle.artifacts.meraki_snapshot_json.as_deref(),
+            unifi_snapshot_json: context_bundle.artifacts.unifi_snapshot_json.as_deref(),
+            aruba_snapshot_json: context_bundle.artifacts.aruba_snapshot_json.as_deref(),
+            omada_snapshot_json: context_bundle.artifacts.omada_snapshot_json.as_deref(),
+            ntopng_json: lane_bundle.artifacts.ntopng_json.as_deref(),
+            flow_json: lane_bundle.artifacts.flow_json.as_deref(),
+            greenbone_json: lane_bundle.artifacts.greenbone_json.as_deref(),
+            wazuh_json: lane_bundle.artifacts.wazuh_json.as_deref(),
+            napalm_json: lane_bundle.artifacts.napalm_json.as_deref(),
+            netmiko_json: lane_bundle.artifacts.netmiko_json.as_deref(),
+            scrapli_json: lane_bundle.artifacts.scrapli_json.as_deref(),
+        },
     )?;
     workspace.enforce_retention(app_config.retention.max_runs, app_config.retention.keep_raw)?;
     Ok(report)
