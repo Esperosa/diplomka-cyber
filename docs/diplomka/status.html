@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 21:32</strong> ·
-  commit <code>c7ab37f</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 21:39</strong> ·
+  commit <code>c5f807a</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -242,7 +242,9 @@
       <li><span class="badge badge-green mini">hotovo</span> <code class="file">ConnectionDetector</code> trait (<code class="file">src/passive/detector.rs</code>) sjednocuje ablace A/B/C/D — produkce i eval teď jdou přes STEJNÉ trait objekty, ne dvě nezávislé kopie téže logiky</li>
       <li><span class="badge badge-green mini">hotovo</span> výchozí produkční chování beze změny (<code class="file">&amp;LegacyAnomalyDetector</code> explicitně) — ověřeno 8 reálnými CTU-13 regresními testy, stejná čísla jako dřív</li>
       <li><span class="badge badge-green mini">hotovo</span> sdílené prahy 2500 pps/35 Mbps (<code class="file">src/passive/thresholds.rs</code>) — dřív 3× nezávisle opsané magické konstanty</li>
-      <li><span class="badge badge-gray mini">zbývá</span> <code class="file">FindingKindSpec</code> + registr (nový <code class="file">event_type</code> dnes zasahuje až 10 souborů), rozdělení <code class="file">generate_findings</code> (630 řádků) na <code class="file">FindingRule</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> dedup <code class="file">identification_gap</code>/<code class="file">correlation_uncertainty</code> kontroly v <code class="file">decision.rs</code> (4× opsaná → 1 funkce)</li>
+      <li><span class="badge badge-yellow mini">zjištění</span> "traffic-like" seznamy nálezů v <code class="file">decision.rs</code> (7 typů) a <code class="file">triage.rs</code> (4 typy) dnes NEJSOU stejné — sjednocení by bylo reálná změna chování, ne bezrizikový plumbing refaktor. Odloženo jako vlastní, měřený krok.</li>
+      <li><span class="badge badge-gray mini">zbývá (samostatný krok)</span> rozhodnout o sjednocení kategorií → <code class="file">FindingKindSpec</code> registr, rozdělení <code class="file">generate_findings</code> (630 řádků) na <code class="file">FindingRule</code></li>
     </ul>
   </div>
 </details>
