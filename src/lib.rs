@@ -9,6 +9,7 @@ pub mod cpe;
 pub mod decision;
 pub mod diff;
 pub mod error;
+pub mod eval;
 pub mod evaluation;
 pub mod external_sql;
 pub mod findings;

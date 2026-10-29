@@ -12,6 +12,10 @@ mod anomaly;
 mod suricata;
 mod zeek;
 
+// Re-exporty pro src/eval (dataset replay baseline) - beze zmeny viditelnosti celych modulu.
+pub(crate) use anomaly::detect_connection_anomalies;
+pub(crate) use zeek::parse_zeek_log;
+
 #[derive(Debug, Clone)]
 pub struct PassiveSources {
     pub suricata_eve: Option<PathBuf>,
@@ -68,7 +72,7 @@ fn event_in_window(timestamp: DateTime<Utc>, start: DateTime<Utc>, end: DateTime
     timestamp >= start && timestamp <= end
 }
 
-fn parse_zeek_ts(value: &str) -> Result<DateTime<Utc>> {
+pub(crate) fn parse_zeek_ts(value: &str) -> Result<DateTime<Utc>> {
     let seconds = value
         .trim()
         .parse::<f64>()
@@ -85,21 +89,22 @@ fn parse_suricata_ts(value: &str) -> Result<DateTime<Utc>> {
         .map_err(|error| BakulaError::Processing(format!("Neplatny Suricata timestamp: {error}")))
 }
 
+// pub(crate): naside tez pro src/eval (dataset replay baseline), beze zmeny logiky.
 #[derive(Debug, Clone)]
-struct ConnectionObservation {
-    timestamp: DateTime<Utc>,
-    src_ip: Option<String>,
-    dst_ip: String,
-    proto: String,
-    dst_port: Option<u16>,
-    duration_s: Option<f64>,
-    orig_bytes: Option<u64>,
-    resp_bytes: Option<u64>,
-    total_bytes: Option<u64>,
-    orig_pkts: Option<u64>,
-    resp_pkts: Option<u64>,
-    total_pkts: Option<u64>,
-    conn_state: Option<String>,
-    history: Option<String>,
-    missed_bytes: Option<u64>,
+pub(crate) struct ConnectionObservation {
+    pub(crate) timestamp: DateTime<Utc>,
+    pub(crate) src_ip: Option<String>,
+    pub(crate) dst_ip: String,
+    pub(crate) proto: String,
+    pub(crate) dst_port: Option<u16>,
+    pub(crate) duration_s: Option<f64>,
+    pub(crate) orig_bytes: Option<u64>,
+    pub(crate) resp_bytes: Option<u64>,
+    pub(crate) total_bytes: Option<u64>,
+    pub(crate) orig_pkts: Option<u64>,
+    pub(crate) resp_pkts: Option<u64>,
+    pub(crate) total_pkts: Option<u64>,
+    pub(crate) conn_state: Option<String>,
+    pub(crate) history: Option<String>,
+    pub(crate) missed_bytes: Option<u64>,
 }

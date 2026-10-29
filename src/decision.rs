@@ -394,14 +394,15 @@ pub fn build_decision_bundle(report: &RunReport) -> DecisionBundle {
 }
 
 #[derive(Debug, Clone)]
-struct RankedDecision {
-    score: f64,
-    target: String,
-    finding_type: String,
-    severity: Severity,
-    confidence: Confidence,
-    decision: String,
-    reasons: Vec<String>,
+// pub(crate): naside tez pro src/eval (dataset replay baseline), beze zmeny logiky.
+pub(crate) struct RankedDecision {
+    pub(crate) score: f64,
+    pub(crate) target: String,
+    pub(crate) finding_type: String,
+    pub(crate) severity: Severity,
+    pub(crate) confidence: Confidence,
+    pub(crate) decision: String,
+    pub(crate) reasons: Vec<String>,
 }
 
 impl RankedDecision {
@@ -582,7 +583,10 @@ fn inference_graph_evidence(report: &RunReport, ranked: &[RankedDecision]) -> Ve
     evidence
 }
 
-fn rank_finding(finding: &Finding, changed_targets: &BTreeSet<String>) -> RankedDecision {
+pub(crate) fn rank_finding(
+    finding: &Finding,
+    changed_targets: &BTreeSet<String>,
+) -> RankedDecision {
     let mut score: f64 = match finding.severity {
         Severity::High => 0.62,
         Severity::Medium => 0.42,

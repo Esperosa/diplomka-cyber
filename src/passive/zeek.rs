@@ -179,7 +179,7 @@ pub fn parse_zeek_dir(
     })
 }
 
-fn parse_zeek_log(path: &Path) -> Result<Vec<HashMap<String, String>>> {
+pub(crate) fn parse_zeek_log(path: &Path) -> Result<Vec<HashMap<String, String>>> {
     let content = fs::read_to_string(path)?;
     let mut fields = Vec::new();
     let mut rows = Vec::new();

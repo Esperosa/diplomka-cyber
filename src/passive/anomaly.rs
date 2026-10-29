@@ -8,7 +8,8 @@ use super::ConnectionObservation;
 
 type ServiceKey = (String, String, u16);
 
-pub(super) fn detect_connection_anomalies(
+// pub(crate): naside tez pro src/eval (dataset replay baseline), beze zmeny logiky.
+pub(crate) fn detect_connection_anomalies(
     connections: Vec<ConnectionObservation>,
     known_services: &HashSet<ServiceKey>,
 ) -> Vec<NormalizedEvent> {
