@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 17:44</strong> ·
-  commit <code>23ab96b</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 17:51</strong> ·
+  commit <code>229a203</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -212,7 +212,8 @@
       <li><span class="badge badge-green mini">hotovo</span> H5: reálný souběžný test (4 vlákna, 20 jobů, 0 double-claimů) — potvrzuje `TransactionBehavior::Immediate` funguje</li>
       <li><span class="badge badge-yellow mini">probíhá</span> H5: DLQ, connection pooling — <code class="file">src/broker.rs</code></li>
       <li><span class="badge badge-yellow mini">probíhá</span> H5: test se 2 oddělenými OS procesy (vlákna už hotová, procesy jsou další krok)</li>
-      <li><span class="badge badge-yellow mini">probíhá</span> H2: Community ID join-key mezi Zeek/Suricata — <code class="file">src/passive/community_id.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> H2: Community ID join-key, ověřeno proti reálnému Zeek 9.0.1 i Suricata 8.0.7 (bajtově identické) — <code class="file">src/passive/community_id.rs</code></li>
+      <li><span class="badge badge-yellow mini">probíhá</span> H2: zapojení do schématu (<code class="file">ConnectionObservation</code>/<code class="file">NormalizedEvent</code> nemají `community_id`/`src_port`)</li>
       <li><span class="badge badge-yellow mini">probíhá</span> H2: dependency-aware fúzní vrstva — nový <code class="file">src/fusion.rs</code></li>
     </ul>
   </div>
@@ -261,7 +262,7 @@
   <tr>
     <td><strong>H2</strong><br><span style="color:var(--muted)">graph fusion s korekcí zdrojů</span></td>
     <td><span class="badge badge-yellow">zpět v rozsahu, probíhá</span></td>
-    <td>Kód umí jen okénkování jedné heuristiky, ne multi-senzorovou fúzi. Vlastnost jádra (ne nový subsystém) — stavím Community ID + dependency-aware fúzi, viz Produkční plán výše.</td>
+    <td>Community ID join-key hotov a ověřen proti 2 reálným senzorům (Zeek+Suricata). Kód umí jen okénkování jedné heuristiky, multi-senzorová fúze (schéma + fusion.rs) zbývá — viz Produkční plán výše.</td>
   </tr>
   <tr>
     <td><strong>H3</strong><br><span style="color:var(--muted)">VOI planner ≤ blanket scan</span></td>
@@ -314,8 +315,8 @@
   </div>
   <div class="num-card">
     <div class="label">Testy (lib, bez broker/lab)</div>
-    <div class="value">85 / 85</div>
-    <div class="sub">0 selhání, vč. 1 reálného souběžného testu</div>
+    <div class="value">90 / 90</div>
+    <div class="sub">0 selhání, vč. souběžného + cross-senzor testu</div>
   </div>
   <div class="num-card">
     <div class="label">Lab testy (Docker)</div>
