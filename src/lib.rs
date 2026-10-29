@@ -28,6 +28,7 @@ pub mod nmap;
 pub mod passive;
 pub mod paths;
 pub mod pentest;
+pub mod pipeline;
 pub mod platform;
 pub mod readiness;
 pub mod report;
