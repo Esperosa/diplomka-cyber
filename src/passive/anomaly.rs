@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use crate::model::{NormalizedEvent, Severity};
 
 use super::ConnectionObservation;
+use super::thresholds::{HIGH_BPS_THRESHOLD, HIGH_PPS_THRESHOLD};
 
 type ServiceKey = (String, String, u16);
 
@@ -455,7 +456,7 @@ impl ConnectionAggregate {
         self.max_pps = self.max_pps.max(pps);
         self.max_bps = self.max_bps.max(bps);
 
-        if pps >= 2_500.0 || bps >= 35_000_000.0 || timeout_like {
+        if pps >= HIGH_PPS_THRESHOLD || bps >= HIGH_BPS_THRESHOLD || timeout_like {
             self.overload_votes = self.overload_votes.saturating_add(1);
         }
     }

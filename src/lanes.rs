@@ -5,6 +5,7 @@ use serde::Deserialize;
 use crate::{
     error::Result,
     model::{Confidence, Finding, HostReport, MonitoringLane, Severity},
+    passive::thresholds::{HIGH_BPS_THRESHOLD, HIGH_PPS_THRESHOLD},
 };
 
 #[derive(Debug, Clone, Default)]
@@ -485,7 +486,7 @@ fn flow_findings(source: &str, hosts: &[HostReport], flows: &[FlowRecord]) -> Ve
             .map(|cap| if cap == 0 { 0.0 } else { bps / cap as f64 })
             .unwrap_or(0.0);
         let capacity_ratio = pps_capacity_ratio.max(bps_capacity_ratio);
-        if capacity_ratio >= 0.8 || pps >= 2_500.0 || bps >= 35_000_000.0 {
+        if capacity_ratio >= 0.8 || pps >= HIGH_PPS_THRESHOLD || bps >= HIGH_BPS_THRESHOLD {
             findings.push(Finding {
                 finding_id: format!(
                     "finding:{source}:flow-rate:{}:{}:{}",

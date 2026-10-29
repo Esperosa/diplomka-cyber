@@ -12,6 +12,7 @@ mod anomaly;
 mod community_id;
 pub(crate) mod detector;
 mod suricata;
+pub(crate) mod thresholds;
 mod zeek;
 
 // Re-exporty pro src/eval (dataset replay baseline) - beze zmeny viditelnosti celych modulu.
