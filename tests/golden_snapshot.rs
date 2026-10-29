@@ -161,13 +161,17 @@ const VOLATILE_SUMMARY_KEYS: &[&str] = &["mas_parallelism_ratio"];
 /// ktere tenhle test vedome nezna do detailu - prave proto je normalizace
 /// podle TVARU hodnoty, ne podle enumerace klicu, s par vyjimkami pro znama
 /// cas-steny-hodiny pole).
-fn normalize(value: &mut Value, tmp_needles: &[String]) {
+fn normalize(value: &mut Value, path_needles: &[(String, &str)]) {
     match value {
         Value::String(text) => {
-            let mut normalized = text.clone();
-            for needle in tmp_needles {
+            // Cesty ulozene v `run.sources.*` (puvodem z `--nmap-xml`/atd. argumentu)
+            // nesou nativni oddelovac adresare - `\` na Windows, `/` na Linux (CI).
+            // Sjednoceni na `/` PRED needle matchingem drzi golden soubor prenositelny
+            // mezi platformami, ne jen mezi behy na stejnem stroji.
+            let mut normalized = text.replace('\\', "/");
+            for (needle, placeholder) in path_needles {
                 if normalized.contains(needle.as_str()) {
-                    normalized = normalized.replace(needle.as_str(), "<TMP>");
+                    normalized = normalized.replace(needle.as_str(), placeholder);
                 }
             }
             if mentions_volatile_timing(&normalized) {
@@ -181,7 +185,7 @@ fn normalize(value: &mut Value, tmp_needles: &[String]) {
         }
         Value::Array(items) => {
             for item in items {
-                normalize(item, tmp_needles);
+                normalize(item, path_needles);
             }
         }
         Value::Object(map) => {
@@ -189,7 +193,7 @@ fn normalize(value: &mut Value, tmp_needles: &[String]) {
                 if VOLATILE_SUMMARY_KEYS.contains(&key.as_str()) {
                     *item = Value::String("<VOLATILE>".to_string());
                 } else {
-                    normalize(item, tmp_needles);
+                    normalize(item, path_needles);
                 }
             }
         }
@@ -347,13 +351,15 @@ fn full_visibility_stack_report_matches_golden_snapshot() {
 
     let mut report = load_single_report(&workspace);
 
-    let tmp_needles = vec![
-        workspace.to_string_lossy().replace('\\', "/"),
-        workspace.to_string_lossy().to_string(),
-        scenarios.to_string_lossy().replace('\\', "/"),
-        scenarios.to_string_lossy().to_string(),
+    // `data_dir` (CARGO_MANIFEST_DIR) je absolutni cesta k checkoutu repa - stejne
+    // volatilni mezi stroji/CI jako `workspace`/`scenarios`, jen jina kategorie
+    // (kontrolovany vstup z `data/`, ne test-scoped docasny adresar).
+    let path_needles: Vec<(String, &str)> = vec![
+        (workspace.to_string_lossy().replace('\\', "/"), "<TMP>"),
+        (scenarios.to_string_lossy().replace('\\', "/"), "<TMP>"),
+        (data_dir.to_string_lossy().replace('\\', "/"), "<REPO>/data"),
     ];
-    normalize(&mut report, &tmp_needles);
+    normalize(&mut report, &path_needles);
 
     let actual = serde_json::to_string_pretty(&report).expect("serializace reportu");
 

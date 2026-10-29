@@ -551,7 +551,7 @@
                 "event_type": "http_basic_without_tls",
                 "message": "HTTP Basic credentials over plaintext channel",
                 "proto": "tcp",
-                "raw_ref": "<TMP>\\zakladni\\suricata\\eve.json",
+                "raw_ref": "<TMP>/zakladni/suricata/eve.json",
                 "rule_id": "2100011",
                 "severity": "high",
                 "source": "suricata",
@@ -575,7 +575,7 @@
                 "event_type": "http_basic_without_tls",
                 "message": "HTTP pozorovani: /login",
                 "proto": "tcp",
-                "raw_ref": "<TMP>\\zakladni\\zeek\\http.log",
+                "raw_ref": "<TMP>/zakladni/zeek/http.log",
                 "rule_id": "heuristika:http",
                 "severity": "high",
                 "source": "zeek",
@@ -747,7 +747,7 @@
                 "event_type": "plaintext_protocol",
                 "message": "TELNET plaintext management traffic",
                 "proto": "tcp",
-                "raw_ref": "<TMP>\\zakladni\\suricata\\eve.json",
+                "raw_ref": "<TMP>/zakladni/suricata/eve.json",
                 "rule_id": "2100010",
                 "severity": "medium",
                 "source": "suricata",
@@ -771,7 +771,7 @@
                 "event_type": "plaintext_protocol",
                 "message": "Telnet management session observed",
                 "proto": "tcp",
-                "raw_ref": "<TMP>\\zakladni\\zeek\\notice.log",
+                "raw_ref": "<TMP>/zakladni/zeek/notice.log",
                 "rule_id": "Plaintext::Telnet",
                 "severity": "medium",
                 "source": "zeek",
@@ -1769,7 +1769,7 @@
     },
     {
       "evidence": [
-        "suricata=<TMP>\\zakladni\\suricata\\eve.json"
+        "suricata=<TMP>/zakladni/suricata/eve.json"
       ],
       "lane_id": "lane:passive:suricata:<RUN_ID>",
       "lane_type": "live",
@@ -1784,7 +1784,7 @@
     },
     {
       "evidence": [
-        "zeek=<TMP>\\zakladni\\zeek"
+        "zeek=<TMP>/zakladni/zeek"
       ],
       "lane_id": "lane:passive:zeek:<RUN_ID>",
       "lane_type": "live",
@@ -2224,27 +2224,27 @@
       "192.168.56.0/24"
     ],
     "sources": {
-      "aruba_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\aruba_demo_snapshot.json",
-      "flow_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\flow_demo_snapshot.json",
-      "greenbone_report": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\greenbone_demo_report.json",
+      "aruba_snapshot": "<REPO>/data/aruba_demo_snapshot.json",
+      "flow_snapshot": "<REPO>/data/flow_demo_snapshot.json",
+      "greenbone_report": "<REPO>/data/greenbone_demo_report.json",
       "librenms_base_url": null,
-      "librenms_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\librenms_demo_snapshot.json",
+      "librenms_snapshot": "<REPO>/data/librenms_demo_snapshot.json",
       "meraki_network_id": null,
-      "meraki_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\meraki_demo_snapshot.json",
-      "napalm_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\napalm_demo_snapshot.json",
-      "netmiko_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\netmiko_demo_snapshot.json",
+      "meraki_snapshot": "<REPO>/data/meraki_demo_snapshot.json",
+      "napalm_snapshot": "<REPO>/data/napalm_demo_snapshot.json",
+      "netmiko_snapshot": "<REPO>/data/netmiko_demo_snapshot.json",
       "nmap_followup_xml": null,
       "nmap_forensic_xml": null,
       "nmap_mode": "replay",
-      "nmap_xml": "<TMP>\\zakladni\\nmap.xml",
-      "ntopng_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\ntopng_demo_snapshot.json",
-      "omada_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\omada_demo_snapshot.json",
-      "scrapli_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\scrapli_demo_snapshot.json",
-      "snmp_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\snmp_demo_snapshot.json",
-      "suricata_eve": "<TMP>\\zakladni\\suricata\\eve.json",
-      "unifi_snapshot": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\unifi_demo_snapshot.json",
-      "wazuh_report": "C:\\Users\\Creator\\Desktop\\Diplomka_Cyber\\diplomka-cyber\\data\\wazuh_demo_report.json",
-      "zeek_dir": "<TMP>\\zakladni\\zeek"
+      "nmap_xml": "<TMP>/zakladni/nmap.xml",
+      "ntopng_snapshot": "<REPO>/data/ntopng_demo_snapshot.json",
+      "omada_snapshot": "<REPO>/data/omada_demo_snapshot.json",
+      "scrapli_snapshot": "<REPO>/data/scrapli_demo_snapshot.json",
+      "snmp_snapshot": "<REPO>/data/snmp_demo_snapshot.json",
+      "suricata_eve": "<TMP>/zakladni/suricata/eve.json",
+      "unifi_snapshot": "<REPO>/data/unifi_demo_snapshot.json",
+      "wazuh_report": "<REPO>/data/wazuh_demo_report.json",
+      "zeek_dir": "<TMP>/zakladni/zeek"
     },
     "started_at": "<TIMESTAMP>"
   },
