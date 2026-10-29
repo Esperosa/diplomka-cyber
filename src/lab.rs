@@ -15,21 +15,29 @@
 //! Container bezi jen na `127.0.0.1`, zadna externi expozice, vlastni Docker instance -
 //! zadne povoleni treti strany potrebne.
 //!
-//! **Co tento modul NEDELA:** nevola `verification_planner::plan_verification` -
-//! zadna `SecurityHypothesis` o Juice Shopu jeste neexistuje, na kterou by se planner
-//! mel vztahovat (stejna disciplina jako "vedome OUT" v Deliverable 1/5). Tento krok
-//! jen namefi a zapise syrova fakta (co nmap/httpx/nuclei skutecne najdou), ktera az
-//! navazujici krok muze pouzit jako vstup pro hypotezu/planner.
+//! **Deliverable 8 doplnila `build_hypotheses_from_lab_scan`**, ktera zavre smyckou:
+//! lab sken -> `report::build_report`/`findings::generate_findings` (stejna nezmenena
+//! produkcni logika jako vsude jinde) -> `hypothesis::build_hypothesis` pro kazdy
+//! `Finding`. `verification_planner::plan_verification` se vola az v testu (ne v tomto
+//! modulu) nad REALNE zmerenym nalezem (prometheus-metrics-exposed na Juice Shopu),
+//! ne nad synteticky vymyslenym - poprve v cele diplomce je cely pipeline Observation
+//! -> Finding -> Hypothesis -> Verification Planner demonstrovan na realnych datech.
 
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+use chrono::Utc;
+
 use crate::error::{BakulaError, Result};
-use crate::model::HostReport;
+use crate::findings::generate_findings;
+use crate::hypothesis::{SecurityHypothesis, build_hypothesis};
+use crate::identity::IdentityMatch;
+use crate::model::{Finding, HostReport, PassiveWindow, RunReport, SourceMetadata};
 use crate::nmap::{parse_nmap_xml, run_real_nmap};
 use crate::report::normalize_inventory;
+use crate::report::{build_report, score_services};
 use crate::webscan::{WebScanArtifacts, WebScanConfig, enrich_http_services};
 
 const JUICE_SHOP_IMAGE: &str = "bkimminich/juice-shop";
@@ -142,6 +150,65 @@ pub fn run_active_scan_against_lab(
     })
 }
 
+#[derive(Debug, Clone)]
+pub struct LabPipelineResult {
+    pub report: RunReport,
+    /// Kazdy `Finding` z `report.findings` parovany se svou `SecurityHypothesis` -
+    /// stejne poradi, stejna delka jako `report.findings`.
+    pub hypotheses: Vec<(Finding, SecurityHypothesis)>,
+}
+
+/// Zavre smycku Observation -> Finding -> Hypothesis pres STEJNOU, NEZMENENOU
+/// produkcni logiku (`score_services`/`build_report`/`generate_findings`) jako
+/// kdekoliv jinde v projektu - lab sken se tu nijak nezvyhodnuje ani neobchazi.
+/// Identita je `IdentityMatch::New` pro kazdy finding - zadna historie bezu pro
+/// tenhle lab jeste neexistuje (jen jeden sken, ne sekvence jako v Deliverable 2).
+pub fn build_hypotheses_from_lab_scan(
+    scan: LabScanResult,
+    run_id: &str,
+) -> Result<LabPipelineResult> {
+    let mut hosts = scan.hosts;
+    score_services(&mut hosts);
+
+    let now = Utc::now();
+    let scope = vec!["127.0.0.1/32".parse().map_err(|error| {
+        BakulaError::Processing(format!("neplatny scope 127.0.0.1/32: {error}"))
+    })?];
+    let mut report: RunReport = build_report(
+        run_id,
+        &format!("lab-pipeline:{run_id}"),
+        now,
+        now,
+        scope,
+        vec![JUICE_SHOP_PORT],
+        "opatrny",
+        "lab",
+        "active-only",
+        PassiveWindow {
+            start: now,
+            end: now,
+            time_window_s: 0,
+        },
+        SourceMetadata::default(),
+        hosts,
+        Vec::new(),
+    );
+    report.findings = generate_findings(&report);
+
+    let hypotheses = report
+        .findings
+        .iter()
+        .map(|finding| {
+            let asset_id = format!("asset:lab:{}", finding.host_key.clone().unwrap_or_default());
+            let identity = IdentityMatch::New(asset_id);
+            let hypothesis = build_hypothesis(finding, None, Some(&identity), None);
+            (finding.clone(), hypothesis)
+        })
+        .collect();
+
+    Ok(LabPipelineResult { report, hypotheses })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,5 +315,76 @@ mod tests {
             nuclei_output.contains("prometheus-metrics-exposed"),
             "ocekavam realny nalez neautentizovaneho /metrics endpointu, dostal jsem: {nuclei_output}"
         );
+    }
+
+    /// Deliverable 8: poprve v cele diplomce cely pipeline Observation -> Finding ->
+    /// Hypothesis -> Verification Planner demonstrovany spolu na REALNE zmerenem
+    /// nalezu (ne synteticke fixture). `VerificationCandidate` cisla jsou poctive
+    /// odhady (ne zmerena), proto se `plan_verification` nikde netvari, ze je to
+    /// kalibrovane - presne stejna disciplina jako ve `verification_planner.rs` testech.
+    #[test]
+    fn full_pipeline_plans_next_verification_for_real_metrics_exposure_finding() {
+        let lab = start_juice_shop_lab().expect("start juice shop lab");
+
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let scan = run_active_scan_against_lab(
+            temp.path(),
+            "lab-pipeline-run",
+            httpx_bin(),
+            nuclei_bin(),
+            nuclei_templates_dir(),
+        );
+
+        stop_lab(lab);
+        let scan = scan.expect("aktivni sken proti lab cili");
+        let pipeline =
+            build_hypotheses_from_lab_scan(scan, "lab-pipeline-run").expect("build hypotheses");
+
+        let (finding, hypothesis) = pipeline
+            .hypotheses
+            .iter()
+            .find(|(finding, _)| finding.finding_type.contains("prometheus-metrics-exposed"))
+            .expect("pipeline musi vyprodukovat Finding pro realny nuclei nalez");
+
+        assert_eq!(finding.severity, crate::model::Severity::Medium);
+        // Nova identita (New) - zadna historie bezu pro tenhle lab jeste neexistuje.
+        assert!(hypothesis.uncertainty.identity.is_some());
+
+        let candidates = vec![
+            crate::verification_planner::VerificationCandidate {
+                method: "inspect_metrics_content".to_string(),
+                estimated_information_gain: 0.6,
+                estimated_network_cost: 0.02,
+                estimated_runtime_ms: 500,
+                disruption_risk: 0.0,
+                requires_approval: false,
+            },
+            crate::verification_planner::VerificationCandidate {
+                method: "broad_nuclei_rescan_full_template_set".to_string(),
+                estimated_information_gain: 0.5,
+                estimated_network_cost: 0.3,
+                estimated_runtime_ms: 60_000,
+                disruption_risk: 0.1,
+                requires_approval: false,
+            },
+            crate::verification_planner::VerificationCandidate {
+                method: "escalate_to_human_review".to_string(),
+                estimated_information_gain: 0.3,
+                estimated_network_cost: 0.0,
+                estimated_runtime_ms: 0,
+                disruption_risk: 0.0,
+                requires_approval: true,
+            },
+        ];
+
+        let plan = crate::verification_planner::plan_verification(hypothesis, candidates);
+        let requires_approval = plan.chosen_requires_approval();
+        let chosen = plan.chosen.expect("planner musi vybrat kandidata");
+
+        // Levny, rychly, informativni krok (precist obsah uz potvrzeneho exponovaneho
+        // endpointu) ma vyhrat proti pomalejsimu/drazsimu rescanu a proti eskalaci,
+        // ktera ma nejnizsi odhadovany information gain ze vsech tri.
+        assert_eq!(chosen.candidate.method, "inspect_metrics_content");
+        assert!(!requires_approval);
     }
 }
