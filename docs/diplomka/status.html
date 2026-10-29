@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 18:08</strong> ·
-  commit <code>f13c440</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 18:12</strong> ·
+  commit <code>cc4c0c1</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -214,7 +214,8 @@
       <li><span class="badge badge-yellow mini">probíhá</span> H5: test se 2 oddělenými OS procesy (vlákna už hotová, procesy jsou další krok)</li>
       <li><span class="badge badge-green mini">hotovo</span> H2: Community ID join-key, ověřeno proti reálnému Zeek 9.0.1 i Suricata 8.0.7 (bajtově identické) — <code class="file">src/passive/community_id.rs</code></li>
       <li><span class="badge badge-green mini">hotovo</span> H2: zapojeno do schématu — <code class="file">ConnectionObservation.src_port</code> + <code class="file">community_id()</code>, 0 regrese na reálných datech (CTU-13, H1 Zeek test)</li>
-      <li><span class="badge badge-yellow mini">probíhá</span> H2: dependency-aware fúzní vrstva — nový <code class="file">src/fusion.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> H2: dependency-aware fúzní logika — stejný tok ze 2+ senzorů = MAX, ne SOUČET — <code class="file">src/fusion.rs</code></li>
+      <li><span class="badge badge-yellow mini">probíhá</span> H2: zapojení fúze do <code class="file">correlation_v2.rs</code>/<code class="file">decision.rs</code> + validace na reálných dual-sensor datech</li>
     </ul>
   </div>
 </details>
@@ -262,7 +263,7 @@
   <tr>
     <td><strong>H2</strong><br><span style="color:var(--muted)">graph fusion s korekcí zdrojů</span></td>
     <td><span class="badge badge-yellow">zpět v rozsahu, probíhá</span></td>
-    <td>Community ID hotov, ověřen proti 2 reálným senzorům, a zapojen do schématu. Kód umí jen okénkování jedné heuristiky, dependency-aware fúze (<code class="file">fusion.rs</code>) zbývá — viz Produkční plán výše.</td>
+    <td>Community ID + schema wiring + dependency-aware fúzní logika hotovy a testovány (poprvé v projektu kód, co literálně implementuje H2 claim). Zapojení do rozhodování + validace na reálných dual-sensor datech zbývá — viz Produkční plán výše.</td>
   </tr>
   <tr>
     <td><strong>H3</strong><br><span style="color:var(--muted)">VOI planner ≤ blanket scan</span></td>
@@ -315,8 +316,8 @@
   </div>
   <div class="num-card">
     <div class="label">Testy (lib, bez broker/lab)</div>
-    <div class="value">93 / 93</div>
-    <div class="sub">0 selhání, vč. souběžného + cross-senzor testu</div>
+    <div class="value">97 / 97</div>
+    <div class="sub">0 selhání, vč. souběžného + cross-senzor + fúzního testu</div>
   </div>
   <div class="num-card">
     <div class="label">Lab testy (Docker)</div>
