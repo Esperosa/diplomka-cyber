@@ -39,17 +39,26 @@ Registr datových zdrojů pro `src/eval/` (replay a baseline měření korelačn
 | `known_leakage_risks` | Stejná strukturní záruka jako IoT-23 (paralelní `Vec`). Navíc: `State` pole je NetFlow notace ("FPA_FPA", "CON"), ne Zeek `conn_state` slovník ("S0", "REJ") — heuristiky v `passive::anomaly`/`correlation_v2` laděné na Zeek vokabulář na CTU-13 nefungují stejně (změřeno, viz níže) |
 | `wave` | 1 |
 
-**Stažený výřez (NE committed — 30 MB, nad limit pro git, viz `.gitignore`):**
+**Stažený výřez (NE committed — 30 MB/scénář, nad limit pro git, viz `.gitignore`):**
 
-| Scénář | Cesta (lokální, gitignored) | Velikost | SHA-256 | Flows | Malicious |
-|---|---|---|---|---|---|
-| CTU-Malware-Capture-Botnet-54 (Virut), prvních 30 MB | `labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv` | 31 457 281 B | `e53331ede25cb047e65ed814b7e34dd49f3926e8585d4ea6294aba4cccf336b6` | 229 653 | 6 185 |
+| Scénář | Rodina (ověřeno přímo na `mcfp.felk.cvut.cz`) | Cesta (lokální, gitignored) | Velikost | SHA-256 | Flows (ve výřezu) | Malicious |
+|---|---|---|---|---|---|---|
+| CTU-Malware-Capture-Botnet-54, scénář 13, prvních 30 MB | Virut | `labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv` | 31 457 281 B | `e53331ede25cb047e65ed814b7e34dd49f3926e8585d4ea6294aba4cccf336b6` | 229 653 | 6 185 |
+| CTU-Malware-Capture-Botnet-51, scénář 10, prvních 30 MB | Rbot | `labs/datasets/ctu13/Botnet-51/capture20110818.binetflow.excerpt.csv` | 31 457 281 B | `c27b7443884c68c4b4ae49ce1404bf897a5dd7a430122a21121e4d135bfbca32` | 228 760 | 81 |
+| CTU-Malware-Capture-Botnet-42, scénář 1, 30 MB od offsetu 150 000 000 B | Neris | `labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv` | 31 457 312 B | `2b78111d5eefae6ea24d58bb7cf54f6958a6c2cbb9b843e8693d5075f8bb8710` | 229 501 | 2 614 |
+
+**Deliverable 18 (29.10.2026) — rozšíření ze 1 na 3 scénáře, 2 další malware rodiny.** Důvod offsetu u Botnet-42: první 30 MB (chronologický začátek 6,15h capture) obsahovalo 0 Botnet-labelovaných flows — malware aktivita v téhle capture začíná později. Ověřeno přímo (`curl` sondy na 150MB/250MB offsetu), ne odhadnuto. Výřez proto sestaven jako: hlavičkový řádek z bytu 0 (CSV header, nutný pro `src/eval/sources/ctu13.rs::column()` lookup podle jména) + 30 MB dat od bytu 150 000 000, první (potenciálně useknutý) řádek dat zahozen. **Honestní poznámka k Botnet-51**: tahle scénář má v adresáři i druhý soubor (`capture20110818.binetflow.labeled`, jiné jméno sloupců `Label(Normal:CC:Background)` + extra `CCDetector` sloupec) — NEpoužitý, protože nemá stejné schéma jako ostatní 2 scénáře; ověřeno přímo (`curl -r 0-500`), ne předpokládáno ze jména souboru.
 
 **Oprava 29.10.2026:** všechny tři SHA-256 hashe v této tabulce byly dřív useknuté o 1 hex znak (63 místo 64) — chyba při přepisu z `sha256sum` výstupu, odhalená nezávislou kontrolou (Opus Plan agent). Opraveno zde na skutečné hashe.
 
-**Reprodukce stažení** (HTTP Range request — "reprezentativní výřez", ne bezhlavé stažení celého 251MB souboru, per návrh sekce 7):
+**Reprodukce stažení** (HTTP Range request — "reprezentativní výřez", ne bezhlavé stažení celého souboru, per návrh sekce 7):
 ```
 curl -s -r 0-31457280 "https://mcfp.felk.cvut.cz/publicDatasets/CTU-Malware-Capture-Botnet-54/detailed-bidirectional-flow-labels/capture20110815-3.binetflow" -o labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv
+curl -s -r 0-31457280 "https://mcfp.felk.cvut.cz/publicDatasets/CTU-Malware-Capture-Botnet-51/detailed-bidirectional-flow-labels/capture20110818.binetflow" -o labs/datasets/ctu13/Botnet-51/capture20110818.binetflow.excerpt.csv
+# Botnet-42: header z bytu 0 + data od offsetu 150 000 000 (viz vysvetleni vyse)
+curl -s -r 0-200 "$URL42" | head -1 > header.tmp
+curl -s -r 150000000-181457280 "$URL42" | tail -n +2 > body.tmp
+cat header.tmp body.tmp > labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv
 ```
 
 ## Budoucí vlny (naplánováno, ne implementováno)

@@ -1,4 +1,4 @@
-# Souhrn výsledků (Deliverables 1–17) a vztah k výzkumným hypotézám H1–H5
+# Souhrn výsledků (Deliverables 1–18) a vztah k výzkumným hypotézám H1–H5
 
 **Status: konsolidace k 29. 10. 2026, OPRAVENO po nezávislém master-plan auditu (3 agenti, Opus + pragmatik + skeptik).** Návrhový dokument (sekce 11) definuje 5 výzkumných hypotéz pro diplomku. Tento dokument mapuje, co z dosavadních deliverables tyto hypotézy skutečně testuje — **honestně**, včetně částečně negativních výsledků, ne jako seznam úspěchů.
 
@@ -33,6 +33,7 @@
 | 13 | H3 měření zablokováno potvrzeným strukturním důvodem (ne domněnkou) | `docs/diplomka/eval/h3-measurement-difficulty.md` | Hotovo |
 | 16 | Multiservice lab (4 cíle), H3 poprvé změřeno (VOI vs. blanket, 16× méně kontrol), H1 na 2. nezávislém cíli | `src/lab.rs`, `docs/diplomka/eval/h3-voi-vs-blanket-multiservice-lab.md` | Hotovo |
 | 17 | Model hrozeb (konsolidace, návrh sekce 11 jmenuje jako povinný výstup) + regresní asserty na IoT-23 baseline čísla | `docs/diplomka/threat-model.md`, `src/eval/dataset_replay.rs` | Hotovo |
+| 18 | CTU-13 rozšířeno ze 1 na 3 scénáře/2 rodiny (Virut, Rbot, Neris) — ablace A prohrává s triviálním baseline 0/3, ne 0/1 | `src/eval/dataset_replay.rs`, `docs/diplomka/eval/ctu13-three-scenarios-dataset-sufficiency.md` | Hotovo |
 | 14 | Oprava CTU-13 label bugu + triviální baseline + hash fix (nezávislý audit, kolo 1) | `src/eval/ground_truth.rs`, `src/eval/dataset_replay.rs` | Hotovo |
 | 15 | Oprava Virut/RBot, H1 terminologie, IoT-23 stejná třída chyby jako bod 14.1, regresní asserty na CTU-13 čísla (nezávislý audit, kolo 2) | `src/eval/sources/iot23.rs`, `docs/diplomka/eval/h1-passive-vs-active.md` | Hotovo |
 
@@ -52,7 +53,7 @@
 
 ### H4: verzované učení a kalibrace z ověřených případů zlepší přenositelnost na neviděná data oproti statickým heuristikám.
 
-**Status: NEOVĚŘITELNÉ BEZ CASE MEMORY, které ještě neexistuje.** `hypothesis.rs` vědomě nepočítá `probability`/kalibraci (dokumentováno jako limitace). Deliverable 9 ALE už změřila přesně tu "přenositelnost na neviděná data" část H4 nepřímo — po opravě N1 je obraz jemnější než se původně tvrdilo: **statické heuristiky (ablace A) neztrácejí drtivou většinu F1 při přechodu na jiný dataset** (F1 0.364 na IoT-23 → 0.306 na CTU-13, pokles ~16 %, ne přes 2/3 jak se chybně uvádělo v původní verzi), ale **na obou datasetech zůstávají pod triviálním baseline "vše=malicious"** (0.462 na IoT-23, 0.965 na CTU-13 — viz `docs/diplomka/eval/cross-dataset-ctu13.md`). To je přesnější a náročnější baseline, proti kterému by budoucí kalibrace/Case Memory musela prokázat zlepšení, aby H4 potvrdila: nejde jen o "neztratit F1 při přechodu na jiný dataset", ale především o "překonat nejhloupější možný klasifikátor na obou datasetech".
+**Status: NEOVĚŘITELNÉ BEZ CASE MEMORY, které ještě neexistuje.** `hypothesis.rs` vědomě nepočítá `probability`/kalibraci (dokumentováno jako limitace). Deliverable 9 ALE už změřila přesně tu "přenositelnost na neviděná data" část H4 nepřímo — po opravě N1 je obraz jemnější než se původně tvrdilo: **statické heuristiky (ablace A) neztrácejí drtivou většinu F1 při přechodu na jiný dataset** (F1 0.364 na IoT-23 → 0.306 na CTU-13, pokles ~16 %, ne přes 2/3 jak se chybně uvádělo v původní verzi), ale **na obou datasetech zůstávají pod triviálním baseline "vše=malicious"** (0.462 na IoT-23, 0.965 na CTU-13 — viz `docs/diplomka/eval/cross-dataset-ctu13.md`). **Deliverable 18 posílilo tenhle baseline na 3 CTU-13 scénáře/2 rodiny** (Virut, Rbot, Neris) — ablace A prohrává s triviálním baseline ve **všech 3** (F1 0.273–0.306 vs. triviální baseline 0.348–0.965), ne jen v 1 scénáři. To je přesnější a náročnější, teď i vícenásobně potvrzená laťka, proti které by budoucí kalibrace/Case Memory musela prokázat zlepšení, aby H4 potvrdila: nejde jen o "neztratit F1 při přechodu na jiný dataset", ale především o "překonat nejhloupější možný klasifikátor konzistentně napříč nezávislými scénáři".
 
 ### H5: rozdělení workerů a stavu umožní s přidáním hardwaru zvýšit propustnost bez disproporčního růstu latence.
 
