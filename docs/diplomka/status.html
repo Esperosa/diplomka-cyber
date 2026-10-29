@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 18:12</strong> ·
-  commit <code>cc4c0c1</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 18:30</strong> ·
+  commit <code>fd1d7c2</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -125,12 +125,15 @@
   </div>
 </details>
 
-<details class="stage">
-  <summary><span class="badge badge-yellow">postaveno, honestně negativní výsledek</span> <span class="stage-title">Korelace (temporal/graph)</span> <span class="stage-sub">okénkování, multi-scale</span></summary>
+<details class="stage" open>
+  <summary><span class="badge badge-yellow">negativní výsledek diagnostikován + reálná oprava nalezena</span> <span class="stage-title">Korelace (temporal/graph)</span> <span class="stage-sub">okénkování, multi-scale, diagnóza slabého skóre</span></summary>
   <div class="stage-body">
     <ul class="items">
       <li><span class="badge badge-green mini">hotovo</span> ablace B/C (tumbling okna, graph-linking) — <code class="file">src/correlation_v2.rs</code></li>
       <li><span class="badge badge-green mini">hotovo</span> ablace D (multi-scale union), fragmentační hypotéza potvrzena sweepem</li>
+      <li><span class="badge badge-green mini">hotovo</span> <b>PR-AUC diagnóza</b>: destinace-centrické skóre (ablace A) je na 2/3 scénářů HŮŘ než náhoda — problém je CO se měří, ne špatný práh</li>
+      <li><span class="badge badge-green mini">hotovo</span> <b>reálná oprava nalezena</b>: zdroj-centrické skóre (je HOST anomální, ne SLUŽBA) dává LIFT 24–90× nad náhodou na všech 3 scénářích — <code class="file">score_source_hosts</code></li>
+      <li><span class="badge badge-yellow mini">probíhá</span> zapojení zdroj-centrického skóre do produkční detekce + přepočet F1 proti triviálnímu baseline</li>
       <li><span class="badge badge-yellow mini">probíhá</span> skutečná multi-senzorová fúze s korekcí závislosti zdrojů (H2 doslovně) — ZPĚT V ROZSAHU (29.10.2026, produkční reframing), join-key hotov, viz Produkční plán níže</li>
     </ul>
   </div>
@@ -295,6 +298,11 @@
     <div class="sub">ablace A porazila triviální baseline</div>
   </div>
   <div class="num-card">
+    <div class="label">Zdroj- vs. destinace-centrické LIFT</div>
+    <div class="value">24–90× vs. 0,75–1,09×</div>
+    <div class="sub">PR-AUC/prevalence na všech 3 scénářích — reálná oprava nalezena</div>
+  </div>
+  <div class="num-card">
     <div class="label">H4 kalibrace, Brier skóre</div>
     <div class="value">0.683 → 0.434</div>
     <div class="sub">průměr přes 3 LOSO foldy, zlepšení 3/3</div>
@@ -316,8 +324,8 @@
   </div>
   <div class="num-card">
     <div class="label">Testy (lib, bez broker/lab)</div>
-    <div class="value">97 / 97</div>
-    <div class="sub">0 selhání, vč. souběžného + cross-senzor + fúzního testu</div>
+    <div class="value">100 / 100</div>
+    <div class="sub">0 selhání, vč. PR-AUC diagnózy proti reálným datům</div>
   </div>
   <div class="num-card">
     <div class="label">Lab testy (Docker)</div>
