@@ -13,6 +13,7 @@ pub mod eval;
 pub mod evaluation;
 pub mod external_sql;
 pub mod findings;
+pub mod identity;
 pub mod intel;
 pub mod lanes;
 pub mod model;
