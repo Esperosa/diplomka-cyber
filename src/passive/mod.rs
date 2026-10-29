@@ -9,6 +9,7 @@ use crate::{
 };
 
 mod anomaly;
+mod community_id;
 mod suricata;
 mod zeek;
 
