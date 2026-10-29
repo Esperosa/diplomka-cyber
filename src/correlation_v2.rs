@@ -166,6 +166,31 @@ pub(crate) fn detect_windowed_anomalies(
     events
 }
 
+/// Ablace D: primy, zmereny dusledek potvrzene fragmentacni hypotezy v
+/// `docs/diplomka/eval/cross-dataset-ctu13.md` - fixni `time_window_s` je trade-off
+/// (male okno oddeli kratke intenzivni bursty, velke okno zachyti sustained nizko-
+/// -objemovy C2 beaconing, ale ne obe najednou). Misto volby JEDNE konstanty se
+/// detekce spusti na VICE skalach a vysledky se sjednoti - (dst_ip,proto,port) klic
+/// je "predicted positive", pokud ho zachyti ALESPON JEDNA skala. Vedomy trade-off:
+/// tohle muze zvysit recall za cenu precision (kazda skala pridava i sve vlastni FP) -
+/// zmereno, ne predpokladano, viz `docs/diplomka/eval/ablation-d-multiscale.md`.
+pub(crate) fn detect_multiscale_windowed_anomalies(
+    connections: Vec<ConnectionObservation>,
+    known_services: &HashSet<ServiceKey>,
+    window_scales: &[i64],
+) -> Vec<NormalizedEvent> {
+    let mut all_events = Vec::new();
+    for &scale in window_scales {
+        all_events.extend(detect_windowed_anomalies(
+            connections.clone(),
+            known_services,
+            scale,
+        ));
+    }
+    all_events.sort_by_key(|event| event.timestamp);
+    all_events
+}
+
 fn windowed_events(
     aggregates: &HashMap<WindowedKey, WindowedAggregate>,
     unexpected: &HashMap<WindowedKey, u32>,

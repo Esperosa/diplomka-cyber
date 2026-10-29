@@ -3,7 +3,10 @@ use std::collections::{BTreeSet, HashSet};
 use chrono::Utc;
 
 use crate::correlation::correlate_events;
-use crate::correlation_v2::{detect_windowed_anomalies, detect_windowed_anomalies_linked};
+use crate::correlation_v2::{
+    detect_multiscale_windowed_anomalies, detect_windowed_anomalies,
+    detect_windowed_anomalies_linked,
+};
 use crate::decision;
 use crate::eval::ground_truth::LabeledDataset;
 use crate::findings;
@@ -14,11 +17,14 @@ use crate::report::build_report;
 /// A = soucasny nezmeneny engine (`passive::anomaly`, zadne okenkovani).
 /// B = `correlation_v2::detect_windowed_anomalies` (stejne prahy, tumbling okna).
 /// C = B + graph-linking stejneho `src_ip` pres ruzne cile ve stejnem okne.
+/// D = multi-scale sjednoceni vice oken (`detect_multiscale_windowed_anomalies`) -
+/// primy dusledek potvrzene fragmentacni hypotezy, viz `correlation_v2.rs`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AblationVariant {
     A,
     B,
     C,
+    D,
 }
 
 type AggKey = (String, String, u16);
@@ -108,6 +114,14 @@ pub(crate) fn run_ablation(
             dataset.observations.clone(),
             &known_services,
             time_window_s,
+        ),
+        // Skaly voleny tak, aby pokryly obe strany trade-offu zmerenou ve sweepu:
+        // kratka (burst, IoT-23-like) i dlouha (sustained beaconing, CTU-13-like).
+        // `time_window_s` parametr funkce se tu neuplatnuje - D ma svou vlastni sadu.
+        AblationVariant::D => detect_multiscale_windowed_anomalies(
+            dataset.observations.clone(),
+            &known_services,
+            &[60, 300, 1800, 7200],
         ),
     };
     let correlated: Vec<CorrelatedEvent> = correlate_events(&[], events, time_window_s);
@@ -329,6 +343,38 @@ mod tests {
         );
     }
 
+    /// Ablace D (multi-scale) na IoT-23: kratky burst zachyti uz male skaly v sade,
+    /// takze D by nemela byt na IoT-23 horsi nez B - testuje se tu "nezhorsilo to
+    /// burst-detekci", ne primo prinos D (ten je zmereny na CTU-13 nize, kde D
+    /// skutecne reaguje na jiny typ signalu).
+    #[test]
+    fn ablation_d_multiscale_does_not_regress_burst_detection_on_iot23() {
+        let dataset = Iot23Source
+            .load(&dataset_path(
+                "labs/datasets/iot23/CTU-IoT-Malware-Capture-44-1/conn.log.labeled",
+            ))
+            .expect("parse iot23 scenario 44-1");
+
+        let a = run_ablation(&dataset, 300, AblationVariant::A);
+        let d = run_ablation(&dataset, 300, AblationVariant::D);
+
+        println!(
+            "ablace D na {} (events={}): TP={} FP={} precision={:.3} recall={:.3} f1={:.3}",
+            d.dataset_id,
+            d.correlated_event_count,
+            d.confusion.true_positive,
+            d.confusion.false_positive,
+            d.confusion.precision(),
+            d.confusion.recall(),
+            d.confusion.f1(),
+        );
+
+        assert!(
+            d.confusion.recall() >= a.confusion.recall(),
+            "D sjednocuje vice skal, nesmi mit nizsi recall nez samotna A"
+        );
+    }
+
     /// Charakterizacni test (ne jen diagnostika) - potvrzuje konkretni znamou limitaci
     /// ablace C popsanou v docs/diplomka/eval/ablation-b-c-iot23.md: naivni multi-target
     /// heuristika (stejny src_ip, >=2 cile ve stejnem okne) na tomto scenari vetsinou
@@ -406,8 +452,9 @@ mod tests {
         let a = run_ablation(&dataset, 300, AblationVariant::A);
         let b = run_ablation(&dataset, 300, AblationVariant::B);
         let c = run_ablation(&dataset, 300, AblationVariant::C);
+        let d = run_ablation(&dataset, 300, AblationVariant::D);
 
-        for (label, result) in [("A", &a), ("B", &b), ("C", &c)] {
+        for (label, result) in [("A", &a), ("B", &b), ("C", &c), ("D", &d)] {
             println!(
                 "CTU-13 ablace {label} (events={}, observations={}): TP={} FP={} FN={} TN={} precision={:.3} recall={:.3} f1={:.3} findings={}",
                 result.correlated_event_count,
