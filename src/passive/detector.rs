@@ -172,6 +172,179 @@ mod tests {
         );
     }
 
+    /// Komplexnejsi fixtura nez trivialni "3 identicke spojeni" - vice zdroju,
+    /// vice cilu, spojeni rozlozena pres nekolik tumbling oken (300s), jeden
+    /// zdroj skenujici mnoho cilu (ma vyvolat multi_target_pattern v C), a
+    /// timeout-like spojeni (S0) mix s normalnimi. Cilem je, aby paritni
+    /// testy nize overovaly neco netrivialniho, ne jen "prazdny vstup -> prazdny
+    /// vystup".
+    fn complex_connection_fixture() -> Vec<ConnectionObservation> {
+        let base = chrono::Utc::now();
+        let mut connections = Vec::new();
+
+        // Zdroj A sken pres 6 ruznych cilu v ramci jednoho okna - KAZDY cil
+        // zasazen 3x (hranice `count >= 3` pro "unexpected_traffic" v
+        // `windowed_events`), aby kazdy jednotlive prekrocil zakladni
+        // anomalni prah a vsech 6 se pak spojilo stejnym `src_ip` do jednoho
+        // "multi_target_pattern" nalezu (ablace C). Puvodni verze (1x na
+        // cil) tohle nevyvolala vubec - zadny base event se neudelal, takze
+        // test nic neoveroval; najito prave diky tomuto testu.
+        for (index, port) in [21u16, 22, 23, 80, 443, 8080].into_iter().enumerate() {
+            for repeat in 0..3 {
+                connections.push(ConnectionObservation {
+                    timestamp: base + chrono::Duration::seconds(index as i64 * 5 + repeat as i64),
+                    src_ip: Some("10.0.0.9".to_string()),
+                    src_port: Some(50000 + index as u16),
+                    dst_ip: format!("10.0.1.{}", index + 1),
+                    proto: "tcp".to_string(),
+                    dst_port: Some(port),
+                    conn_state: Some("S0".to_string()),
+                    history: None,
+                    duration_s: Some(0.01),
+                    orig_pkts: Some(1),
+                    resp_pkts: Some(0),
+                    orig_bytes: Some(40),
+                    resp_bytes: Some(0),
+                    total_pkts: None,
+                    total_bytes: None,
+                    missed_bytes: None,
+                });
+            }
+        }
+
+        // Zdroj B opakovane zasahuje JEDEN cil - 4x v prvnim okne (t=0..300s),
+        // 4x ve druhem okne (t=400..700s) - overuje spravne rozdeleni pres
+        // tumbling hranice (ablace B/D).
+        for window in 0..2 {
+            for repeat in 0..4 {
+                connections.push(connection_at_offset(
+                    base,
+                    window * 400 + repeat * 10,
+                    "10.0.2.1",
+                    "10.0.9.9",
+                    "tcp",
+                    9999,
+                ));
+            }
+        }
+
+        // Zdroj C - normalni, nizko-objemovy provoz, nema vyvolat zadny nalez.
+        connections.push(connection_at_offset(
+            base,
+            0,
+            "10.0.3.1",
+            "10.0.9.50",
+            "tcp",
+            443,
+        ));
+
+        connections
+    }
+
+    fn connection_at_offset(
+        base: chrono::DateTime<chrono::Utc>,
+        offset_s: i64,
+        src_ip: &str,
+        dst_ip: &str,
+        proto: &str,
+        port: u16,
+    ) -> ConnectionObservation {
+        ConnectionObservation {
+            timestamp: base + chrono::Duration::seconds(offset_s),
+            src_ip: Some(src_ip.to_string()),
+            src_port: Some(12345),
+            dst_ip: dst_ip.to_string(),
+            proto: proto.to_string(),
+            dst_port: Some(port),
+            conn_state: Some("S0".to_string()),
+            history: None,
+            duration_s: Some(0.01),
+            orig_pkts: Some(1),
+            resp_pkts: Some(0),
+            orig_bytes: Some(40),
+            resp_bytes: Some(0),
+            total_pkts: None,
+            total_bytes: None,
+            missed_bytes: None,
+        }
+    }
+
+    /// Stejny princip jako `legacy_detector_matches_direct_function_call`, ale
+    /// pro ablace B/C/D na netrivialni fixture - BEZE ZMENY chovani by melo
+    /// `Detector::detect` vracet presne to, co vrati primy zavolani funkce,
+    /// kterou obaluje. Srovnani pres JSON serializaci zachyti i pole, na ktera
+    /// by se rucni per-field srovnani mohlo zapomenout.
+    #[test]
+    fn windowed_detector_matches_direct_function_call_on_complex_fixture() {
+        let connections = complex_connection_fixture();
+        let known_services = HashSet::new();
+
+        let via_trait =
+            WindowedDetector { time_window_s: 300 }.detect(connections.clone(), &known_services);
+        let direct =
+            crate::correlation_v2::detect_windowed_anomalies(connections, &known_services, 300);
+
+        assert!(
+            !via_trait.is_empty(),
+            "fixtura musi skutecne neco vyprodukovat"
+        );
+        assert_eq!(
+            serde_json::to_string(&via_trait).unwrap(),
+            serde_json::to_string(&direct).unwrap()
+        );
+    }
+
+    #[test]
+    fn linked_detector_matches_direct_function_call_on_complex_fixture() {
+        let connections = complex_connection_fixture();
+        let known_services = HashSet::new();
+
+        let via_trait =
+            LinkedDetector { time_window_s: 300 }.detect(connections.clone(), &known_services);
+        let direct = crate::correlation_v2::detect_windowed_anomalies_linked(
+            connections,
+            &known_services,
+            300,
+        );
+
+        assert!(
+            via_trait
+                .iter()
+                .any(|event| event.event_type == "multi_target_pattern"),
+            "fixtura ma zdroj skenujici 6 cilu - multi_target_pattern se musi objevit, jinak test nic neoveruje"
+        );
+        assert_eq!(
+            serde_json::to_string(&via_trait).unwrap(),
+            serde_json::to_string(&direct).unwrap()
+        );
+    }
+
+    #[test]
+    fn multiscale_detector_matches_direct_function_call_on_complex_fixture() {
+        let connections = complex_connection_fixture();
+        let known_services = HashSet::new();
+        let scales = vec![60, 300, 1800, 7200];
+
+        let via_trait = MultiscaleDetector {
+            window_scales: scales.clone(),
+        }
+        .detect(connections.clone(), &known_services);
+        let direct = crate::correlation_v2::detect_multiscale_windowed_anomalies(
+            connections,
+            &known_services,
+            &scales,
+        );
+
+        assert!(
+            !via_trait.is_empty(),
+            "fixtura musi skutecne neco vyprodukovat"
+        );
+        assert_eq!(
+            serde_json::to_string(&via_trait).unwrap(),
+            serde_json::to_string(&direct).unwrap()
+        );
+    }
+
     #[test]
     fn each_detector_reports_its_own_id() {
         assert_eq!(LegacyAnomalyDetector.id(), "a-legacy");
