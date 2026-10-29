@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 15:52</strong> ·
-  commit <code>b491a62</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 16:02</strong> ·
+  commit <code>47dae1e</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="dalsi-postup-master-plan.md">master plán</a>
 </div>
@@ -145,12 +145,13 @@
 </details>
 
 <details class="stage">
-  <summary><span class="badge badge-yellow">selekce hotová, vstupy ne</span> <span class="stage-title">Verification Planner</span> <span class="stage-sub">VOI, EVOI</span></summary>
+  <summary><span class="badge badge-green">selekce + 1 kandidát data-driven</span> <span class="stage-title">Verification Planner</span> <span class="stage-sub">VOI, EVOI</span></summary>
   <div class="stage-body">
     <ul class="items">
       <li><span class="badge badge-green mini">hotovo</span> <code class="file">plan_verification()</code>, ranking kandidátů — <code class="file">src/verification_planner.rs</code></li>
       <li><span class="badge badge-green mini">hotovo</span> skutečné vykonání vybraného kandidáta (ne jen výběr)</li>
-      <li><span class="badge badge-red mini">otevřeno</span> <code class="file">estimated_information_gain</code> je stále konstanta od volajícího, ne odvozená z dat</li>
+      <li><span class="badge badge-green mini">hotovo</span> 1 kandidát (<code class="file">inspect_metrics_content</code>) odvozen z 5 reálných měření — <code class="file">src/case_history.rs</code>; původní odhad 500ms vs. realita 2ms</li>
+      <li><span class="badge badge-yellow mini">zbývá</span> ostatní 2 kandidáty zůstávají ruční odhad — žádná historie pro ně ještě nebyla naměřena</li>
     </ul>
   </div>
 </details>
@@ -267,14 +268,19 @@
     <div class="sub">pasivní-only vs. pasivní+aktivní, 18 connections</div>
   </div>
   <div class="num-card">
+    <div class="label">EVOI odhad vs. realita</div>
+    <div class="value">500ms → 2ms</div>
+    <div class="sub">původní ruční konstanta vs. 5 reálných měření</div>
+  </div>
+  <div class="num-card">
     <div class="label">Testy (lib, bez broker/lab)</div>
-    <div class="value">81 / 81</div>
+    <div class="value">83 / 83</div>
     <div class="sub">0 selhání</div>
   </div>
   <div class="num-card">
     <div class="label">Lab testy (Docker)</div>
-    <div class="value">9 / 9</div>
-    <div class="sub">0 selhání (8 lab:: + 1 identity_lab::)</div>
+    <div class="value">10 / 10</div>
+    <div class="sub">0 selhání (9 lab:: + 1 identity_lab::)</div>
   </div>
 </div>
 
