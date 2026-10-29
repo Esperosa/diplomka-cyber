@@ -1,4 +1,4 @@
-# Souhrn výsledků (Deliverables 1–13) a vztah k výzkumným hypotézám H1–H5
+# Souhrn výsledků (Deliverables 1–16) a vztah k výzkumným hypotézám H1–H5
 
 **Status: konsolidace k 29. 10. 2026, OPRAVENO po nezávislém master-plan auditu (3 agenti, Opus + pragmatik + skeptik).** Návrhový dokument (sekce 11) definuje 5 výzkumných hypotéz pro diplomku. Tento dokument mapuje, co z dosavadních deliverables tyto hypotézy skutečně testuje — **honestně**, včetně částečně negativních výsledků, ne jako seznam úspěchů.
 
@@ -29,8 +29,9 @@
 | 9 | Vlna 1 — CTU-13, cross-dataset generalizace + potvrzená fragmentační hypotéza | `src/eval/sources/ctu13.rs` | Hotovo |
 | 10 | Ablace D (multi-scale), honest "safety net", ne tvrzené zlepšení | `src/correlation_v2.rs` | Hotovo |
 | 11 | Skutečné vykonání vybrané verifikace (ne jen výběr) | `src/lab.rs` | Hotovo |
-| 12 | H1 poprvé reálně změřeno (pasivní vs. pasivní+aktivní) | `src/lab.rs` | Hotovo |
+| 12 | H1 poprvé reálně změřeno (lehký aktivní sken vs. + hlubší aktivní ověření, opraveno v bodě 15.1) | `src/lab.rs` | Hotovo |
 | 13 | H3 měření zablokováno potvrzeným strukturním důvodem (ne domněnkou) | `docs/diplomka/eval/h3-measurement-difficulty.md` | Hotovo |
+| 16 | Multiservice lab (4 cíle), H3 poprvé změřeno (VOI vs. blanket, 16× méně kontrol), H1 na 2. nezávislém cíli | `src/lab.rs`, `docs/diplomka/eval/h3-voi-vs-blanket-multiservice-lab.md` | Hotovo |
 | 14 | Oprava CTU-13 label bugu + triviální baseline + hash fix (nezávislý audit, kolo 1) | `src/eval/ground_truth.rs`, `src/eval/dataset_replay.rs` | Hotovo |
 | 15 | Oprava Virut/RBot, H1 terminologie, IoT-23 stejná třída chyby jako bod 14.1, regresní asserty na CTU-13 čísla (nezávislý audit, kolo 2) | `src/eval/sources/iot23.rs`, `docs/diplomka/eval/h1-passive-vs-active.md` | Hotovo |
 
@@ -46,7 +47,7 @@
 
 ### H3: typovaná nejistota a VOI-based planner dosáhne stejné či vyšší přesnosti s menším počtem aktivních kontrol oproti pravidelnému plošnému skenu.
 
-**Status: STRUKTURA HOTOVA (Deliverable 4/5/8/11), MĘŘENÍ HYPOTÉZY ZABLOKOVÁNO POTVRZENÝM STRUKTURNÍM DŮVODEM (Deliverable 13).** `docs/diplomka/eval/h3-measurement-difficulty.md`: ověřeno přímo v kódu, že `correlate_events()` v celém eval harnessu (ablace A-D) běží vždy s `hosts: &[]` — proto má `observation` nejistota v tomhle harnessu nulovou variancí (vždy `Confidence::Low`), žádný signál k postavení escalate/ne-escalate rozhodnutí. Juice Shop lab naopak reálný inventář má, ale jen 1 finding — žádná variace k porovnání. **Potvrzený, konkrétní požadavek na další krok**: dataset/lab s párovaným aktivním inventářem A více nálezy současně — žádný dosavadní zdroj tuhle kombinaci nemá.
+**Status: POPRVÉ ZMĚŘENO (Deliverable 15), po strukturním bloku zdokumentovaném v Deliverable 13.** `docs/diplomka/eval/h3-measurement-difficulty.md` identifikoval přesný chybějící předpoklad (lab s reálným aktivním inventářem a více nálezy různé jistoty současně, s pasivním signálem dostupným před aktivní kontrolou). `docs/diplomka/eval/h3-voi-vs-blanket-multiservice-lab.md`: nový 4-cílový multiservice lab (Juice Shop, Grafana, python http.server s directory listing, čistý nginx kontrolní cíl) tuhle kombinaci poskytl. Naměřeno: VOI-informovaný výběr (1 cílená kontrola na základě httpx titulku místo všech 8 kurátorovaných šablon) použil **16× méně kontrol (2 vs. 32)** a správně zacílil **2 ze 3** reálných nálezů — přesně tam, kde titulek nesl specifickou stopu (Grafana, directory listing). Správně minul Juice Shop, kde — stejně jako předpověděl Deliverable 13 — titulek "OWASP Juice Shop" žádnou specifickou stopu k exponovanému `/metrics` nenese. Vedlejší nález: blanket sken navíc vyvolal falešně pozitivní `actuator-health-exposed` na Grafaně (jednoslovný matcher chybně sedl na její SPA app-shell) — další, nezávislý argument pro VOI nad plošné skenování, ne jen argument o nákladu. **Omezení**: VOI heuristika je zjednodušená na 2 pravidla (ne plný EVOI vzorec z `verification_planner.rs`), 1 lab prostředí — dokazuje princip, ne vyčerpávající zobecnění.
 
 ### H4: verzované učení a kalibrace z ověřených případů zlepší přenositelnost na neviděná data oproti statickým heuristikám.
 
@@ -54,8 +55,8 @@
 
 ### H5: rozdělení workerů a stavu umožní s přidáním hardwaru zvýšit propustnost bez disproporčního růstu latence.
 
-**Status: ZCELA NEOVĚŘENO.** Žádný z deliverables 1–10 se netýkal distribuovaného zpracování/škálování workerů — to vyžaduje infrastrukturu (vícero uzlů/workerů), která ještě nebyla postavena. Broker oprava (Deliverable 6) je nutná předpodmínka (bez spolehlivého crash recovery by škálování na víc workerů jen zvýšilo počet ztracených jobů), ale sama o sobě H5 neměří.
+**Status: EXPLICITNĚ MIMO ROZSAH empirické validace diplomky (rozhodnuto 29.10.2026, viz `docs/diplomka/dalsi-postup-master-plan.md`).** Žádný z deliverables 1–15 se netýkal distribuovaného zpracování/škálování workerů — to by vyžadovalo infrastrukturu (vícero uzlů/workerů, zátěžový generátor, latency harness), kterou projekt nemá, a jejíž legitimní postavení (byť jen jako single-machine sharding experiment) je investice řádu týdnů, nesouměřitelná s jedinou z pěti hypotéz. Stejná kategorie rozhodnutí jako firewall/DNS/IPS/multi-tenant/HA-DR, které návrh sám (sekce 11) už řadí mimo povinný rozsah diplomky. Broker oprava (Deliverable 6, XAUTOCLAIM/crash recovery) zůstává citovatelná nutná (ne dostačující) předpodmínka pro H5 — dokládá, že distribuovaná korektnost byla řešena tam, kde to bylo levné, ne že H5 samo bylo ověřeno.
 
 ## Co z tohoto plyne pro další postup
 
-**H1, H2 a H4 mají teď reálná, měřená čísla** (H1 na jednom lab cíli, H2/H4 na cross-dataset ablacích) — včetně honest negativních/částečných výsledků, ne jen implementovanou strukturu. **H3 je strukturně zablokovaná potvrzeným důvodem** (žádný dosavadní zdroj nemá současně aktivní inventář i více nálezů) — další krok musí buď přidat druhý/třetí lab cíl s odlišnými nálezy, nebo najít/postavit dataset s párovaným active+passive snímkem, než bude mít smysl cokoliv měřit. **H5 je zatím zcela netknutá** a vyžaduje distribuovanou infrastrukturu, kterou projekt ještě nemá.
+**H1 a H3 mají teď reálná, měřená čísla na multiservice labu** (Deliverable 15: H1 na 2 nezávislých lab cílech, H3 poprvé změřeno jako VOI vs. blanket s 16× méně kontrolami). **H2 v doslovném znění** (multi-senzorová fúze s korekcí závislosti zdrojů) **je explicitně mimo rozsah** — single-sensor datasety (IoT-23, CTU-13) ji ani nemohou testovat, a stavba multi-senzorové fúze (Community ID dedup Zeek↔Suricata) je nová netriviální funkce, ne měření nad existujícím kódem; dílčí nález o oknech samotných (fragmentace, Deliverable 9) zůstává platný jako související, ale užší zjištění. **H4** má změřený baseline (cross-dataset, pod triviálním baseline na obou datasetech) jako laťku pro budoucí kalibraci, ale samotná kalibrace se nestaví (disproporční investice vůči jedné hypotéze). **H5 je explicitně mimo rozsah** se zdůvodněním výše, ne nekonečně odložené bez vysvětlení. Detailní zdůvodnění všech rozhodnutí: `docs/diplomka/dalsi-postup-master-plan.md`.

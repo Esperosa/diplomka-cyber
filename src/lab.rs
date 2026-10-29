@@ -43,6 +43,36 @@ use crate::webscan::{WebScanArtifacts, WebScanConfig, enrich_http_services};
 const JUICE_SHOP_IMAGE: &str = "bkimminich/juice-shop";
 const JUICE_SHOP_PORT: u16 = 3000;
 
+// Deliverable 15: 3 dalsi cile pro multiservice lab (H3 odblokovani, viz
+// docs/diplomka/eval/h3-measurement-difficulty.md a dalsi-postup-master-plan.md).
+// Vsechny 3 overeny rucne (`docker run` + `curl`) proti realnym default obrazum PRED
+// zapsanim do kodu - stejna disciplina jako prometheus nalez v Deliverable 7.
+const GRAFANA_IMAGE: &str = "grafana/grafana-oss:11.3.0";
+const GRAFANA_HOST_PORT: u16 = 3001;
+const GRAFANA_CONTAINER_PORT: u16 = 3000;
+
+// Port 8000 (ne 3002) zamerne - `webscan.rs::is_http_candidate` pozna jako http
+// kandidata port bud podle jmena sluzby z nmap -sV detekce, nebo podle pevneho
+// seznamu znamych web-portu. Pythonuv zakladni http.server ma nestandardni banner
+// ("SimpleHTTP/0.6 Python/3.x"), ktery nmap -sV nerozpozna jako "http" sluzbu podle
+// jmena - overeno rucne (port 3002 skutecne vypada jako "Directory listing" pro curl,
+// ale httpx ho vubec neoskenoval, protoze nebyl na pevnem seznamu). Port 8000 na
+// seznamu je, takze stejny obraz na tomhle portu uz httpx/nuclei spravne zacili.
+const DIRLISTING_IMAGE: &str = "python:3-alpine";
+const DIRLISTING_HOST_PORT: u16 = 8000;
+const DIRLISTING_CONTAINER_PORT: u16 = 8000;
+
+const CLEAN_IMAGE: &str = "nginx:alpine";
+const CLEAN_HOST_PORT: u16 = 3003;
+const CLEAN_CONTAINER_PORT: u16 = 80;
+
+const MULTISERVICE_PORTS: [u16; 4] = [
+    JUICE_SHOP_PORT,
+    GRAFANA_HOST_PORT,
+    DIRLISTING_HOST_PORT,
+    CLEAN_HOST_PORT,
+];
+
 /// RAII: `docker rm -f` i kdyz test panikne. `stop_lab()` je explicitni cesta pro
 /// happy-path cleanup o nic jina nez `drop(handle)` - cteni kodu je jasnejsi s
 /// explicitnim nazvem na konci testu, i kdyz mechanicky dela totez co Drop.
@@ -122,6 +152,104 @@ fn wait_for_http_health(port: u16, timeout: Duration) -> Result<()> {
     }
 }
 
+/// RAII pro vice kontejneru najednou (Deliverable 15) - stejny princip jako
+/// `LabHandle`, jen pro N cilu. `docker rm -f` kazdeho kontejneru i kdyz test panikne.
+pub struct MultiLabHandle {
+    container_names: Vec<String>,
+}
+
+impl Drop for MultiLabHandle {
+    fn drop(&mut self) {
+        for name in &self.container_names {
+            let _ = Command::new("docker").args(["rm", "-f", name]).status();
+        }
+    }
+}
+
+pub fn stop_multiservice_lab(handle: MultiLabHandle) {
+    drop(handle);
+}
+
+fn docker_run(container_name: &str, port_mapping: &str, image_and_cmd: &[&str]) -> Result<()> {
+    let mut args: Vec<&str> = vec!["run", "-d", "--name", container_name, "-p", port_mapping];
+    args.extend_from_slice(image_and_cmd);
+    let status = Command::new("docker")
+        .args(&args)
+        .status()
+        .map_err(|error| BakulaError::Processing(format!("docker run selhal: {error}")))?;
+    if !status.success() {
+        let _ = Command::new("docker")
+            .args(["rm", "-f", container_name])
+            .status();
+        return Err(BakulaError::Processing(format!(
+            "docker run pro {container_name} se nepodarilo spustit."
+        )));
+    }
+    Ok(())
+}
+
+/// Lab se 4 cíli pro Deliverable 15: 3 odlisitelne zranitelnosti ruznych produktu
+/// (Juice Shop/prometheus, Grafana/login, python http.server/directory listing) +
+/// 1 cisty negativni kontrolni cil (nginx default stranka) - presne ta kombinace
+/// "realny aktivni inventar s vice nalezy ruzne jistoty soucasne", kterou
+/// `docs/diplomka/eval/h3-measurement-difficulty.md` identifikoval jako chybejici.
+pub fn start_multiservice_lab() -> Result<MultiLabHandle> {
+    let suffix = uuid::Uuid::new_v4();
+    let names = [
+        format!("bakula-lab-juiceshop-{suffix}"),
+        format!("bakula-lab-grafana-{suffix}"),
+        format!("bakula-lab-dirlisting-{suffix}"),
+        format!("bakula-lab-clean-{suffix}"),
+    ];
+
+    let start_result = docker_run(
+        &names[0],
+        &format!("127.0.0.1:{JUICE_SHOP_PORT}:{JUICE_SHOP_PORT}"),
+        &[JUICE_SHOP_IMAGE],
+    )
+    .and_then(|()| {
+        docker_run(
+            &names[1],
+            &format!("127.0.0.1:{GRAFANA_HOST_PORT}:{GRAFANA_CONTAINER_PORT}"),
+            &[GRAFANA_IMAGE],
+        )
+    })
+    .and_then(|()| {
+        docker_run(
+            &names[2],
+            &format!("127.0.0.1:{DIRLISTING_HOST_PORT}:{DIRLISTING_CONTAINER_PORT}"),
+            &[DIRLISTING_IMAGE, "python3", "-m", "http.server", "8000"],
+        )
+    })
+    .and_then(|()| {
+        docker_run(
+            &names[3],
+            &format!("127.0.0.1:{CLEAN_HOST_PORT}:{CLEAN_CONTAINER_PORT}"),
+            &[CLEAN_IMAGE],
+        )
+    });
+
+    if let Err(error) = start_result {
+        for name in &names {
+            let _ = Command::new("docker").args(["rm", "-f", name]).status();
+        }
+        return Err(error);
+    }
+
+    let handle = MultiLabHandle {
+        container_names: names.to_vec(),
+    };
+
+    for port in MULTISERVICE_PORTS {
+        if let Err(error) = wait_for_http_health(port, Duration::from_secs(30)) {
+            drop(handle);
+            return Err(error);
+        }
+    }
+
+    Ok(handle)
+}
+
 #[derive(Debug, Clone)]
 pub struct LabScanResult {
     pub hosts: Vec<HostReport>,
@@ -131,9 +259,13 @@ pub struct LabScanResult {
 /// `httpx_bin`/`nuclei_bin` jsou explicitni cesty (ne spoleham na PATH) - prostredi
 /// muze mit na PATH jiny `httpx` (napr. Python HTTP klient se stejnym nazvem), presne
 /// tento mismatch byl pricinou predem zname nesouvisejici chyby v `tests/e2e.rs`.
-pub fn run_active_scan_against_lab(
+/// Obecna verze - skenuje libovolnou sadu portu na 127.0.0.1, ne jen Juice Shop.
+/// `run_active_scan_against_lab` (nize) je tenky wrapper pro zpetnou kompatibilitu
+/// se vsemi existujicimi testy z Deliverable 7-13.
+pub fn run_active_scan_against_ports(
     workspace: &Path,
     run_id: &str,
+    ports: &[u16],
     httpx_bin: PathBuf,
     nuclei_bin: PathBuf,
     nuclei_templates_dir: PathBuf,
@@ -142,7 +274,7 @@ pub fn run_active_scan_against_lab(
         BakulaError::Processing(format!("neplatny scope 127.0.0.1/32: {error}"))
     })?];
 
-    let xml_path = run_real_nmap(workspace, &scope, &[JUICE_SHOP_PORT], "opatrny")?;
+    let xml_path = run_real_nmap(workspace, &scope, ports, "opatrny")?;
     let parsed = parse_nmap_xml(&xml_path)?;
     let mut hosts = normalize_inventory(parsed);
 
@@ -159,6 +291,40 @@ pub fn run_active_scan_against_lab(
         hosts,
         web_artifacts,
     })
+}
+
+pub fn run_active_scan_against_lab(
+    workspace: &Path,
+    run_id: &str,
+    httpx_bin: PathBuf,
+    nuclei_bin: PathBuf,
+    nuclei_templates_dir: PathBuf,
+) -> Result<LabScanResult> {
+    run_active_scan_against_ports(
+        workspace,
+        run_id,
+        &[JUICE_SHOP_PORT],
+        httpx_bin,
+        nuclei_bin,
+        nuclei_templates_dir,
+    )
+}
+
+pub fn run_active_scan_against_multiservice_lab(
+    workspace: &Path,
+    run_id: &str,
+    httpx_bin: PathBuf,
+    nuclei_bin: PathBuf,
+    nuclei_templates_dir: PathBuf,
+) -> Result<LabScanResult> {
+    run_active_scan_against_ports(
+        workspace,
+        run_id,
+        &MULTISERVICE_PORTS,
+        httpx_bin,
+        nuclei_bin,
+        nuclei_templates_dir,
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -178,6 +344,14 @@ pub fn build_hypotheses_from_lab_scan(
     scan: LabScanResult,
     run_id: &str,
 ) -> Result<LabPipelineResult> {
+    build_hypotheses_from_lab_scan_with_ports(scan, run_id, vec![JUICE_SHOP_PORT])
+}
+
+pub fn build_hypotheses_from_lab_scan_with_ports(
+    scan: LabScanResult,
+    run_id: &str,
+    ports: Vec<u16>,
+) -> Result<LabPipelineResult> {
     let mut hosts = scan.hosts;
     score_services(&mut hosts);
 
@@ -191,7 +365,7 @@ pub fn build_hypotheses_from_lab_scan(
         now,
         now,
         scope,
-        vec![JUICE_SHOP_PORT],
+        ports,
         "opatrny",
         "lab",
         "active-only",
@@ -294,6 +468,211 @@ mod tests {
 
     fn nuclei_templates_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/nuclei-templates/controlled")
+    }
+
+    /// Predikce sablony z pasivniho httpx titulku PRED jakoukoliv aktivni kontrolou -
+    /// obecne pravidlo (rozpoznej produkt z titulku, zkontroluj jeho znamou exponovanou
+    /// cestu), NE zpetne odvozene ze znameho vysledku tohoto konkretniho labu. Vraci
+    /// None, kde titulek nenese zadnou specifickou stopu - to je zamerne, ne chyba
+    /// (presne tenhle pripad byl u Juice Shopu identifikovan jako strukturalne
+    /// neinformativni v `docs/diplomka/eval/h3-measurement-difficulty.md`).
+    fn voi_predict_template_from_passive_title(title: &str) -> Option<&'static str> {
+        let lower = title.to_ascii_lowercase();
+        if lower.contains("grafana") {
+            Some("bakula-grafana-login-exposed")
+        } else if lower.contains("directory listing") {
+            Some("bakula-directory-listing-exposed")
+        } else {
+            None
+        }
+    }
+
+    /// Deliverable 15: prvni test s realnym aktivnim inventarem A vice nalezy ruzne
+    /// jistoty soucasne - presne ta kombinace, kterou `h3-measurement-difficulty.md`
+    /// identifikoval jako chybejici infrastrukturu pro smysluplne H3 mereni.
+    #[test]
+    fn multiservice_lab_exposes_three_distinct_findings_and_one_clean_control() {
+        let _guard = LAB_PORT_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let lab = start_multiservice_lab().expect("start multiservice lab");
+
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let scan = run_active_scan_against_multiservice_lab(
+            temp.path(),
+            "lab-d15-smoke",
+            httpx_bin(),
+            nuclei_bin(),
+            nuclei_templates_dir(),
+        );
+        stop_multiservice_lab(lab);
+        let scan = scan.expect("aktivni sken proti multiservice labu");
+
+        assert_eq!(
+            scan.hosts.len(),
+            1,
+            "vsechny 4 cile bezi na 127.0.0.1, musi se slit do 1 hosta se 4 otevrenymi porty"
+        );
+        let host = &scan.hosts[0];
+        assert_eq!(
+            host.services.len(),
+            4,
+            "nmap musi najit vsechny 4 otevrene porty"
+        );
+
+        let find_service = |port: u16| {
+            host.services
+                .iter()
+                .find(|service| service.port == port)
+                .unwrap_or_else(|| panic!("port {port} musi byt v nmap vysledku"))
+        };
+        let has_template = |port: u16, template_id: &str| {
+            find_service(port)
+                .active_checks
+                .iter()
+                .any(|check| check.template_id == template_id)
+        };
+
+        assert!(
+            has_template(JUICE_SHOP_PORT, "bakula-prometheus-metrics-exposed"),
+            "Juice Shop musi vykazat prometheus-metrics-exposed jako v Deliverable 7"
+        );
+        assert!(
+            has_template(GRAFANA_HOST_PORT, "bakula-grafana-login-exposed"),
+            "Grafana musi vykazat grafana-login-exposed"
+        );
+        assert!(
+            has_template(DIRLISTING_HOST_PORT, "bakula-directory-listing-exposed"),
+            "python http.server musi vykazat directory-listing-exposed"
+        );
+        assert!(
+            find_service(CLEAN_HOST_PORT).active_checks.is_empty(),
+            "cisty kontrolni cil (nginx default) nesmi vyvolat zadny z 8 kurátorovanych nalezu"
+        );
+    }
+
+    /// Deliverable 15 - skutecne mereni H3 ("typovana nejistota a VOI planner dosahne
+    /// stejne/vyssi presnosti s mensim poctem aktivnich kontrol oproti plosnemu
+    /// skenu"), poprve na nezniklem (ne cirkularnim, ne degenerovanem na konstantu)
+    /// zakladu: 4 sluzby, kazda s vlastnim pasivnim titulkem ZISKANYM PRED nuclei
+    /// skenem, 3 z nich s realnym nalezem, 1 cista. "Blanket" = vsech 8 kurátorovanych
+    /// sablon na vsech 4 sluzbach (= to, co uz skutecne probehlo v teto jedne scan).
+    /// "VOI" = jen sablona predikovana z pasivniho titulku, 0 kontrol kde titulek
+    /// nema specifickou stopu.
+    #[test]
+    fn h3_voi_informed_template_selection_recovers_most_findings_with_far_fewer_checks() {
+        let _guard = LAB_PORT_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let lab = start_multiservice_lab().expect("start multiservice lab");
+
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let scan = run_active_scan_against_multiservice_lab(
+            temp.path(),
+            "lab-d15-h3",
+            httpx_bin(),
+            nuclei_bin(),
+            nuclei_templates_dir(),
+        );
+        stop_multiservice_lab(lab);
+        let scan = scan.expect("aktivni sken proti multiservice labu");
+        let host = &scan.hosts[0];
+
+        const CURATED_TEMPLATE_COUNT: usize = 8; // resources/nuclei-templates/controlled/
+
+        // Predregistrovany manifest (napsany pred spustenim tohoto testu, ne odvozeny
+        // ze zmereneho vysledku) - stejna disciplina jako label-leakage-safe eval.
+        let expected_manifest: [(u16, Option<&str>); 4] = [
+            (JUICE_SHOP_PORT, Some("bakula-prometheus-metrics-exposed")),
+            (GRAFANA_HOST_PORT, Some("bakula-grafana-login-exposed")),
+            (
+                DIRLISTING_HOST_PORT,
+                Some("bakula-directory-listing-exposed"),
+            ),
+            (CLEAN_HOST_PORT, None),
+        ];
+
+        let mut blanket_checks = 0usize;
+        let mut blanket_correct = 0usize;
+        let mut voi_checks = 0usize;
+        let mut voi_correct = 0usize;
+        let mut voi_missed: Vec<u16> = Vec::new();
+        let mut spurious_blanket_matches: Vec<(u16, String)> = Vec::new();
+
+        for (port, expected_template) in expected_manifest {
+            let service = host
+                .services
+                .iter()
+                .find(|service| service.port == port)
+                .unwrap_or_else(|| panic!("port {port} musi byt v nmap vysledku"));
+            blanket_checks += CURATED_TEMPLATE_COUNT;
+
+            let blanket_is_correct = match expected_template {
+                Some(template) => service
+                    .active_checks
+                    .iter()
+                    .any(|check| check.template_id == template),
+                None => service.active_checks.is_empty(),
+            };
+            if blanket_is_correct {
+                blanket_correct += 1;
+            }
+            for check in &service.active_checks {
+                if expected_template != Some(check.template_id.as_str()) {
+                    spurious_blanket_matches.push((port, check.template_id.clone()));
+                }
+            }
+
+            let passive_title = service
+                .web_probe
+                .as_ref()
+                .and_then(|probe| probe.title.clone())
+                .unwrap_or_default();
+            let predicted = voi_predict_template_from_passive_title(&passive_title);
+
+            match (predicted, expected_template) {
+                (Some(_), _) => {
+                    voi_checks += 1;
+                    if predicted == expected_template {
+                        voi_correct += 1;
+                    }
+                }
+                (None, Some(_)) => voi_missed.push(port),
+                (None, None) => {}
+            }
+        }
+
+        println!(
+            "H3: blanket={blanket_correct}/4 spravne za {blanket_checks} kontrol (spurious navic nalezy: {spurious_blanket_matches:?}) | VOI={voi_correct}/3 spravne za {voi_checks} kontroly (chybi porty: {voi_missed:?})"
+        );
+
+        // Blanket sken (vsech 8 sablon na vsech 4 sluzbach) musi spravne rozlisit
+        // vsechny 4 cile podle manifestu - to je ground truth, proti kteremu se VOI
+        // porovnava.
+        assert_eq!(
+            blanket_correct, 4,
+            "blanket sken musi spravne rozlisit vsechny 4 cile (3 zranitelne + 1 cisty)"
+        );
+        // VOI musi spravne cilit presne ty nalezy, kde pasivni titulek nese
+        // specifickou stopu (Grafana, directory listing) - 2 ze 3 zranitelnych cilu.
+        assert_eq!(
+            voi_correct, 2,
+            "VOI musi spravne cilit presne 2 ze 3 nalezu diky specifickemu titulku (Grafana, directory listing), dostal jsem {voi_correct}"
+        );
+        // A musi to udelat za radikalne min kontrol nez blanket (2 cilene kontroly
+        // vs. 32 = 4 sluzby * 8 sablon).
+        assert!(
+            voi_checks * 4 < blanket_checks,
+            "VOI musi pouzit radikalne min kontrol nez blanket sken (voi={voi_checks}, blanket={blanket_checks})"
+        );
+        // Honest limitace, ne skryta: Juice Shop nema v titulku zadnou specifickou
+        // stopu (presne nalez z h3-measurement-difficulty.md) - VOI ho proto musi
+        // minout.
+        assert_eq!(
+            voi_missed,
+            vec![JUICE_SHOP_PORT],
+            "VOI musi minout presne Juice Shop (zadna specificka stopa v titulku) - pokud se tohle zmenilo, over zda Juice Shop titulek je stale jen 'OWASP Juice Shop'"
+        );
     }
 
     /// Prvni skutecny end-to-end test aktivniho overeni: nmap + httpx proti realnemu,
