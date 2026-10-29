@@ -138,9 +138,12 @@ fn mask_epoch_seconds(text: &str) -> String {
 
 /// MAS scheduler/consensus evidence a summary texty (automation.rs) obsahuji
 /// SKUTECNE namerene cas steny hodiny (thread::scope parallel kolektory) -
-/// nejsou odvozene od vstupnich dat, takze se liseji kazdy beh. Tenhle test
-/// o nich vi, ze jsou volatilni, a cely retezec vedome maskuje - presnost
-/// jejich hodnoty neni to, co golden snapshot ma hlidat.
+/// nejsou odvozene od vstupnich dat, takze se liseji kazdy beh. Masky se
+/// aplikuji jen na CISLO hned za markerem, ne na cely retezec kolem nej -
+/// puvodni verze nahrazovala celou hodnotu "<VOLATILE_TIMING_TEXT>", coz by
+/// schovalo i zmenu neceho DETERMINISTICKEHO ve stejnem retezci (napr.
+/// nazvu role agenta) - nezavisle odhaleno 2 review (Fable + Haiku),
+/// 29.10.2026.
 const VOLATILE_TIMING_MARKERS: &[&str] = &[
     "runtime_ms=",
     "parallel_stage_wall_ms=",
@@ -153,10 +156,30 @@ const VOLATILE_TIMING_MARKERS: &[&str] = &[
     "SLA ",
 ];
 
-fn mentions_volatile_timing(text: &str) -> bool {
-    VOLATILE_TIMING_MARKERS
-        .iter()
-        .any(|marker| text.contains(marker))
+/// Pro kazdy vyskyt markeru v `text` nahradi nasledujici ciselny token
+/// (cifry a desetinna tecka) placeholderem "<N>" - zbytek retezce (nazvy
+/// roli, jednotky, oddelovace) zustava beze zmeny a dal se porovnava.
+fn mask_numbers_after_markers(text: &str) -> String {
+    let mut current = text.to_string();
+    for marker in VOLATILE_TIMING_MARKERS {
+        let mut result = String::with_capacity(current.len());
+        let mut rest = current.as_str();
+        while let Some(offset) = rest.find(marker) {
+            let (before, after_marker) = rest.split_at(offset);
+            result.push_str(before);
+            result.push_str(marker);
+            let number_part = &after_marker[marker.len()..];
+            let number_len = number_part
+                .bytes()
+                .take_while(|byte| byte.is_ascii_digit() || *byte == b'.')
+                .count();
+            result.push_str("<N>");
+            rest = &number_part[number_len..];
+        }
+        result.push_str(rest);
+        current = result;
+    }
+    current
 }
 
 /// Pole v `Summary` (model.rs), jejichz hodnota je primo namerene cas steny
@@ -185,12 +208,11 @@ fn normalize(value: &mut Value, path_needles: &[(String, &str)]) {
                     normalized = normalized.replace(needle.as_str(), placeholder);
                 }
             }
-            if mentions_volatile_timing(&normalized) {
-                normalized = "<VOLATILE_TIMING_TEXT>".to_string();
-            } else if looks_like_timestamp(&normalized) {
+            if looks_like_timestamp(&normalized) {
                 normalized = "<TIMESTAMP>".to_string();
             } else {
-                normalized = mask_epoch_seconds(&mask_run_ids(&normalized));
+                normalized =
+                    mask_numbers_after_markers(&mask_epoch_seconds(&mask_run_ids(&normalized)));
             }
             *text = normalized;
         }

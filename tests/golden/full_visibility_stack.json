@@ -1743,17 +1743,17 @@
     },
     {
       "evidence": [
-        "<VOLATILE_TIMING_TEXT>",
-        "<VOLATILE_TIMING_TEXT>",
-        "<VOLATILE_TIMING_TEXT>",
-        "<VOLATILE_TIMING_TEXT>",
-        "<VOLATILE_TIMING_TEXT>",
-        "<VOLATILE_TIMING_TEXT>",
-        "<VOLATILE_TIMING_TEXT>",
-        "<VOLATILE_TIMING_TEXT>",
-        "<VOLATILE_TIMING_TEXT>",
-        "<VOLATILE_TIMING_TEXT>",
-        "<VOLATILE_TIMING_TEXT>"
+        "parallelism_ratio=<N>",
+        "queue_wait_ms_avg=<N>",
+        "agent_sla_ratio=<N>",
+        "total_runtime_ms=<N>",
+        "parallel_stage_wall_ms=<N>",
+        "agent=live-observer priority=1.23 budget_ms=2530 wait_ms=<N> runtime_ms=<N> latency_hint_ms=790",
+        "agent=context-fusion priority=1.19 budget_ms=2580 wait_ms=<N> runtime_ms=<N> latency_hint_ms=790",
+        "agent=correlator priority=0.96 budget_ms=1468 wait_ms=<N> runtime_ms=<N> latency_hint_ms=184",
+        "agent=correlator-prep priority=0.91 budget_ms=1438 wait_ms=<N> runtime_ms=<N> latency_hint_ms=244",
+        "agent=forensic priority=0.78 budget_ms=1650 wait_ms=<N> runtime_ms=<N> latency_hint_ms=225",
+        "agent=followup priority=0.73 budget_ms=1288 wait_ms=<N> runtime_ms=<N> latency_hint_ms=194"
       ],
       "lane_id": "lane:mas:scheduler:<RUN_ID>",
       "lane_type": "automation",
@@ -1764,7 +1764,7 @@
       ],
       "source": "mas-scheduler",
       "status": "ok",
-      "summary": "<VOLATILE_TIMING_TEXT>",
+      "summary": "Scheduler přidělil dynamické priority a budgety. SLA <N> %, queue wait <N> ms, paralelismus <N> %.",
       "title": "Adaptivní scheduling agentů"
     },
     {
