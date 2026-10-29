@@ -434,6 +434,32 @@ fn compute_parallelism_ratio(total_runtime_ms: u64, wall_ms: u64, workers: usize
     round_metric((total_runtime_ms as f64 / (wall_ms as f64 * workers as f64)).clamp(0.0, 1.0))
 }
 
+/// `run_pipeline` přidává nové `monitoring_lanes` na 3 různých místech (po
+/// MAS scheduler lane, po validation bundle, po automation insights) a po
+/// každém musí přesortovat/odduplikovat podle `lane_id` a přepočítat
+/// souhrnná čísla - stejná trojice kroků, dřív 3x doslova opsaná (Fáze 1,
+/// produkční plán). Sjednoceno sem beze změny chování - volá se na přesně
+/// stejných 3 místech jako dřív, počítá přesně totéž.
+fn resort_and_recompute_lane_summary(report: &mut RunReport) {
+    report
+        .monitoring_lanes
+        .sort_by(|left, right| left.lane_id.cmp(&right.lane_id));
+    report
+        .monitoring_lanes
+        .dedup_by(|left, right| left.lane_id == right.lane_id);
+    report.summary.monitoring_lanes_total = report.monitoring_lanes.len();
+    report.summary.live_lanes_total = report
+        .monitoring_lanes
+        .iter()
+        .filter(|lane| lane.lane_type == "live")
+        .count();
+    report.summary.audit_lanes_total = report
+        .monitoring_lanes
+        .iter()
+        .filter(|lane| lane.lane_type == "audit")
+        .count();
+}
+
 pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     let args = prepare_pipeline_args(args)?;
     fs::create_dir_all(&args.workspace)?;
@@ -1247,23 +1273,7 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
             "suricata".to_string(),
         ],
     });
-    report
-        .monitoring_lanes
-        .sort_by(|left, right| left.lane_id.cmp(&right.lane_id));
-    report
-        .monitoring_lanes
-        .dedup_by(|left, right| left.lane_id == right.lane_id);
-    report.summary.monitoring_lanes_total = report.monitoring_lanes.len();
-    report.summary.live_lanes_total = report
-        .monitoring_lanes
-        .iter()
-        .filter(|lane| lane.lane_type == "live")
-        .count();
-    report.summary.audit_lanes_total = report
-        .monitoring_lanes
-        .iter()
-        .filter(|lane| lane.lane_type == "audit")
-        .count();
+    resort_and_recompute_lane_summary(&mut report);
 
     if let Some(base_run_id) = args.porovnat_s.as_deref() {
         if let Ok(base_report) = workspace.load_report(base_run_id) {
@@ -1305,23 +1315,7 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
         .count();
     let validation_bundle = validation::build_validation_bundle(&report);
     report.monitoring_lanes.extend(validation_bundle.lanes);
-    report
-        .monitoring_lanes
-        .sort_by(|left, right| left.lane_id.cmp(&right.lane_id));
-    report
-        .monitoring_lanes
-        .dedup_by(|left, right| left.lane_id == right.lane_id);
-    report.summary.monitoring_lanes_total = report.monitoring_lanes.len();
-    report.summary.live_lanes_total = report
-        .monitoring_lanes
-        .iter()
-        .filter(|lane| lane.lane_type == "live")
-        .count();
-    report.summary.audit_lanes_total = report
-        .monitoring_lanes
-        .iter()
-        .filter(|lane| lane.lane_type == "audit")
-        .count();
+    resort_and_recompute_lane_summary(&mut report);
     let consensus_snapshot = automation::build_consensus_snapshot(&report);
     report.summary.mas_consensus_score = consensus_snapshot.weighted_score;
     report.summary.mas_consensus_state = consensus_snapshot.state.clone();
@@ -1382,23 +1376,7 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     report
         .monitoring_lanes
         .extend(automation_insights.agent_lanes.clone());
-    report
-        .monitoring_lanes
-        .sort_by(|left, right| left.lane_id.cmp(&right.lane_id));
-    report
-        .monitoring_lanes
-        .dedup_by(|left, right| left.lane_id == right.lane_id);
-    report.summary.monitoring_lanes_total = report.monitoring_lanes.len();
-    report.summary.live_lanes_total = report
-        .monitoring_lanes
-        .iter()
-        .filter(|lane| lane.lane_type == "live")
-        .count();
-    report.summary.audit_lanes_total = report
-        .monitoring_lanes
-        .iter()
-        .filter(|lane| lane.lane_type == "audit")
-        .count();
+    resort_and_recompute_lane_summary(&mut report);
     report.summary.automation_agents_total = automation_insights.automation_agents_total;
     report.summary.automation_rounds_total = automation_insights.automation_rounds_total;
     report.summary.forensic_targets_total = automation_insights.forensic_targets_total;
