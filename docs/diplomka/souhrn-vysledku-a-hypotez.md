@@ -1,4 +1,4 @@
-# Souhrn výsledků (Deliverables 1–21) a vztah k výzkumným hypotézám H1–H5
+# Souhrn výsledků (Deliverables 1–22) a vztah k výzkumným hypotézám H1–H5
 
 **Status: konsolidace k 29. 10. 2026, OPRAVENO po nezávislém master-plan auditu (3 agenti, Opus + pragmatik + skeptik).** Návrhový dokument (sekce 11) definuje 5 výzkumných hypotéz pro diplomku. Tento dokument mapuje, co z dosavadních deliverables tyto hypotézy skutečně testuje — **honestně**, včetně částečně negativních výsledků, ne jako seznam úspěchů.
 
@@ -37,6 +37,7 @@
 | 19 | H4 poprvé částečně potvrzeno — izotonická kalibrace zlepšila Brier skóre na 3/3 LOSO foldech (průměr 0.683→0.434) | `src/eval/calibration.rs`, `src/passive/anomaly.rs`, `docs/diplomka/eval/h4-isotonic-calibration-loso.md` | Hotovo |
 | 20 | Statistický aparát — bootstrap 95% CI na ablaci A/CTU-13 (F1 0.306 [0.271, 0.342], mimo dosah triviálního baseline) | `src/eval/stats.rs`, `docs/diplomka/eval/bootstrap-confidence-intervals.md` | Hotovo |
 | 21 | H1 v doslovném znění poprvé změřeno se skutečným Zeek 9.0.1 (tcpdump sidecar + offline Zeek analýza) — pasivní 3 findings, pasivní+aktivní 5 findings | `src/lab.rs`, `docs/diplomka/eval/h1-literal-real-zeek-passive-vs-active.md` | Hotovo |
+| 22 | Identity vrstva poprvé testována na reálné síti (Docker bridge, skutečné ARP objevování) — DHCP renewal i NAT/swap správně rozlišeny | `src/identity_lab.rs`, `docs/diplomka/eval/identity-layer-real-network.md` | Hotovo |
 | 14 | Oprava CTU-13 label bugu + triviální baseline + hash fix (nezávislý audit, kolo 1) | `src/eval/ground_truth.rs`, `src/eval/dataset_replay.rs` | Hotovo |
 | 15 | Oprava Virut/RBot, H1 terminologie, IoT-23 stejná třída chyby jako bod 14.1, regresní asserty na CTU-13 čísla (nezávislý audit, kolo 2) | `src/eval/sources/iot23.rs`, `docs/diplomka/eval/h1-passive-vs-active.md` | Hotovo |
 

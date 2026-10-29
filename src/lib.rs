@@ -16,6 +16,7 @@ pub mod external_sql;
 pub mod findings;
 pub mod hypothesis;
 pub mod identity;
+pub mod identity_lab;
 pub mod intel;
 pub mod lab;
 pub mod lanes;

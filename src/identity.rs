@@ -8,10 +8,14 @@
 //! je proto samostatná vrstva NAD `normalize_inventory()`, ne jeho náhrada - `host_key`/
 //! `host_id` se tu nemění, přidává se jen `asset_id` jako doplňkový, cross-run identifikátor.
 //!
-//! Omezení: ověřeno na autorsky vytvořených (ne reálně zachycených) sekvencích běhů -
-//! reálná vícedenní síťová data s potvrzenou fyzickou identitou zařízení (longitudinal
-//! capture) nejsou k dispozici; validace na takových datech je budoucí práce (vlna 3,
-//! Mininet/Containerlab simulace DHCP/NAT churn).
+//! Omezení: tyto testy (níže) ověřují logiku na autorsky vytvořených (ne reálně
+//! zachycených) sekvencích běhů. Deliverable 22 (`src/identity_lab.rs`) tuhle logiku
+//! navíc ověřil na REÁLNÉ síti (Docker bridge se skutečným ARP objevováním) - DHCP
+//! renewal i NAT/swap správně rozlišeny, viz
+//! `docs/diplomka/eval/identity-layer-real-network.md`. Skutečná vícedenní síťová data
+//! s potvrzenou fyzickou identitou zařízení (longitudinal capture, víc VLAN segmentů)
+//! stále nejsou k dispozici - zobecnění nad jednu plochou podsíť a krátký časový úsek
+//! zůstává budoucí práce.
 
 use std::collections::HashMap;
 
