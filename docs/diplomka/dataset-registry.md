@@ -43,7 +43,7 @@ Registr datových zdrojů pro `src/eval/` (replay a baseline měření korelačn
 
 | Scénář | Cesta (lokální, gitignored) | Velikost | SHA-256 | Flows | Malicious |
 |---|---|---|---|---|---|
-| CTU-Malware-Capture-Botnet-54 (RBot), prvních 30 MB | `labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv` | 31 457 281 B | `e53331ede25cb047e65ed814b7e34dd49f3926e8585d4ea6294aba4cccf336b6` | 229 653 | 6 185 |
+| CTU-Malware-Capture-Botnet-54 (Virut), prvních 30 MB | `labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv` | 31 457 281 B | `e53331ede25cb047e65ed814b7e34dd49f3926e8585d4ea6294aba4cccf336b6` | 229 653 | 6 185 |
 
 **Oprava 29.10.2026:** všechny tři SHA-256 hashe v této tabulce byly dřív useknuté o 1 hex znak (63 místo 64) — chyba při přepisu z `sha256sum` výstupu, odhalená nezávislou kontrolou (Opus Plan agent). Opraveno zde na skutečné hashe.
 

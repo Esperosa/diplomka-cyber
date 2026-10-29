@@ -527,6 +527,23 @@ mod tests {
         println!(
             "CTU-13 trivialni baseline (vse=malicious): precision={trivial_p:.3} recall={trivial_r:.3} f1={trivial_f1:.3} (srovnej s ablaci A vyse)"
         );
+
+        // Regresni asserty (N10 nezavisleho auditu, 29.10.2026): cisla citovana v
+        // docs/diplomka/eval/cross-dataset-ctu13.md a souhrn-vysledku-a-hypotez.md
+        // byla dosud jen z println vystupu rucne prepsana do markdownu - zadny test
+        // je nepinoval, takze budouci zmena detekcni logiky by mohla cisla v docs
+        // tise rozejit s kodem beze selhani testu. Tolerance 1e-3 na zaokrouhleni.
+        let approx = |actual: f64, expected: f64| (actual - expected).abs() < 1e-3;
+        assert!(
+            approx(a.confusion.precision(), 0.767) && approx(a.confusion.recall(), 0.192),
+            "ablace A: precision={:.3} recall={:.3}, cekano 0.767/0.192 - pokud je zmena zamerna, oprav i docs/diplomka/eval/cross-dataset-ctu13.md",
+            a.confusion.precision(),
+            a.confusion.recall()
+        );
+        assert!(
+            approx(trivial_p, 0.932) && approx(trivial_f1, 0.965),
+            "trivialni baseline: precision={trivial_p:.3} f1={trivial_f1:.3}, cekano 0.932/0.965"
+        );
     }
 
     /// Nasledna otazka z `docs/diplomka/eval/cross-dataset-ctu13.md`: byla 300s

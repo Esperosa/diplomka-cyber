@@ -78,16 +78,23 @@ impl ScenarioSource for Iot23Source {
 /// `tunnel_parents`/`label`/`detailed-label` jsou v IoT-23 jedno tab-pole s hodnotami
 /// oddelenymi mezerami (zvlastnost puvodniho labelovaciho skriptu CTU), proto se hleda
 /// podle prefixu nazvu klice, ne presnou shodou - pocet mezer v headeru neni garantovany.
+///
+/// Regresni oprava (29.10.2026, N9 nezavisleho auditu): chybejici sloupec nebo chybejici/
+/// prazdny label token kdysi defaultoval na "Benign" (stejna trida chyby jako N1 - tise
+/// predpokladat potvrzene benigni, kde ve skutecnosti neni zadne overeni). Ted defaultuje
+/// na "Unknown", ktere `dataset_replay.rs` vyrazuje z confusion matrix, ne tise pocita jako
+/// potvrzene benigni. Na obou committed fixturach (44-1, Somfy-01) se tento default nikdy
+/// neuplatni - oba scenare maji label token u kazdeho radku - ale je to strukturalni ochrana
+/// proti stejne chybe na budoucich IoT-23 scenarich.
 fn extract_label(row: &HashMap<String, String>) -> GroundTruthLabel {
     let combined = row
         .iter()
         .find(|(key, _)| key.starts_with("tunnel_parents"))
-        .map(|(_, value)| value.as_str())
-        .unwrap_or("-   Benign   -");
+        .map(|(_, value)| value.as_str());
 
-    let mut parts = combined.split_whitespace();
+    let mut parts = combined.unwrap_or_default().split_whitespace();
     let _tunnel_parents = parts.next();
-    let label = parts.next().unwrap_or("Benign").to_string();
+    let label = parts.next().unwrap_or("Unknown").to_string();
     let detailed_label = parts.next().unwrap_or("-").to_string();
 
     GroundTruthLabel {

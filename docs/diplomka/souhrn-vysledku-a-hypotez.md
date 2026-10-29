@@ -8,6 +8,12 @@
 3. **Ablace B/C/D v kódu neodpovídají ablacím B/C/D/E z návrhu** (sekce 9.1) — kódové B/C/D jsou všechny podvarianty návrhové ablace C (temporal/graph), návrhové B (aktivní signály) a E (kalibrace) nikdy neběžely v tomhle harnessu. H2 status níže je proto opraven na konzervativnější "netestováno", ne "částečně vyvráceno".
 4. **Hashe v `dataset-registry.md` byly useknuté o 1 znak** — opraveno, doplněn automatický test (`eval::tests::committed_iot23_files_match_hashes_recorded_in_dataset_registry`).
 
+**Druhé kolo auditu (29.10.2026, stejná 3-agentní metodika — Opus comprehensive + pragmatik + skeptik, debatovali nad už opravenou verzí):**
+5. **Botnet-54 je Virut, ne RBot** — nezávisle ověřeno přímo z `mcfp.felk.cvut.cz` (scénář 13, probable name Virut). Oprava v `dataset-registry.md` a `cross-dataset-ctu13.md`.
+6. **H1 test ve skutečnosti porovnával dvě aktivní varianty, ne pasivní vs. aktivní** — nmap/httpx jsou aktivní nástroje (posílají pakety/požadavky cíli), ne pasivní odposlech. Přejmenováno na "lehký aktivní sken vs. + hlubší aktivní ověření"; H1 v doslovném znění (skutečná pasivní telemetrie) zůstává nezměřena. Oprava: `docs/diplomka/eval/h1-passive-vs-active.md`, sekce H1 níže.
+7. **`eval/sources/iot23.rs` měl stejnou třídu chyby jako bod 1** (`extract_label` defaultoval chybějící/poškozený label token na "Benign") — nikdy se neprojevilo na committed fixturách, ale opraveno proaktivně na "Unknown" dřív, než se objeví na dalším IoT-23 scénáři.
+8. **CTU-13 cross-dataset test neměl žádné numerické asserty** — čísla v docs byla jen ručně přepsaná z `println!` výstupu, bez testu, který by selhal při tiché regresi. Doplněny asserty na precision/recall ablace A a triviálního baseline.
+
 ## Co bylo postaveno (Deliverables 1–10, chronologicky)
 
 | # | Co | Klíčový soubor | Status |
@@ -25,13 +31,14 @@
 | 11 | Skutečné vykonání vybrané verifikace (ne jen výběr) | `src/lab.rs` | Hotovo |
 | 12 | H1 poprvé reálně změřeno (pasivní vs. pasivní+aktivní) | `src/lab.rs` | Hotovo |
 | 13 | H3 měření zablokováno potvrzeným strukturním důvodem (ne domněnkou) | `docs/diplomka/eval/h3-measurement-difficulty.md` | Hotovo |
-| 14 | Oprava CTU-13 label bugu + triviální baseline + hash fix (nezávislý audit) | `src/eval/ground_truth.rs`, `src/eval/dataset_replay.rs` | Hotovo |
+| 14 | Oprava CTU-13 label bugu + triviální baseline + hash fix (nezávislý audit, kolo 1) | `src/eval/ground_truth.rs`, `src/eval/dataset_replay.rs` | Hotovo |
+| 15 | Oprava Virut/RBot, H1 terminologie, IoT-23 stejná třída chyby jako bod 14.1, regresní asserty na CTU-13 čísla (nezávislý audit, kolo 2) | `src/eval/sources/iot23.rs`, `docs/diplomka/eval/h1-passive-vs-active.md` | Hotovo |
 
 ## Vztah k H1–H5
 
 ### H1: spojení pasivní a aktivní telemetrie zvýší kvalitu rozhodnutí proti samotné pasivní vrstvě za definovaných nákladů.
 
-**Status: POPRVÉ ZMĚŘENO (Deliverable 12), na jednom lab cíli.** `docs/diplomka/eval/h1-passive-vs-active.md`: na stejných datech ze stejného běhu má "pasivní+aktivní" varianta víc findings (2 vs 1) a víc decision akcí (4 vs 3) než čistě pasivní, s malým, změřeným dodatečným nákladem (1 nuclei sken + 1 GET). Klíčové: nález exponovaného `/metrics` (a jeho 7 konkrétních citlivých metrik, Deliverable 11) **vůbec nevznikne** bez aktivní kontroly — to je strukturní, ne jen statistický rozdíl. **Omezení**: jeden lab cíl, jeden typ zranitelnosti — nedokazuje H1 obecně, dokazuje ji na jednom reprodukovatelném případu. Zobecnění vyžaduje víc lab scénářů.
+**Status: NEZMĚŘENO V DOSLOVNÉM ZNĚNÍ (oprava N8); změřen jen užší dílčí nález na jednom lab cíli.** `docs/diplomka/eval/h1-passive-vs-active.md`: Deliverable 12 porovnávalo lehký aktivní sken (nmap+httpx) vs. + hlubší aktivní ověření (nuclei) — **obě varianty jsou aktivní nástroje, žádná skutečná pasivní telemetrie (Zeek/Suricata) tu nefiguruje.** Původní označení "pasivní vs. pasivní+aktivní" bylo terminologicky nepřesné a je opraveno. Naměřeno: hlubší aktivní varianta má víc findings (2 vs 1) a víc decision akcí (4 vs 3), s malým, změřeným dodatečným nákladem (1 nuclei sken + 1 GET). Klíčové: nález exponovaného `/metrics` (a jeho 7 konkrétních citlivých metrik, Deliverable 11) **vůbec nevznikne** bez hlubší aktivní kontroly — to je strukturní, ne jen statistický rozdíl, a pravděpodobně se přenese i na skutečné H1 (pasivní vs. pasivní+aktivní), ale to je zatím nepotvrzená extrapolace, ne měření. **H1 v doslovném znění vyžaduje lab s paralelním pasivním snímkem, který zatím neexistuje — to je teď nejkonkrétnější, nejlevnější next step (viz souhrn níže).**
 
 ### H2: temporal/graph evidence fusion s korekcí závislosti zdrojů sníží falešné incidenty oproti prostému scoringu eventů.
 

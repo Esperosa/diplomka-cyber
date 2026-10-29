@@ -8,7 +8,7 @@
 
 **Stejný, nezměněný kód** (`passive::anomaly`, `correlation.rs`, `correlation_v2.rs`) jako na IoT-23 — žádné ladění prahů pro CTU-13. Reprodukce: `cargo test --lib ctu13_cross_dataset -- --ignored --nocapture` (vyžaduje stažený výřez, viz `docs/diplomka/dataset-registry.md`).
 
-**Dataset:** CTU-Malware-Capture-Botnet-54 (RBot), prvních 30 MB — 229 653 flows, 885 "known" (dst_ip,proto,port) klíčů po vyřazení Background-only (825 malicious, 60 confirmed benign — silně nevyvážené, ne reprezentativní vzorek reálného provozu).
+**Dataset:** CTU-Malware-Capture-Botnet-54 (Virut), prvních 30 MB — 229 653 flows, 885 "known" (dst_ip,proto,port) klíčů po vyřazení Background-only (825 malicious, 60 confirmed benign — silně nevyvážené, ne reprezentativní vzorek reálného provozu).
 
 ## Naměřeno (opravená čísla)
 
@@ -33,4 +33,4 @@
 
 Oprava nezneplatňuje fragmentační hypotézu o oknech (bod 3) — ta zůstává platná a podepřená sweepem. Mění ale celkový rámec: místo "naše heuristika generalizuje hůř na nový dataset" je přesnější "naše heuristika je na obou datasetech blízko nebo pod úrovní triviálního klasifikátoru, a teprve typovaná nejistota/kalibrace (H4) má šanci to změřitelně zlepšit". Každá budoucí tabulka v tomhle projektu musí obsahovat triviální baseline vedle ablací — bez něj je číslo bez kontextu.
 
-**Omezení generalizačního tvrzení samotného (N1 auditu):** CTU-13 strana stojí na **jediném** scénáři (Botnet-54/RBot) z 13 dostupných. "Cross-dataset" zde fakticky znamená "druhý capture soubor", ne prokázanou šíři generalizace — rozšíření na víc CTU-13 scénářů (a ideálně i jiné botnet rodiny) je nutné, než se tomuto zjištění může říkat "generalizace" bez výhrady.
+**Omezení generalizačního tvrzení samotného (N1 auditu):** CTU-13 strana stojí na **jediném** scénáři (Botnet-54/Virut) z 13 dostupných. "Cross-dataset" zde fakticky znamená "druhý capture soubor", ne prokázanou šíři generalizace — rozšíření na víc CTU-13 scénářů (a ideálně i jiné botnet rodiny) je nutné, než se tomuto zjištění může říkat "generalizace" bez výhrady.
