@@ -1,5 +1,5 @@
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -269,51 +269,59 @@ pub fn determine_passive_window(start: DateTime<Utc>, end: DateTime<Utc>) -> Pas
     }
 }
 
-pub fn build_source_metadata(
-    nmap_mode: &str,
-    nmap_path: &Path,
-    nmap_followup_path: Option<&PathBuf>,
-    nmap_forensic_path: Option<&PathBuf>,
-    suricata_eve: Option<&PathBuf>,
-    zeek_dir: Option<&PathBuf>,
-    snmp_snapshot: Option<&PathBuf>,
-    librenms_snapshot: Option<&PathBuf>,
-    librenms_base_url: Option<&str>,
-    meraki_snapshot: Option<&PathBuf>,
-    meraki_network_id: Option<&str>,
-    unifi_snapshot: Option<&PathBuf>,
-    aruba_snapshot: Option<&PathBuf>,
-    omada_snapshot: Option<&PathBuf>,
-    ntopng_snapshot: Option<&PathBuf>,
-    flow_snapshot: Option<&PathBuf>,
-    greenbone_report: Option<&PathBuf>,
-    wazuh_report: Option<&PathBuf>,
-    napalm_snapshot: Option<&PathBuf>,
-    netmiko_snapshot: Option<&PathBuf>,
-    scrapli_snapshot: Option<&PathBuf>,
-) -> SourceMetadata {
+/// Fáze 1 (produkční plán, framework-style wiring): nahrazuje 21 pozičních
+/// parametrů, které `build_source_metadata` mělo dřív - stejná sada vstupů,
+/// jen jako pojmenovaná struktura. Čistě mechanická změna, beze změny
+/// chování (ověřeno golden-snapshot testem).
+#[derive(Debug)]
+pub struct SourceInputs<'a> {
+    pub nmap_mode: &'a str,
+    pub nmap_path: &'a Path,
+    pub nmap_followup_path: Option<&'a Path>,
+    pub nmap_forensic_path: Option<&'a Path>,
+    pub suricata_eve: Option<&'a Path>,
+    pub zeek_dir: Option<&'a Path>,
+    pub snmp_snapshot: Option<&'a Path>,
+    pub librenms_snapshot: Option<&'a Path>,
+    pub librenms_base_url: Option<&'a str>,
+    pub meraki_snapshot: Option<&'a Path>,
+    pub meraki_network_id: Option<&'a str>,
+    pub unifi_snapshot: Option<&'a Path>,
+    pub aruba_snapshot: Option<&'a Path>,
+    pub omada_snapshot: Option<&'a Path>,
+    pub ntopng_snapshot: Option<&'a Path>,
+    pub flow_snapshot: Option<&'a Path>,
+    pub greenbone_report: Option<&'a Path>,
+    pub wazuh_report: Option<&'a Path>,
+    pub napalm_snapshot: Option<&'a Path>,
+    pub netmiko_snapshot: Option<&'a Path>,
+    pub scrapli_snapshot: Option<&'a Path>,
+}
+
+pub fn build_source_metadata(inputs: &SourceInputs) -> SourceMetadata {
+    let path_string = |path: Option<&Path>| path.map(|path| path.to_string_lossy().to_string());
     SourceMetadata {
-        nmap_mode: Some(nmap_mode.to_string()),
-        nmap_xml: Some(nmap_path.to_string_lossy().to_string()),
-        nmap_followup_xml: nmap_followup_path.map(|path| path.to_string_lossy().to_string()),
-        nmap_forensic_xml: nmap_forensic_path.map(|path| path.to_string_lossy().to_string()),
-        suricata_eve: suricata_eve.map(|path| path.to_string_lossy().to_string()),
-        zeek_dir: zeek_dir.map(|path| path.to_string_lossy().to_string()),
-        snmp_snapshot: snmp_snapshot.map(|path| path.to_string_lossy().to_string()),
-        librenms_snapshot: librenms_snapshot.map(|path| path.to_string_lossy().to_string()),
-        librenms_base_url: librenms_base_url.map(ToString::to_string),
-        meraki_snapshot: meraki_snapshot.map(|path| path.to_string_lossy().to_string()),
-        meraki_network_id: meraki_network_id.map(ToString::to_string),
-        unifi_snapshot: unifi_snapshot.map(|path| path.to_string_lossy().to_string()),
-        aruba_snapshot: aruba_snapshot.map(|path| path.to_string_lossy().to_string()),
-        omada_snapshot: omada_snapshot.map(|path| path.to_string_lossy().to_string()),
-        ntopng_snapshot: ntopng_snapshot.map(|path| path.to_string_lossy().to_string()),
-        flow_snapshot: flow_snapshot.map(|path| path.to_string_lossy().to_string()),
-        greenbone_report: greenbone_report.map(|path| path.to_string_lossy().to_string()),
-        wazuh_report: wazuh_report.map(|path| path.to_string_lossy().to_string()),
-        napalm_snapshot: napalm_snapshot.map(|path| path.to_string_lossy().to_string()),
-        netmiko_snapshot: netmiko_snapshot.map(|path| path.to_string_lossy().to_string()),
-        scrapli_snapshot: scrapli_snapshot.map(|path| path.to_string_lossy().to_string()),
+        nmap_mode: Some(inputs.nmap_mode.to_string()),
+        nmap_xml: Some(inputs.nmap_path.to_string_lossy().to_string()),
+        nmap_followup_xml: path_string(inputs.nmap_followup_path),
+        nmap_forensic_xml: path_string(inputs.nmap_forensic_path),
+        suricata_eve: path_string(inputs.suricata_eve),
+        zeek_dir: path_string(inputs.zeek_dir),
+        snmp_snapshot: path_string(inputs.snmp_snapshot),
+        librenms_snapshot: path_string(inputs.librenms_snapshot),
+        librenms_base_url: inputs.librenms_base_url.map(ToString::to_string),
+        meraki_snapshot: path_string(inputs.meraki_snapshot),
+        meraki_network_id: inputs.meraki_network_id.map(ToString::to_string),
+        unifi_snapshot: path_string(inputs.unifi_snapshot),
+        aruba_snapshot: path_string(inputs.aruba_snapshot),
+        omada_snapshot: path_string(inputs.omada_snapshot),
+        ntopng_snapshot: path_string(inputs.ntopng_snapshot),
+        flow_snapshot: path_string(inputs.flow_snapshot),
+        greenbone_report: path_string(inputs.greenbone_report),
+        wazuh_report: path_string(inputs.wazuh_report),
+        napalm_snapshot: path_string(inputs.napalm_snapshot),
+        netmiko_snapshot: path_string(inputs.netmiko_snapshot),
+        scrapli_snapshot: path_string(inputs.scrapli_snapshot),
     }
 }
 
