@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 19:55</strong> ·
-  commit <code>faebd22</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 20:35</strong> ·
+  commit <code>e0bc5ff</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -208,6 +208,19 @@
 
 <h2>Produkční plán (ne jen diplomka)</h2>
 <p class="hint">H2 a H5 jsou vlastnosti jádra (korektnost fúze evidence / škálování), ne nové subsystémy — proto se vrátily do rozsahu. Firewall/DNS/IPS/SOAR zůstávají vědomě odloženy, rozhodnutím uživatele po 3-agentní debatě. Detaily: <code class="file">produkcni-plan.md</code>.</p>
+
+<details class="stage" open>
+  <summary><span class="badge badge-green">fáze 0 — hotovo</span> <span class="stage-title">Zapojení jádra do produkce + "framework style"</span> <span class="stage-sub">samostatná stopa, 3-agentní kolo 29.10.2026</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">zjištěno</span> produkční <code class="file">run_pipeline</code> stále běží na pre-diplomkové logice — <code class="file">correlation_v2</code>/<code class="file">fusion</code>/<code class="file">hypothesis</code>/<code class="file">verification_planner</code>/<code class="file">identity</code> jsou ověřené, ale volané jen z eval/lab, ne z produkce</li>
+      <li><span class="badge badge-green mini">zjištěno</span> přepnutí na ablace B/C/D jako výchozí by bylo podle vlastních čísel ZHORŠENÍ (B: F1 0,306→0,124) a rozbilo by <code class="file">tests/mas_deep.rs</code> — žádné naivní "přepojení"</li>
+      <li><span class="badge badge-green mini">zjištěno</span> jediný skutečný runtime extension point v celém crate je <code class="file">vuln::VulnerabilityProvider</code> — framework style to zatím není</li>
+      <li><span class="badge badge-green mini">hotovo</span> golden-snapshot regresní test (<code class="file">tests/golden_snapshot.rs</code>) — bezpečnostní síť pro další fáze, ověřen stabilní přes opakované běhy i negativní kontrolou</li>
+      <li><span class="badge badge-gray mini">další krok</span> Fáze 1–6 (Opusův plán): pipeline do lib beze změny chování → traity pro detektory/findingy → stínové aditivní zapojení → přepínače → změna výchozího chování jen na základě měření</li>
+    </ul>
+  </div>
+</details>
 
 <details class="stage" open>
   <summary><span class="badge badge-yellow">fáze 1 — probíhá</span> <span class="stage-title">H5 korektnost + H2 fúze</span> <span class="stage-sub">bounded, dny až 2 týdny</span></summary>
