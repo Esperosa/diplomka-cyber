@@ -10,10 +10,14 @@
 //! fixturam) se pred porovnanim normalizuji - jinak by test padal na kazdem
 //! behu, ne jen pri skutecne zmene chovani.
 //!
+//! Test NENI `#[ignore]` - potrebuje jen binarku + commitnute fixtury v
+//! `data/` (zadny Docker/nmap/httpx/nuclei), stejne jako existujici
+//! `full_visibility_stack_populates_lanes_and_findings` v `tests/e2e.rs`,
+//! takze bezi normalne v CI. Jako bezpecnostni sit pro refaktor musi bezet
+//! automaticky, ne za specialni flag.
+//!
 //! Aktualizace zlateho souboru po VEDOME zmene chovani:
-//! `BAKULA_UPDATE_GOLDEN=1 cargo test --test golden_snapshot -- --ignored`
-//! (test je `#[ignore]`, protoze spusti cely binary pipeline - stejna
-//! konvence jako ostatni e2e testy v tomhle souboru, viz `tests/e2e.rs`).
+//! `BAKULA_UPDATE_GOLDEN=1 cargo test --test golden_snapshot`
 
 use std::{fs, path::Path, process::Command};
 
@@ -217,7 +221,6 @@ fn load_single_report(workspace: &Path) -> Value {
 /// duplikovano misto sdileni helperu, aby zmena jednoho testu neposunula
 /// tise i vstup druheho.
 #[test]
-#[ignore = "spousti cely binary pipeline (nmap/suricata/zeek/snmp/... fixtury), stejna konvence jako ostatni e2e testy"]
 fn full_visibility_stack_report_matches_golden_snapshot() {
     let temp = TempDir::new().expect("tempdir");
     let workspace = temp.path().join("workspace");
