@@ -2,9 +2,12 @@
 //! sit PRED jakoukoliv zmenou v `run_pipeline`/`passive::load_and_normalize`/
 //! `findings.rs`. Existujici e2e testy kontroluji jen prahove vlastnosti
 //! (`.len() >= N`, `any(finding_type == ...)`) - tenhle test naopak zachyti
-//! JAKOUKOLIV zmenu ve tvaru vysledneho `report.json` pro stejny, plne
-//! deterministicky vstup (stejne fixtury jako
-//! `full_visibility_stack_populates_lanes_and_findings`, seed=7, 0 nahodnych).
+//! JAKOUKOLIV zmenu ve tvaru vysledneho `report.json` pro stejny vstup (stejne
+//! fixtury jako `full_visibility_stack_populates_lanes_and_findings`, seed=7,
+//! 0 nahodnych). Vstup NENI uplne deterministicky bit-po-bitu (`simulation.rs`
+//! vnitrne pouziva `Utc::now()` pro relativni casove posuny) - vystup na
+//! tenhle posun je ale invariantni (overeno opakovanymi behy), proto na
+//! predvidatelnost golden snapshotu nema vliv.
 //!
 //! Volatilni pole (run_id, casova razitka, absolutni docasne cesty k
 //! fixturam) se pred porovnanim normalizuji - jinak by test padal na kazdem
@@ -144,6 +147,10 @@ const VOLATILE_TIMING_MARKERS: &[&str] = &[
     "parallelism_ratio=",
     "paralelismus ",
     "wait_ms=",
+    "queue_wait_ms_avg=",
+    "agent_sla_ratio=",
+    "queue wait ",
+    "SLA ",
 ];
 
 fn mentions_volatile_timing(text: &str) -> bool {
@@ -154,7 +161,11 @@ fn mentions_volatile_timing(text: &str) -> bool {
 
 /// Pole v `Summary` (model.rs), jejichz hodnota je primo namerene cas steny
 /// hodiny, ne odvozena od (determinstickych) vstupnich dat.
-const VOLATILE_SUMMARY_KEYS: &[&str] = &["mas_parallelism_ratio"];
+const VOLATILE_SUMMARY_KEYS: &[&str] = &[
+    "mas_parallelism_ratio",
+    "mas_queue_wait_ms_avg",
+    "mas_agent_sla_ratio",
+];
 
 /// Nahradi volatilni hodnoty stabilnimi placeholdery - rekurzivne projde
 /// cely JSON strom (vcetne vnorenych struktur z automation/context/lanes,
@@ -369,13 +380,19 @@ fn full_visibility_stack_report_matches_golden_snapshot() {
         return;
     }
 
-    let golden = fs::read_to_string(golden_path()).unwrap_or_else(|error| {
-        panic!(
-            "zlaty soubor {:?} chybi nebo se neda cist ({error}) - vygeneruj ho: \
-             BAKULA_UPDATE_GOLDEN=1 cargo test --test golden_snapshot -- --ignored",
-            golden_path()
-        )
-    });
+    // `.gitattributes` vynucuje LF pro `tests/golden/*.json`, ale normalizace
+    // CRLF->LF i tady je levna pojistka pro checkout, ktery vznikl pred timhle
+    // pravidlem (nezavisle odhaleno 2 review agenty, 29.10.2026) - test ma
+    // hlidat zmenu CHOVANI, ne zpusob konce radku na disku.
+    let golden = fs::read_to_string(golden_path())
+        .unwrap_or_else(|error| {
+            panic!(
+                "zlaty soubor {:?} chybi nebo se neda cist ({error}) - vygeneruj ho: \
+                 BAKULA_UPDATE_GOLDEN=1 cargo test --test golden_snapshot",
+                golden_path()
+            )
+        })
+        .replace('\r', "");
 
     if actual != golden {
         let actual_path = golden_path().with_extension("actual.json");
@@ -384,7 +401,7 @@ fn full_visibility_stack_report_matches_golden_snapshot() {
             "report.json se zmenil oproti zlatemu snapshotu.\n\
              Skutecny vystup ulozen do {actual_path:?} - over diffem proti {:?}.\n\
              Pokud je zmena VEDOMA (napr. nova vrstva jadra zapojena do pipeline), \
-             aktualizuj zlaty soubor: BAKULA_UPDATE_GOLDEN=1 cargo test --test golden_snapshot -- --ignored",
+             aktualizuj zlaty soubor: BAKULA_UPDATE_GOLDEN=1 cargo test --test golden_snapshot",
             golden_path()
         );
     }
