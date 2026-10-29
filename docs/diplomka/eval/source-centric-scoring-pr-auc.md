@@ -48,10 +48,44 @@ Botnet-42: DESTINACE PR-AUC=0.3844 prevalence=0.5086 LIFT=0.76x | ZDROJ PR-AUC=0
 
 **Přesun z "je tahle služba anomální" na "je tenhle host anomální" dramaticky a konzistentně zlepšuje rozlišovací silu na všech 3 reálných scénářích/2 rodinách.** To je reálná, měřená cesta ke zlepšení — ne naděje, že se to časem spraví. Destinace-centrické skóre (dosavadní `score_connection_keys`, jádro ablace A) je skutečně slabé, protože měří špatnou věc pro tento typ hrozby (botnet C2), ne protože je implementace chybná.
 
+## Naměřeno — krok 2: překládá se lepší ranking do lepší klasifikace? (NE naivně)
+
+Otázka z omezení výše ("PR-AUC lift neznamená automaticky lepší klasifikaci při nějakém prahu") je teď změřená, ne jen vyslovená. Použit stejný práh `3.2`, který je dnes natvrdo zapojený do destinace-centrické ablace A (Deliverable 3) — **beze změny, ne přeladěný na zdrojová data**, aby srovnání nebylo cirkulární.
+
+```
+Botnet-54: ZDROJ klasifikace pri prahu 3.2: TP=1 FP=2086 FN=0 TN=528 precision=0.000 recall=1.000 f1=0.001 | trivialni baseline precision=0.000 f1=0.001
+Botnet-51: ZDROJ klasifikace pri prahu 3.2: TP=10 FP=1886 FN=0 TN=520 precision=0.005 recall=1.000 f1=0.010 | trivialni baseline precision=0.004 f1=0.008
+Botnet-42: ZDROJ klasifikace pri prahu 3.2: TP=1 FP=2370 FN=0 TN=418 precision=0.000 recall=1.000 f1=0.001 | trivialni baseline precision=0.000 f1=0.001
+```
+
+**Výsledek: NE, naivní přenesení prahu nefunguje.** Na všech 3 scénářích práh 3.2 klasifikuje téměř všechny zdroje jako malicious (recall=1.0, ale FP v tisících) — prakticky identické s triviálním "vše=bot" baseline. To NENÍ v rozporu s naměřeným LIFT 24–90× výše — je to důkaz, že **práh a skóre jsou dvě different věci**: `score_source_hosts` používá jinou agregaci (jiné rysy, jiné měřítko robust z-score) než destinace-centrické skóre, pro které byl 3.2 kdysi odhadnutý (Deliverable 3, nikdy natrénovaný). Přenos konstanty z jedné domény do druhé nemá důvod fungovat — a nefunguje.
+
+**Co s tím NEdělat**: hledat nový "magický" práh proladěním přímo na tomhle eval-setu by byl přesně ten cirkulární overfitting, který si tenhle projekt opakovaně zakazuje (stejná disciplína jako u 3.2 samotného). Hand-picked konstanta pro novou doménu skóre by byla jen o stupeň sofistikovanější verze stejné chyby.
+
+**Co to skutečně ukazuje**: tohle je přímý, měřený argument PRO existující kalibrační vrstvu (Deliverable 19, `src/eval/calibration.rs::IsotonicCalibrator`, LOSO-validovaná na destinace-centrickém skóre) místo hand-picked prahů obecně — problém není "najít lepší magické číslo pro zdroj", je "přestat používat magická čísla a kalibrovat skóre na pravděpodobnost nezávisle pro každou doménu agregace". Zdroj-centrické skóre potřebuje svou vlastní izotonickou kalibraci (stejná metoda, nová doména) — to je přesně následující, bounded krok, ne nový koncept.
+
+## Naměřeno — krok 3: LOSO izotonická kalibrace na zdroj-centrickém skóre (druhý, ještě poučnější negativní výsledek)
+
+Kalibrátor (Deliverable 19, nezměněná implementace) natrénovaný LOSO na zdroj-centrických bodech:
+
+```
+Botnet-54 held-out (n=2615): naive(3.2) brier=0.7977 f1=0.0010 | kalibrovane(0.5) brier=0.0004 f1=0.0000 | trivialni baseline f1=0.0008
+Botnet-51 held-out (n=2416): naive(3.2) brier=0.7806 f1=0.0105 | kalibrovane(0.5) brier=0.0042 f1=0.0000 | trivialni baseline f1=0.0082
+Botnet-42 held-out (n=2789): naive(3.2) brier=0.8498 f1=0.0008 | kalibrovane(0.5) brier=0.0004 f1=0.0000 | trivialni baseline f1=0.0007
+```
+
+**Brier skóre se zlepšilo dramaticky (0.78–0.85 → 0.0004–0.0042) — ale F1 při standardním prahu 0.5 na kalibrované pravděpodobnosti spadl na 0.0000, HŮŘ než naivní práh 3.2 i hůř než triviální baseline.** Důvod: při extrémně nízké prevalenci (0.04–0.41 % zdrojů je bot) izotonická regrese správně nikdy nevytvoří pool s průměrem nad 0.5 — i pool obsahující VŠECHNY pozitivní body dohromady má průměrnou pravděpodobnost hluboko pod 0.5, protože pozitiv je v absolutních číslech málo. Model tím pádem u prahu 0.5 nikdy nic neoznačí jako malicious.
+
+**To NENÍ chyba kalibrátoru — je to přesně to, co dobrá kalibrace má dělat** (vrátit realistickou P(malicious), ne nafouknutou). Je to ale důkaz, že **"práh 0.5" je u vzácných jevů (rare-event classification) neplatný koncept** — nízký Brier zde vzniká hlavně tím, že model správně predikuje "téměř nikdy", což je u tak nízké prevalence skoro vždy numericky správné, ne tím, že by uměl rozlišit bota od nebota. Klasický a dobře známý rare-event pitfall, teď přímo změřený na vlastních datech projektu, ne jen citovaný z literatury.
+
+**Co by bylo špatně**: hledat jiný, nižší práh (např. 0.01) proladěním přímo na tomhle eval-setu — znovu stejný cirkulární overfitting problém jako u 3.2.
+
+**Co z toho plyne správně**: u vzácných jevů se práh nemá hledat jako jedno pevné číslo vůbec — patří sem přesně to, co diplomka od začátku identifikuje jako svůj skutečný cíl (VOI/typovaná nejistota ve `verification_planner.rs`/`hypothesis.rs`, ne binární klasifikace s jedním prahem). Tohle je konkrétní, měřený argument PRO tenhle směr, ne proti kalibraci — kalibrace (Brier) funguje přesně podle očekávání, jen ukazuje, že navazující rozhodovací krok nesmí být fixní prah.
+
 ## Co z tohoto plyne — konkrétní další krok
 
 1. **Toto je zatím diagnostický nástroj, ne zapojený detektor.** `score_source_hosts` běží jen v testu, ne v `detect_connection_anomalies`/produkčním rozhodování.
-2. **Další krok**: zapojit zdroj-centrické skóre do produkční detekce (nová ablace, nebo rozšíření existující), přepočítat ablace A/confusion matrix na zdroj-centrické predikce místo destinace-centrických, a změřit, jestli **F1/precision/recall** (ne jen PR-AUC) zdroj-centrické ablace konečně překoná triviální baseline — to je ten test, který by potvrdil skutečné zlepšení, ne jen lepší ranking.
+2. **Tři zjištění dohromady**: (a) ranking (PR-AUC/LIFT) je prokazatelně silný, (b) naivní threshold-transfer mezi doménami agregace nefunguje, (c) ani kalibrovaná pravděpodobnost s "učebnicovým" prahem 0.5 nefunguje u tak vzácného jevu — F1 jako metrika "porazilo/neporazilo triviální baseline" je u zdroj-centrické klasifikace **špatně položená otázka při jakémkoliv fixním prahu**. Správná metrika zůstává LIFT/PR-AUC (threshold-independent) dokud rozhodovací logika nepřejde na VOI/typovanou nejistotu místo binárního prahu.
 3. **Ground truth na úrovni zdroje vyžaduje jinou definici "known evidence"** — aktuální `GroundTruthLabel`/confusion matrix logika je psaná pro destinace-centrické klíče; přepis na zdroj-centrické vyžaduje paralelní, ne nahrazující, evaluační cestu (žádná regrese v existujících ablacích A-D).
 
 ## Honestní omezení
