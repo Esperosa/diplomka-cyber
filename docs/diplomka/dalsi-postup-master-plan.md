@@ -22,10 +22,10 @@ Toto kolo navíc přímo vedlo k 6 opraveným chybám (N7-N10, viz `souhrn-vysle
 - [x] H1 změřeno na jednom lab cíli (poctivě přeznačeno jako "lehký vs. hlubší aktivní", ne "pasivní vs. aktivní").
 - [x] H3 strukturální blok zdokumentován s konkrétním, splnitelným požadavkem na odblokování.
 - [x] H4 baseline pro budoucí kalibraci změřen a honestně reportován.
-- [ ] H1 změřeno na ≥2 nezávislých lab cílech (Deliverable 15, next).
-- [ ] H3 skutečně změřeno na lab cíli s ≥2-3 nálezy různé jistoty (Deliverable 15, next).
-- [ ] H2 a H5 mají explicitní, zdůvodněný "mimo rozsah" zápis v `souhrn-vysledku-a-hypotez.md` (ne jen "netestováno"/"neověřeno" bez vysvětlení proč se to nebude stavět).
-- [ ] Všechny citlivé numerické tvrzení v `docs/diplomka/eval/*.md` mají odpovídající regresní assert v kódu (zatím jen CTU-13 cross-dataset; IoT-23 ablace A/B/C/D baseline čísla ještě ne).
+- [x] H1 změřeno na ≥2 nezávislých lab cílech (Deliverable 15/16 — Juice Shop + Grafana).
+- [x] H3 skutečně změřeno na lab cíli s ≥2-3 nálezy různé jistoty (Deliverable 15/16 — VOI 16× méně kontrol, 2/3 nálezů).
+- [x] H2 a H5 mají explicitní, zdůvodněný "mimo rozsah" zápis v `souhrn-vysledku-a-hypotez.md`.
+- [x] Všechny citlivé numerické tvrzení v `docs/diplomka/eval/*.md` mají odpovídající regresní assert v kódu (CTU-13 cross-dataset + IoT-23 ablace A/D).
 
 Done = každý bod zaškrtnutý a ověřitelný čtením repa, ne subjektivní pocit "je to dost dobré".
 

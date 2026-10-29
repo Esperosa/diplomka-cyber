@@ -321,6 +321,21 @@ mod tests {
             first.decision_action_count,
             first.malicious_detailed_labels,
         );
+
+        // Regresni assert (Deliverable 15/16 Definition-of-Done, stejny duvod jako N10 u
+        // CTU-13): tohle NEodporuje komentari vyse - "prvni zmerena hodnota, ne cil k
+        // dosazeni" znamena, ze se k tomuto cislu nenavrhuje detektor, ne ze cislo nesmi
+        // byt pinovane proti tichemu rozjetí s `docs/diplomka/eval/baseline-iot23.md`.
+        assert_eq!(
+            (
+                first.confusion.true_positive,
+                first.confusion.false_positive,
+                first.confusion.false_negative,
+                first.confusion.true_negative
+            ),
+            (2, 6, 1, 1),
+            "TP/FP/FN/TN ablace A na IoT-23 44-1 se rozesly s docs/diplomka/eval/baseline-iot23.md - pokud je zmena zamerna, oprav i dokumentaci"
+        );
     }
 
     #[test]
@@ -384,6 +399,21 @@ mod tests {
             "IoT-23 44-1 trivialni baseline (vse=malicious): precision={trivial_p:.3} recall={trivial_r:.3} f1={trivial_f1:.3} (srovnej s ablaci A vyse)"
         );
 
+        // Regresni assert (Deliverable 15/16 Definition-of-Done): pinuje cisla citovana
+        // v docs/diplomka/eval/baseline-iot23.md a cross-dataset-ctu13.md proti tiche
+        // regresi, stejny duvod jako N10 u CTU-13.
+        let approx = |actual: f64, expected: f64| (actual - expected).abs() < 1e-3;
+        assert!(
+            approx(a.confusion.precision(), 0.250) && approx(a.confusion.recall(), 0.667),
+            "ablace A na IoT-23: precision={:.3} recall={:.3}, cekano 0.250/0.667",
+            a.confusion.precision(),
+            a.confusion.recall()
+        );
+        assert!(
+            approx(trivial_p, 0.300) && approx(trivial_f1, 0.462),
+            "trivialni baseline na IoT-23: precision={trivial_p:.3} f1={trivial_f1:.3}, cekano 0.300/0.462"
+        );
+
         // Ablace C pridava multi_target_pattern nalezy s dst_port=None, ktere confusion
         // matrix (klicovana (dst_ip,proto,port)) nikdy nezachyti jako predicted_positive -
         // proto C a B musi mit STEJNOU confusion matrix, jen C muze mit vic findings/events.
@@ -420,6 +450,14 @@ mod tests {
             d.confusion.precision(),
             d.confusion.recall(),
             d.confusion.f1(),
+        );
+
+        // Regresni assert (Deliverable 15/16 Definition-of-Done): pinuje cislo citovane
+        // v docs/diplomka/eval/ablation-d-multiscale.md (127 events, 4.7x vs. A) proti
+        // tiche regresi.
+        assert_eq!(
+            d.correlated_event_count, 127,
+            "ablace D na IoT-23 pocet events se rozesel s docs/diplomka/eval/ablation-d-multiscale.md"
         );
 
         assert!(
