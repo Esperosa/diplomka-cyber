@@ -45,6 +45,55 @@ pub(crate) fn detect_connection_anomalies(
     events
 }
 
+/// Deliverable 19 (H4 kalibrace): vystavuje stejny kontinualni `score`, ktery
+/// `inductive_outlier_events` uz pocita interne, ale do teto chvile ho vratila jen
+/// pro klice, ktere prekrocily prah 3.2/2.4 (a jen zabalene do zpravy stringu, ne jako
+/// cislo). Kalibrace potrebuje score pro VSECHNY klice (count>=3), ne jen ty, co uz
+/// presly binarni branou - jinak by trenovaci data pro isotonic regresi byla
+/// systematicky vychylena (chybely by vsechny "below threshold" body).
+pub(crate) fn score_connection_keys(
+    connections: &[ConnectionObservation],
+) -> HashMap<(String, String, u16), f64> {
+    let mut aggregates: HashMap<ServiceKey, ConnectionAggregate> = HashMap::new();
+    for connection in connections {
+        let Some(port) = connection.dst_port else {
+            continue;
+        };
+        let key = (connection.dst_ip.clone(), connection.proto.clone(), port);
+        let aggregate = aggregates.entry(key).or_insert_with(|| {
+            ConnectionAggregate::new(connection.timestamp, connection.src_ip.clone())
+        });
+        aggregate.observe(connection);
+    }
+
+    if aggregates.len() < 4 {
+        return HashMap::new();
+    }
+
+    let mut count_values = aggregates
+        .values()
+        .map(|item| item.count as f64)
+        .collect::<Vec<_>>();
+    let mut pps_values = aggregates
+        .values()
+        .map(|item| item.max_pps)
+        .collect::<Vec<_>>();
+    let (count_median, count_mad) = median_and_mad(&mut count_values);
+    let (pps_median, pps_mad) = median_and_mad(&mut pps_values);
+
+    aggregates
+        .into_iter()
+        .filter(|(_, aggregate)| aggregate.count >= 3)
+        .map(|(key, aggregate)| {
+            let timeout_component = aggregate.timeout_ratio() * 4.0;
+            let score = robust_zscore(aggregate.count as f64, count_median, count_mad)
+                .max(robust_zscore(aggregate.max_pps, pps_median, pps_mad))
+                .max(timeout_component);
+            (key, score)
+        })
+        .collect()
+}
+
 fn unexpected_traffic_events(
     unexpected: HashMap<ServiceKey, (u32, DateTime<Utc>)>,
 ) -> Vec<NormalizedEvent> {

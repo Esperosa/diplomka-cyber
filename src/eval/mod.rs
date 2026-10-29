@@ -13,6 +13,7 @@
 // proto je modul z pohledu produkcniho (ne-testovaciho) buildu "nevolany".
 #![allow(dead_code)]
 
+pub mod calibration;
 pub mod dataset_replay;
 pub mod ground_truth;
 pub mod source;
