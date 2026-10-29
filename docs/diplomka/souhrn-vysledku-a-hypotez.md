@@ -1,4 +1,4 @@
-# Souhrn výsledků (Deliverables 1–23) a vztah k výzkumným hypotézám H1–H5
+# Souhrn výsledků (Deliverables 1–24) a vztah k výzkumným hypotézám H1–H5
 
 **Status: konsolidace k 29. 10. 2026, OPRAVENO po nezávislém master-plan auditu (3 agenti, Opus + pragmatik + skeptik).** Návrhový dokument (sekce 11) definuje 5 výzkumných hypotéz pro diplomku. Tento dokument mapuje, co z dosavadních deliverables tyto hypotézy skutečně testuje — **honestně**, včetně částečně negativních výsledků, ne jako seznam úspěchů.
 
@@ -39,6 +39,7 @@
 | 21 | H1 v doslovném znění poprvé změřeno se skutečným Zeek 9.0.1 (tcpdump sidecar + offline Zeek analýza) — pasivní 3 findings, pasivní+aktivní 5 findings | `src/lab.rs`, `docs/diplomka/eval/h1-literal-real-zeek-passive-vs-active.md` | Hotovo |
 | 22 | Identity vrstva poprvé testována na reálné síti (Docker bridge, skutečné ARP objevování) — DHCP renewal i NAT/swap správně rozlišeny | `src/identity_lab.rs`, `docs/diplomka/eval/identity-layer-real-network.md` | Hotovo |
 | 23 | Verification Planner EVOI vstupy odvozené z 5 reálných měření (audit N6, bounded fix) — runtime 500ms odhad vs. 2ms realita | `src/case_history.rs`, `docs/diplomka/eval/evoi-derived-from-measurements.md` | Hotovo |
+| 24 | H5 krok 1 — oprava claimed_by fencing bugu (split-brain riziko) + lease navázaný na config + reálný souběžný test (4 vlákna, 20 jobů, 0 double-claimů) | `src/platform.rs`, `docs/diplomka/eval/h5-platform-correctness-fixes.md` | Hotovo |
 | 14 | Oprava CTU-13 label bugu + triviální baseline + hash fix (nezávislý audit, kolo 1) | `src/eval/ground_truth.rs`, `src/eval/dataset_replay.rs` | Hotovo |
 | 15 | Oprava Virut/RBot, H1 terminologie, IoT-23 stejná třída chyby jako bod 14.1, regresní asserty na CTU-13 čísla (nezávislý audit, kolo 2) | `src/eval/sources/iot23.rs`, `docs/diplomka/eval/h1-passive-vs-active.md` | Hotovo |
 

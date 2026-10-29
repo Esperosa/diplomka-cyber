@@ -869,7 +869,12 @@ fn main() -> anyhow::Result<()> {
                     &display_name,
                     &capabilities,
                 )?;
-                let message = broker::claim_one(&broker_config, &args.node_id, 500, 30_000)?;
+                // min_idle_ms pro XAUTOCLAIM navazany na job_lease_s (Deliverable 24,
+                // produkcni-plan.md) - drive hardcoded 30_000 bez ohledu na
+                // konfigurovany lease, takze reclaim stale zpravy mohl probehnout
+                // driv/pozdeji, nez sama platform.rs lease skutecne vyprsela.
+                let min_idle_ms = (args.job_lease_s.max(0) as usize).saturating_mul(1000);
+                let message = broker::claim_one(&broker_config, &args.node_id, 500, min_idle_ms)?;
                 let run_id = if let Some(message) = message {
                     if let Some(job) = platform::claim_job_by_id(
                         &args.db,
@@ -879,22 +884,36 @@ fn main() -> anyhow::Result<()> {
                     )? {
                         match run_pipeline(spec_to_beh_args(job.spec)?) {
                             Ok(report) => {
-                                platform::mark_job_succeeded(
+                                let fenced = platform::mark_job_succeeded(
                                     &args.db,
                                     job.id,
+                                    &args.node_id,
                                     &report.run.run_id,
                                     job.schedule_interval_s,
                                 )?;
+                                if !fenced {
+                                    eprintln!(
+                                        "Job {} dobehl uspesne, ale jeho lease uz drzi jiny worker - vysledek {} se nezapsal",
+                                        job.id, report.run.run_id
+                                    );
+                                }
                                 broker::ack(&broker_config, &message.stream_id)?;
                                 Some(report.run.run_id)
                             }
                             Err(error) => {
-                                platform::mark_job_failed(
+                                let fenced = platform::mark_job_failed(
                                     &args.db,
                                     job.id,
+                                    &args.node_id,
                                     &error.to_string(),
                                     job.schedule_interval_s,
                                 )?;
+                                if !fenced {
+                                    eprintln!(
+                                        "Job {} selhal, ale jeho lease uz drzi jiny worker - chybovy stav se nezapsal",
+                                        job.id
+                                    );
+                                }
                                 broker::ack(&broker_config, &message.stream_id)?;
                                 return Err(error);
                             }
@@ -1014,7 +1033,10 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Broker(BrokerCommand::WorkerRun(args)) => {
             let config = broker::RedisBrokerConfig::for_uri(&args.broker_uri);
-            let message = broker::claim_one(&config, &args.node_id, 500, 30_000)?;
+            // min_idle_ms navazany na --lease-s (drive hardcoded 30_000, args.lease_s
+            // existoval, ale nebyl pro tohle vubec pouzit - Deliverable 24).
+            let min_idle_ms = (args.lease_s.max(0) as usize).saturating_mul(1000);
+            let message = broker::claim_one(&config, &args.node_id, 500, min_idle_ms)?;
             println!("{}", serde_json::to_string_pretty(&message)?);
         }
         Command::ExternalSql(ExternalSqlCommand::Init(args)) => {

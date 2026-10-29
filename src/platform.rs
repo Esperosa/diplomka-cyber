@@ -1030,12 +1030,19 @@ pub fn claim_job_by_id(
     }))
 }
 
+/// `claimed_by` fencing (Deliverable 24, produkcni-plan.md): bez tohohle WHERE
+/// podminky muze stale worker (jehoz lease uz vyprsela a jiny worker job znovu
+/// prevzal pres `claim_due_job`/`claim_job_by_id`) prepsat vysledek, co prave pise
+/// NOVY vlastnik - klasicky lost-update/split-brain bug. Vraci `false`, pokud se
+/// fence neuplatnil (job uz nikdo jiny prevzal) - volajici to musi zalogovat, ne tise
+/// ignorovat, protoze to znamena, ze vysledek tohoto behu se NEZAPSAL.
 pub fn mark_job_succeeded(
     path: &Path,
     job_id: i64,
+    claimed_by: &str,
     run_id: &str,
     schedule_interval_s: Option<i64>,
-) -> Result<()> {
+) -> Result<bool> {
     let conn = open_connection(path)?;
     let now = Utc::now();
     let (status, next_run_at) = if let Some(interval) = schedule_interval_s {
@@ -1046,8 +1053,9 @@ pub fn mark_job_succeeded(
     } else {
         ("succeeded", None)
     };
-    conn.execute(
-        "
+    let affected = conn
+        .execute(
+            "
         UPDATE jobs
         SET status = ?1,
             next_run_at = COALESCE(?2, next_run_at),
@@ -1056,20 +1064,29 @@ pub fn mark_job_succeeded(
             updated_at = ?3,
             last_run_id = ?4,
             last_error = NULL
-        WHERE id = ?5
+        WHERE id = ?5 AND claimed_by = ?6
         ",
-        params![status, next_run_at, format_dt(now), run_id, job_id],
-    )
-    .map_err(to_processing_error)?;
-    Ok(())
+            params![
+                status,
+                next_run_at,
+                format_dt(now),
+                run_id,
+                job_id,
+                claimed_by
+            ],
+        )
+        .map_err(to_processing_error)?;
+    Ok(affected > 0)
 }
 
+/// Stejny `claimed_by` fence jako `mark_job_succeeded` - viz tamni komentar.
 pub fn mark_job_failed(
     path: &Path,
     job_id: i64,
+    claimed_by: &str,
     error: &str,
     schedule_interval_s: Option<i64>,
-) -> Result<()> {
+) -> Result<bool> {
     let conn = open_connection(path)?;
     let now = Utc::now();
     let (status, next_run_at) = if let Some(interval) = schedule_interval_s {
@@ -1080,8 +1097,9 @@ pub fn mark_job_failed(
     } else {
         ("failed", format_dt(now))
     };
-    conn.execute(
-        "
+    let affected = conn
+        .execute(
+            "
         UPDATE jobs
         SET status = ?1,
             next_run_at = ?2,
@@ -1089,18 +1107,19 @@ pub fn mark_job_failed(
             claim_until = NULL,
             updated_at = ?3,
             last_error = ?4
-        WHERE id = ?5
+        WHERE id = ?5 AND claimed_by = ?6
         ",
-        params![
-            status,
-            next_run_at,
-            format_dt(now),
-            truncate_error(error),
-            job_id
-        ],
-    )
-    .map_err(to_processing_error)?;
-    Ok(())
+            params![
+                status,
+                next_run_at,
+                format_dt(now),
+                truncate_error(error),
+                job_id,
+                claimed_by
+            ],
+        )
+        .map_err(to_processing_error)?;
+    Ok(affected > 0)
 }
 
 pub fn worker_cycle<F>(
@@ -1122,11 +1141,24 @@ where
     };
     match executor(job.spec) {
         Ok(run_id) => {
-            mark_job_succeeded(path, job.id, &run_id, job.schedule_interval_s)?;
+            let fenced =
+                mark_job_succeeded(path, job.id, node_id, &run_id, job.schedule_interval_s)?;
+            if !fenced {
+                return Err(BakulaError::Processing(format!(
+                    "Job {} ({}) dobehl uspesne, ale jeho lease uz drzi jiny worker - vysledek {run_id} se NEZAPSAL (claimed_by fence)",
+                    job.id, job.name
+                )));
+            }
             Ok(Some(run_id))
         }
         Err(error) => {
-            mark_job_failed(path, job.id, &error, job.schedule_interval_s)?;
+            let fenced = mark_job_failed(path, job.id, node_id, &error, job.schedule_interval_s)?;
+            if !fenced {
+                return Err(BakulaError::Processing(format!(
+                    "Job {} ({}) selhal ({error}), ale jeho lease uz drzi jiny worker - chybovy stav se NEZAPSAL (claimed_by fence)",
+                    job.id, job.name
+                )));
+            }
             Err(BakulaError::Processing(format!(
                 "Job {} ({}) selhal: {error}",
                 job.id, job.name
@@ -1368,6 +1400,9 @@ fn default_abuseipdb_key_env() -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
     use super::*;
 
     /// Jen 6 poli `PipelineJobSpec` nema `#[serde(default...)]` (workspace_root, nazev,
@@ -1415,6 +1450,77 @@ mod tests {
             "job zasekly v 'running' s vyprselym claim_until musi byt znovu nalezen"
         );
         assert_eq!(recovered.unwrap().id, job_id);
+    }
+
+    /// Regresni test na bezpecnostni bug (Deliverable 24, produkcni-plan.md):
+    /// `mark_job_succeeded`/`mark_job_failed` drive nemely `claimed_by` fence -
+    /// stale worker (jehoz lease uz vyprsela a jiny worker job znovu prevzal) mohl
+    /// prepsat vysledek, co prave pise NOVY vlastnik. Scenar: node-a prevezme job,
+    /// jeho lease vyprsi, node-b job znovu prevezme a zacne pracovat, pak se node-a
+    /// (opozdene, po padu/zpomaleni) pokusi dokoncit svou PUVODNI, uz neplatnou
+    /// praci - tohle MUSI byt no-op (vraci false), ne tiche prepsani.
+    #[test]
+    fn mark_job_succeeded_is_fenced_against_stale_worker_after_job_was_reclaimed() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db_path = temp.path().join("platform.sqlite");
+        init_database(&db_path).expect("init db");
+
+        let job_id =
+            enqueue_job(&db_path, "test-job", &minimal_spec(), None, None).expect("enqueue");
+
+        let first_claim = claim_due_job(&db_path, "node-a", 60, true)
+            .expect("claim ok")
+            .expect("node-a musi job prevzit");
+        assert_eq!(first_claim.id, job_id);
+
+        // Simulace: node-a lease vyprsela, aniz by node-a dokoncil praci.
+        let conn = open_connection(&db_path).expect("open connection");
+        let expired = Utc::now() - chrono::Duration::seconds(120);
+        conn.execute(
+            "UPDATE jobs SET claim_until = ?1 WHERE id = ?2",
+            params![format_dt(expired), job_id],
+        )
+        .expect("force-expire claim");
+        drop(conn);
+
+        // node-b prevezme stejny job (legitimne, protoze lease vyprsela).
+        let second_claim = claim_due_job(&db_path, "node-b", 60, true)
+            .expect("claim ok")
+            .expect("node-b musi job znovu prevzit po vyprseni node-a lease");
+        assert_eq!(second_claim.id, job_id);
+
+        // node-a (opozdene, uz bez platneho claimu) se pokusi dokoncit SVOJI,
+        // uz neplatnou praci - fence to musi odmitnout.
+        let node_a_fenced = mark_job_succeeded(&db_path, job_id, "node-a", "run-from-node-a", None)
+            .expect("mark_job_succeeded nesmi vratit chybu, jen false");
+        assert!(
+            !node_a_fenced,
+            "stale node-a nesmi moct dokoncit job, ktery uz drzi node-b"
+        );
+
+        // Status musi zustat 'running' (node-b stale pracuje), ne 'succeeded' s
+        // vysledkem od node-a.
+        let conn = open_connection(&db_path).expect("open connection");
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM jobs WHERE id = ?1",
+                params![job_id],
+                |row| row.get(0),
+            )
+            .expect("precist status");
+        drop(conn);
+        assert_eq!(
+            status, "running",
+            "job nesmi byt oznacen jako hotovy vysledkem od stale workeru"
+        );
+
+        // node-b (skutecny drzitel claimu) dokonci job legitimne - tohle MUSI projit.
+        let node_b_fenced = mark_job_succeeded(&db_path, job_id, "node-b", "run-from-node-b", None)
+            .expect("mark_job_succeeded nesmi vratit chybu");
+        assert!(
+            node_b_fenced,
+            "skutecny drzitel claimu (node-b) musi byt schopen job dokoncit"
+        );
     }
 
     #[test]
@@ -1494,5 +1600,85 @@ mod tests {
             recovered.is_some(),
             "claim_job_by_id musi umoznit rucni znovu-naroky zasekleho 'running' jobu"
         );
+    }
+
+    /// Deliverable 24 (produkcni-plan.md, H5 krok 1): skutecny souvezny test, ne jen
+    /// sekvencni simulace vyprseleho leasu. 4 OS vlakna soucasne bijou o 20 joby ve
+    /// STEJNEM SQLite souboru pres `claim_due_job` (`TransactionBehavior::Immediate`
+    /// ma dat vzajemne vyloucenou SELECT+UPDATE dvojici). Overuje presne tu obavu, co
+    /// skeptik v produkcnim auditu vznesl - "atomicita claim-query pod konkurenci
+    /// nikdy neverena" - jde o vlakna v jednom procesu, ne oddelene OS procesy (ty
+    /// jsou dalsi krok, Faze 2 v produkcnim planu), ale SQLite zamykani souboru je
+    /// stejny mechanismus, ktery by resil i konkurenci mezi procesy na jednom stroji.
+    #[test]
+    fn concurrent_claim_due_job_never_double_claims_across_real_threads() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db_path = temp.path().join("platform.sqlite");
+        init_database(&db_path).expect("init db");
+
+        const JOB_COUNT: usize = 20;
+        const WORKER_COUNT: usize = 4;
+
+        let mut job_ids = Vec::with_capacity(JOB_COUNT);
+        for index in 0..JOB_COUNT {
+            let job_id = enqueue_job(
+                &db_path,
+                &format!("concurrent-test-job-{index}"),
+                &minimal_spec(),
+                None,
+                None,
+            )
+            .expect("enqueue");
+            job_ids.push(job_id);
+        }
+
+        let claimed_by: Arc<Mutex<HashMap<i64, String>>> = Arc::new(Mutex::new(HashMap::new()));
+        let mut handles = Vec::with_capacity(WORKER_COUNT);
+        for worker_index in 0..WORKER_COUNT {
+            let db_path = db_path.clone();
+            let claimed_by = Arc::clone(&claimed_by);
+            handles.push(thread::spawn(move || {
+                let node_id = format!("thread-worker-{worker_index}");
+                loop {
+                    match claim_due_job(&db_path, &node_id, 60, true) {
+                        Ok(Some(job)) => {
+                            let mut map = claimed_by.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                            if let Some(existing) = map.insert(job.id, node_id.clone()) {
+                                panic!(
+                                    "job {} byl prevzat dvakrat - driv '{existing}', ted '{node_id}' - claim neni atomicky",
+                                    job.id
+                                );
+                            }
+                            drop(map);
+                            let fenced =
+                                mark_job_succeeded(&db_path, job.id, &node_id, "run", None)
+                                    .expect("mark_job_succeeded");
+                            assert!(fenced, "vlastni claim musi byt schopen job dokoncit");
+                        }
+                        Ok(None) => break,
+                        Err(error) => panic!("claim_due_job selhal: {error}"),
+                    }
+                }
+            }));
+        }
+        for handle in handles {
+            handle.join().expect("worker vlakno nesmi panikarit");
+        }
+
+        let final_map = claimed_by
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert_eq!(
+            final_map.len(),
+            JOB_COUNT,
+            "vsech {JOB_COUNT} jobu musi byt prevzato presne jednou celkem, dostal jsem {}",
+            final_map.len()
+        );
+        for job_id in &job_ids {
+            assert!(
+                final_map.contains_key(job_id),
+                "job {job_id} nebyl nikdy prevzat zadnym vlaknem"
+            );
+        }
     }
 }
