@@ -1,0 +1,44 @@
+# Produkční plán (ne jen diplomka) — syntéza 3-agentního kola (29. 10. 2026)
+
+**Důvod vzniku tohoto dokumentu:** uživatel explicitně odmítl rámec "jen diplomka" pro rozhodnutí o H5/H2/firewall/DNS/IPS — "produkční program by to měl umět", H5 "nesmí být vyřazeno", H2 "netestováno... je také velký problém". Tohle není routinní inženýrské rozhodnutí (kde rozhoduju autonomně) — je to skutečná změna rámce pro celý projekt, proto prošlo stejnou 3-agentní metodikou (Opus comprehensive + pragmatik + skeptik) jako předchozí master plán, teď s explicitním zadáním "neber to jako diplomku, ber to jako produkční program".
+
+## Co se všichni 3 agenti shodli (vysoká důvěra)
+
+**H2 a H5 jsou jiná kategorie než firewall/DNS/IPS** — jsou to vlastnosti JÁDRA, které už existuje (správnost fúze evidence, správnost škálování workerů), ne nové, nabalené subsystémy. Design dokument sám (sekce 10) řadí "source-aware evidence fusion" a distribuovaný broker do P0/P1, ne P2/P3 — firewall/DNS/IPS jsou tam explicitně P2. Skeptik nezávisle došel ke stejnému závěru jako pragmatik a Opus: **re-scoping H2 a H5 zpět do rozsahu je obhajitelný na vlastních termínech návrhového dokumentu, ne jen na emoční reakci.**
+
+### H2 — ověřeno přímo v kódu, ne jen odhadnuto
+
+- `src/passive/zeek.rs` a `src/passive/suricata.rs` už extrahují 5-tuple/timestamp data, co Community ID hash potřebuje — **join-key funkce je otázka dní, ne týdnů**.
+- `src/correlation_v2.rs` dnes vůbec neví o Suricatě (grep na `community_id|flow_id|suricata` = 0 výsledků) — žádná cross-senzorová fúze neexistuje v žádné formě.
+- Skutečná H2 claim (korekce závislosti, ne jen deduplikace) vyžaduje novou fúzní vrstvu s váhováním částečně závislé evidence — **to je nový analytický design, 1-2 týdny, ne parser patch**.
+- **IoT-23/CTU-13 jsou single-sensor, takže plně statisticky H2 nemůžou testovat** — ale strukturální test ANO, pomocí existujícího multiservice labu (Deliverable 15/16/21): přidat Suricata sidecar vedle už fungujícího tcpdump+Zeek capture (Deliverable 21), žádný nový dataset potřeba.
+
+### H5 — "docela dost blízko" je optimistické, ale ne bezdůvodné
+
+- `src/broker.rs` (XREADGROUP/XAUTOCLAIM/XACK) je skutečně solidní, testovaná distribuovaná korektnost — **to je ten "blízko" kus, co uživatel vnímá správně**.
+- ALE: `src/platform.rs` state store je SQLite na jednom souboru — **žádný druhý uzel nemůže bezpečně sdílet stav přes síť**. To je skutečný blokátor, ne ceremonie.
+- Žádný test ani kód nezaručuje unikátní `consumer` jméno mezi víc procesy; atomicita claim-query v `platform.rs` není ověřená pod konkurencí; žádný skutečný test se 2 reálnými worker procesy neexistuje.
+- `mark_job_succeeded`/`mark_job_failed` nemají `WHERE claimed_by = ?` fencing — stale worker může přepsat výsledek. Lease reclaim hardcoded na 30s, ne navázaný na `job_lease_s`. Žádný DLQ.
+
+## Kde se agenti NESHODLI — potřebuje rozhodnutí uživatele, ne mé
+
+**Firewall/DNS/IPS/multi-tenant/HA-DR**: Opus a pragmatik navrhli konkrétní MVP sekvence (SOAR→firewall TTL-sets→DNS RPZ→IPS), protože "produkce to teď chce". Skeptik nezávisle nesouhlasí: design dokument sám tohle řadí do P2/P3, nulová produkční instalace/zákazník existuje, a "re-opening těchto rozhodnutí dny po jejich uzavření bez nového faktického zjištění je žlutá vlajka pro emoční/completionistické přehodnocení, ne nový fakt". Skeptik to řadí jako "nejvyšší riziko scope creepu ze všech osmi položek... nejpravděpodobněji tlačené z completionistických důvodů ('porazit Fortinet'), ne z potřeby korelační platformy".
+
+**Multi-tenant/HA-DR**: všichni 3 souhlasí, že spouštěcí podmínka je konkrétní (2. placený zákazník / enforcement vrstva live v produkci), ne kalendářní — tohle zůstává odloženo bez kontroverze.
+
+**Supply-chain**: levné, bez rizika scope creepu, všichni doporučují udělat brzy (SBOM, pinned deps, signed artifacts) bez ohledu na zbytek debaty.
+
+## Rozhodnutí
+
+1. **H2 se vrací do rozsahu** — stavím Community ID join-key + dependency-aware fúzi, bounded (dny až 2 týdny), reuse existujícího multiservice labu.
+2. **H5 se vrací do rozsahu, ale right-sized** — nejdřív uzavřu reálné korektnostní mezery (claimed_by fencing, lease navázaný na config, DLQ, connection pooling) a postavím test se 2 REÁLNÝMI worker procesy proti jednomu Redis+DB (levné, honestní, dny) — PŘED skokem na Postgres migraci a multi-host test (to je skutečný příští blokátor, větší investice, další fáze).
+3. **Firewall/DNS/IPS/SOAR zůstávají odloženy (rozhodnutí uživatele, 29.10.2026, po předložení obou stran argumentace).** Skeptikova pozice potvrzena: zůstává P2/P3 jako v návrhu, dokud nebude reálné nasazení/zákazník. Žádná implementace tady nezačíná — jen H2/H5.
+4. **Multi-tenant/HA-DR** — odloženo, trigger-based (2. zákazník / enforcement live), bez kontroverze mezi agenty.
+5. **Supply-chain** — levné, bez kontroverze, zařazeno do plánu jako nízko-prioritní ale snadný krok, ne aktuálně prováděno.
+
+## Fázovaný plán (syntéza, Fáze 0 = jádro, hotovo)
+
+- **Fáze 1 (týdny, začíná hned)**: H5 korektnostní opravy + 2-proces test (`src/platform.rs`, `src/broker.rs`); H2 Community ID + fúzní vrstva (`src/passive/community_id.rs`, nový `src/fusion.rs`) + Suricata sidecar v multiservice labu.
+- **Fáze 2 (po Fázi 1, větší investice)**: Postgres migrace pro skutečný multi-host H5; re-validace ablací B/C/E s H2 fúzí na dual-sensor datech.
+- **Fáze 3 (odloženo, rozhodnuto 29.10.2026)**: firewall/DNS/IPS/SOAR zůstává P2/P3 podle skeptika a návrhu samotného — uživatel potvrdil tuhle volbu po předložení obou stran. MVP sekvence od Opus/pragmatika (SOAR→firewall TTL-sety→DNS RPZ→IPS) zůstává zapsaná výše pro budoucí referenci, až bude reálné nasazení/zákazník.
+- **Fáze 4 (trigger-based, ne kalendářní)**: multi-tenant (2. zákazník), HA/DR (enforcement live v produkci), supply-chain hardening (první procurement security review).
