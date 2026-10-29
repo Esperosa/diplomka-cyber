@@ -614,6 +614,7 @@ mod tests {
     /// jistoty soucasne - presne ta kombinace, kterou `h3-measurement-difficulty.md`
     /// identifikoval jako chybejici infrastrukturu pro smysluplne H3 mereni.
     #[test]
+    #[ignore = "vyzaduje Docker + nainstalovane nmap/httpx/nuclei, viz docs/diplomka/eval/first-active-lab-verification.md"]
     fn multiservice_lab_exposes_three_distinct_findings_and_one_clean_control() {
         let _guard = LAB_PORT_LOCK
             .lock()
@@ -683,6 +684,7 @@ mod tests {
     /// "VOI" = jen sablona predikovana z pasivniho titulku, 0 kontrol kde titulek
     /// nema specifickou stopu.
     #[test]
+    #[ignore = "vyzaduje Docker + nainstalovane nmap/httpx/nuclei, viz docs/diplomka/eval/first-active-lab-verification.md"]
     fn h3_voi_informed_template_selection_recovers_most_findings_with_far_fewer_checks() {
         let _guard = LAB_PORT_LOCK
             .lock()
@@ -806,6 +808,7 @@ mod tests {
     /// sidecar sdili network namespace s Juice Shop kontejnerem, takze zachyti presne
     /// tu same provoz, kterou aktivni sken vygeneruje.
     #[test]
+    #[ignore = "vyzaduje Docker + nainstalovane nmap/httpx/nuclei, viz docs/diplomka/eval/first-active-lab-verification.md"]
     fn h1_literal_real_zeek_passive_vs_passive_plus_active_on_juice_shop() {
         let _guard = LAB_PORT_LOCK
             .lock()
@@ -940,6 +943,7 @@ mod tests {
     /// KONKRETNI OBSAH vysledku (otevreny port, detekovana HTTP sluzba), ne jen "prikaz
     /// dobehl bez erroru".
     #[test]
+    #[ignore = "vyzaduje Docker + nainstalovane nmap/httpx/nuclei, viz docs/diplomka/eval/first-active-lab-verification.md"]
     fn real_nmap_and_httpx_scan_finds_juice_shop_http_service() {
         let _guard = LAB_PORT_LOCK
             .lock()
@@ -995,6 +999,7 @@ mod tests {
     /// metriky). Test asertuje ZMERENOU realitu, ne predem predpokladany vysledek -
     /// presne to je duvod delat aktivni overeni, ne jen teoreticky odhadovat.
     #[test]
+    #[ignore = "vyzaduje Docker + nainstalovane nmap/httpx/nuclei, viz docs/diplomka/eval/first-active-lab-verification.md"]
     fn nuclei_finds_real_exposed_prometheus_metrics_endpoint_on_juice_shop() {
         let _guard = LAB_PORT_LOCK
             .lock()
@@ -1030,6 +1035,7 @@ mod tests {
     /// odhady (ne zmerena), proto se `plan_verification` nikde netvari, ze je to
     /// kalibrovane - presne stejna disciplina jako ve `verification_planner.rs` testech.
     #[test]
+    #[ignore = "vyzaduje Docker + nainstalovane nmap/httpx/nuclei, viz docs/diplomka/eval/first-active-lab-verification.md"]
     fn full_pipeline_plans_next_verification_for_real_metrics_exposure_finding() {
         let _guard = LAB_PORT_LOCK
             .lock()
@@ -1103,6 +1109,7 @@ mod tests {
     /// diplomce je cely cyklus Observation -> Finding -> Hypothesis -> Planner ->
     /// EXEKUCE uzavren na realnych datech, ne jen navrzen.
     #[test]
+    #[ignore = "vyzaduje Docker + nainstalovane nmap/httpx/nuclei, viz docs/diplomka/eval/first-active-lab-verification.md"]
     fn executing_planners_chosen_candidate_reveals_real_sensitive_metric_names() {
         let _guard = LAB_PORT_LOCK
             .lock()
@@ -1187,6 +1194,7 @@ mod tests {
     /// odhad - zadna historie pro nej jeste nebyla zmerena, zapsano honestne, ne
     /// zamlceno).
     #[test]
+    #[ignore = "vyzaduje Docker + nainstalovane nmap/httpx/nuclei, viz docs/diplomka/eval/first-active-lab-verification.md"]
     fn verification_candidate_derived_from_repeated_real_measurements_not_a_guessed_constant() {
         let _guard = LAB_PORT_LOCK
             .lock()
@@ -1300,6 +1308,7 @@ mod tests {
     /// nuclei (jediny zdroj `active_checks` v tomhle skenu) - realne porovnani na
     /// stejnych datech ze stejneho behu, ne syntetický protiklad.
     #[test]
+    #[ignore = "vyzaduje Docker + nainstalovane nmap/httpx/nuclei, viz docs/diplomka/eval/first-active-lab-verification.md"]
     fn h1_active_checks_increase_decision_quality_over_passive_only() {
         let _guard = LAB_PORT_LOCK
             .lock()
