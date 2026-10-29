@@ -1,4 +1,4 @@
-# Souhrn výsledků (Deliverables 1–25) a vztah k výzkumným hypotézám H1–H5
+# Souhrn výsledků (Deliverables 1–26) a vztah k výzkumným hypotézám H1–H5
 
 **Status: konsolidace k 29. 10. 2026, OPRAVENO po nezávislém master-plan auditu (3 agenti, Opus + pragmatik + skeptik).** Návrhový dokument (sekce 11) definuje 5 výzkumných hypotéz pro diplomku. Tento dokument mapuje, co z dosavadních deliverables tyto hypotézy skutečně testuje — **honestně**, včetně částečně negativních výsledků, ne jako seznam úspěchů.
 
@@ -41,6 +41,7 @@
 | 23 | Verification Planner EVOI vstupy odvozené z 5 reálných měření (audit N6, bounded fix) — runtime 500ms odhad vs. 2ms realita | `src/case_history.rs`, `docs/diplomka/eval/evoi-derived-from-measurements.md` | Hotovo |
 | 24 | H5 krok 1 — oprava claimed_by fencing bugu (split-brain riziko) + lease navázaný na config + reálný souběžný test (4 vlákna, 20 jobů, 0 double-claimů) | `src/platform.rs`, `docs/diplomka/eval/h5-platform-correctness-fixes.md` | Hotovo |
 | 25 | H2 krok 1 — Community ID join-key, ověřeno proti reálnému Zeek 9.0.1 i Suricata 8.0.7 (bajtově identické hodnoty) | `src/passive/community_id.rs`, `docs/diplomka/eval/h2-community-id-joinkey.md` | Hotovo |
+| 26 | H2 krok 2 — Community ID zapojeno do schématu (`src_port`, `community_id()` metoda), 0 regrese na reálných datech | `src/passive/mod.rs`, `docs/diplomka/eval/h2-schema-wiring.md` | Hotovo |
 | 14 | Oprava CTU-13 label bugu + triviální baseline + hash fix (nezávislý audit, kolo 1) | `src/eval/ground_truth.rs`, `src/eval/dataset_replay.rs` | Hotovo |
 | 15 | Oprava Virut/RBot, H1 terminologie, IoT-23 stejná třída chyby jako bod 14.1, regresní asserty na CTU-13 čísla (nezávislý audit, kolo 2) | `src/eval/sources/iot23.rs`, `docs/diplomka/eval/h1-passive-vs-active.md` | Hotovo |
 

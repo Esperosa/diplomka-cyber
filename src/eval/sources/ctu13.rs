@@ -69,6 +69,9 @@ impl ScenarioSource for Ctu13Source {
         let idx_dur = column("Dur")?;
         let idx_proto = column("Proto")?;
         let idx_src_addr = column("SrcAddr")?;
+        // Deliverable 26 (H2 schema wiring) - `Sport` existuje v CTU-13 binetflow
+        // formatu (audit finding: `ConnectionObservation` driv nemelo src_port vubec).
+        let idx_sport = column("Sport")?;
         let idx_dst_addr = column("DstAddr")?;
         let idx_dport = column("Dport")?;
         let idx_state = column("State")?;
@@ -109,6 +112,7 @@ impl ScenarioSource for Ctu13Source {
             observations.push(ConnectionObservation {
                 timestamp,
                 src_ip: Some(fields[idx_src_addr].trim().to_string()),
+                src_port: fields[idx_sport].trim().parse::<u16>().ok(),
                 dst_ip,
                 proto: fields[idx_proto].trim().to_ascii_lowercase(),
                 dst_port,

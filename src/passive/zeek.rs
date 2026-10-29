@@ -150,6 +150,11 @@ pub fn parse_zeek_dir(
                 timestamp,
                 dst_ip,
                 src_ip: row.get("id.orig_h").cloned(),
+                // Deliverable 26 (H2 schema wiring) - drive se `id.orig_p` vubec necetlo
+                // (audit finding), ackoliv je v conn.log vzdy pritomne vedle id.orig_h.
+                src_port: row
+                    .get("id.orig_p")
+                    .and_then(|value| value.parse::<u16>().ok()),
                 proto: row
                     .get("proto")
                     .cloned()

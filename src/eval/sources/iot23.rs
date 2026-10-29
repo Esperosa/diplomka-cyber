@@ -43,6 +43,10 @@ impl ScenarioSource for Iot23Source {
                 timestamp,
                 dst_ip,
                 src_ip: row.get("id.orig_h").cloned(),
+                // Deliverable 26 (H2 schema wiring) - stejna oprava jako zeek.rs/ctu13.rs.
+                src_port: row
+                    .get("id.orig_p")
+                    .and_then(|value| value.parse::<u16>().ok()),
                 proto: row
                     .get("proto")
                     .cloned()

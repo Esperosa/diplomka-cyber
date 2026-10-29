@@ -25,12 +25,7 @@ use std::net::IpAddr;
 /// `proto` je IP protokolove cislo (6=TCP, 17=UDP, 132=SCTP - stejne hodnoty, ktere uz
 /// `src/passive/zeek.rs`/`src/passive/suricata.rs` z logu ctou). `seed` je 0, pokud
 /// senzory nejsou explicitne nakonfigurovany jinak (Zeek/Suricata vychozi hodnota).
-///
-/// `#[allow(dead_code)]`: join-key funkce je hotova a overena (viz testy), ale jeste
-/// nezapojena do `ConnectionObservation`/`NormalizedEvent` schematu ani do
-/// zeek.rs/suricata.rs parsovani - to je dalsi, samostatny krok H2 (produkcni-plan.md,
-/// Faze 1 pokracuje), ne tento. Zustava docasne nevolana z produkcniho kodu.
-#[allow(dead_code)]
+/// Zapojeno pres `ConnectionObservation::community_id()` (Deliverable 26).
 pub(crate) fn community_id_v1(
     src_ip: IpAddr,
     src_port: u16,

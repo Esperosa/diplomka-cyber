@@ -414,6 +414,7 @@ mod tests {
         ConnectionObservation {
             timestamp: Utc.timestamp_opt(ts, 0).unwrap(),
             src_ip: Some(src_ip.to_string()),
+            src_port: None,
             dst_ip: dst_ip.to_string(),
             proto: "tcp".to_string(),
             dst_port: Some(port),

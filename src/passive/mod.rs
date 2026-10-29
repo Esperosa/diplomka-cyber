@@ -97,6 +97,12 @@ fn parse_suricata_ts(value: &str) -> Result<DateTime<Utc>> {
 pub(crate) struct ConnectionObservation {
     pub(crate) timestamp: DateTime<Utc>,
     pub(crate) src_ip: Option<String>,
+    /// Deliverable 26 (H2 schema wiring) - dřív chybělo (audit finding), ačkoliv
+    /// Zeek `conn.log`'s `id.orig_p` i Suricata eve.json `src_port` ho obě nesou.
+    /// Potřebný pro `community_id()` níže. Docasne nevyuzivane v produkcnim kodu
+    /// mimo testy, dokud nevznikne `src/fusion.rs` (produkcni-plan.md, Faze 1
+    /// pokracuje) - proto `#[allow(dead_code)]` na metode community_id nize.
+    pub(crate) src_port: Option<u16>,
     pub(crate) dst_ip: String,
     pub(crate) proto: String,
     pub(crate) dst_port: Option<u16>,
@@ -110,4 +116,99 @@ pub(crate) struct ConnectionObservation {
     pub(crate) conn_state: Option<String>,
     pub(crate) history: Option<String>,
     pub(crate) missed_bytes: Option<u64>,
+}
+
+impl ConnectionObservation {
+    /// Deliverable 26 (H2 schema wiring): Community ID POCITANY Z existujicich poli,
+    /// ne stored field - zabranuje zastaralosti (kdyby se src_ip/dst_port zmenily
+    /// nezavisle na precomputed hodnote by stary join-key tise zustal). `None`, pokud
+    /// chybi src_ip/src_port (napr. observation bez identifikovaneho zdroje), nebo
+    /// proto neni tcp/udp/sctp - jediny protokoly, co `community_id_v1` umi.
+    #[allow(dead_code)]
+    pub(crate) fn community_id(&self) -> Option<String> {
+        let src_ip: std::net::IpAddr = self.src_ip.as_deref()?.parse().ok()?;
+        let dst_ip: std::net::IpAddr = self.dst_ip.parse().ok()?;
+        let src_port = self.src_port?;
+        let dst_port = self.dst_port?;
+        let proto_num = match self.proto.as_str() {
+            "tcp" => 6,
+            "udp" => 17,
+            "sctp" => 132,
+            _ => return None,
+        };
+        community_id::community_id_v1(src_ip, src_port, dst_ip, dst_port, proto_num)
+    }
+}
+
+#[cfg(test)]
+mod connection_observation_tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn base() -> ConnectionObservation {
+        ConnectionObservation {
+            timestamp: Utc.timestamp_opt(0, 0).unwrap(),
+            src_ip: None,
+            src_port: None,
+            dst_ip: String::new(),
+            proto: "tcp".to_string(),
+            dst_port: None,
+            duration_s: None,
+            orig_bytes: None,
+            resp_bytes: None,
+            total_bytes: None,
+            orig_pkts: None,
+            resp_pkts: None,
+            total_pkts: None,
+            conn_state: None,
+            history: None,
+            missed_bytes: None,
+        }
+    }
+
+    /// Deliverable 26 - stejna referencni hodnota jako
+    /// `community_id::tests::matches_real_zeek_reference_value_for_captured_tcp_flow`,
+    /// ted overena pres cely `ConnectionObservation::community_id()`, ne jen pres
+    /// holou funkci - potvrzuje, ze schema wiring (src_ip/src_port/dst_port/proto)
+    /// skutecne dava stejny vysledek jako primy volani.
+    #[test]
+    fn community_id_matches_real_zeek_reference_through_full_observation() {
+        let observation = ConnectionObservation {
+            src_ip: Some("172.17.0.1".to_string()),
+            src_port: Some(49818),
+            dst_ip: "172.17.0.2".to_string(),
+            dst_port: Some(80),
+            proto: "tcp".to_string(),
+            ..base()
+        };
+        assert_eq!(
+            observation.community_id(),
+            Some("1:nTs1CSdTGlG13eI4k9WSGFAbjAw=".to_string())
+        );
+    }
+
+    #[test]
+    fn community_id_is_none_when_src_port_missing() {
+        let observation = ConnectionObservation {
+            src_ip: Some("172.17.0.1".to_string()),
+            src_port: None,
+            dst_ip: "172.17.0.2".to_string(),
+            dst_port: Some(80),
+            ..base()
+        };
+        assert_eq!(observation.community_id(), None);
+    }
+
+    #[test]
+    fn community_id_is_none_for_unsupported_proto() {
+        let observation = ConnectionObservation {
+            src_ip: Some("172.17.0.1".to_string()),
+            src_port: Some(1),
+            dst_ip: "172.17.0.2".to_string(),
+            dst_port: Some(80),
+            proto: "icmp".to_string(),
+            ..base()
+        };
+        assert_eq!(observation.community_id(), None);
+    }
 }
