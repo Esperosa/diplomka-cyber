@@ -477,7 +477,6 @@ fn authorize_for(
     required_permissions: &[&str],
 ) -> std::result::Result<AuthContext, (StatusCode, String)> {
     let provided = bearer_token(headers).or_else(|| api_key_header(headers));
-    let read_only_request = is_read_only_permissions(required_permissions);
     if let Some(db_path) = state.platform_db.as_deref() {
         let token = provided.ok_or((
             StatusCode::UNAUTHORIZED,
@@ -504,9 +503,9 @@ fn authorize_for(
     if !state.auth_required {
         return Ok(admin_context("anonymous-admin"));
     }
-    if read_only_request {
-        return Ok(admin_context("anonymous-readonly"));
-    }
+    // Fail-closed: bez platform DB vyzaduje KAZDY pozadavek (cteni i zapis) platny
+    // staticky api_token, kdyz je auth_required=true - zadna vyjimka pro cist-only
+    // permissions, jinak je API fakticky vzdy neautentizovane pro cteni.
     let Some(expected) = state.api_token.as_deref() else {
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -520,13 +519,6 @@ fn authorize_for(
             "Chybi nebo je neplatny API token.".to_string(),
         )),
     }
-}
-
-fn is_read_only_permissions(required_permissions: &[&str]) -> bool {
-    !required_permissions.is_empty()
-        && required_permissions
-            .iter()
-            .all(|permission| permission.ends_with(".read") || *permission == "metrics.read")
 }
 
 fn ensure_permissions(

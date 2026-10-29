@@ -474,11 +474,13 @@ fn server_respektuje_api_token() {
     wait_for_server(port);
 
     let client = reqwest::blocking::Client::new();
-    let read_only = client
+    // Fail-closed: cteni bez tokenu musi byt odmitnuto stejne jako zapis, kdyz je
+    // require-api-token zapnute - zadna vyjimka pro cist-only endpointy.
+    let unauthorized_read = client
         .get(format!("http://127.0.0.1:{port}/api/runs"))
         .send()
-        .expect("read-only request");
-    assert_eq!(read_only.status(), 200);
+        .expect("unauthorized read-only request");
+    assert_eq!(unauthorized_read.status(), 401);
 
     let unauthorized_write = client
         .post(format!("http://127.0.0.1:{port}/api/automation/reset"))
