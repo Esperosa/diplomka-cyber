@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 19:10</strong> ·
-  commit <code>e35ef4d</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 19:55</strong> ·
+  commit <code>faebd22</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -134,7 +134,8 @@
       <li><span class="badge badge-green mini">hotovo</span> <b>PR-AUC diagnóza</b>: destinace-centrické skóre (ablace A) je na 2/3 scénářů HŮŘ než náhoda — problém je CO se měří, ne špatný práh</li>
       <li><span class="badge badge-green mini">hotovo</span> <b>reálná oprava nalezena</b>: zdroj-centrické skóre (je HOST anomální, ne SLUŽBA) dává LIFT 24–90× nad náhodou na všech 3 scénářích — <code class="file">score_source_hosts</code></li>
       <li><span class="badge badge-green mini">hotovo</span> <b>ověřeno, jestli se LIFT překládá do klasifikace</b>: naivní přenos prahu 3.2 selže (F1≈triviální baseline); LOSO kalibrace zlepší Brier dramaticky (0,78→0,0004), ale práh 0,5 u prevalence 0,04–0,41 % nic neklasifikuje — honestní rare-event pitfall, argument pro VOI nad fixním prahem</li>
-      <li><span class="badge badge-yellow mini">probíhá</span> zapojení zdroj-centrického skóre do produkční detekce (<code class="file">detect_connection_anomalies</code>) — zatím jen diagnostický test</li>
+      <li><span class="badge badge-green mini">hotovo</span> <b>definitivní uzávěr vlákna o prahu</b>: ani nekruhová LOSO F1-optimalizace (práh z trénovacích foldů) nefunguje — degeneruje na přeučení na 1 odlehlý bod, na Botnet-51 úplně selže (recall=0). LIFT zůstává reálný; binární prah je u tohoto jevu špatný rozhodovací mechanismus</li>
+      <li><span class="badge badge-yellow mini">zbývá</span> vědomě NEzapojeno do produkční detekce přes fixní práh (Deliverable 30 ukázalo, že by to bylo špatné rozhodnutí) — čeká na VOI/typovanou nejistotu místo binárního prahu</li>
       <li><span class="badge badge-yellow mini">probíhá</span> skutečná multi-senzorová fúze s korekcí závislosti zdrojů (H2 doslovně) — ZPĚT V ROZSAHU (29.10.2026, produkční reframing), join-key hotov, viz Produkční plán níže</li>
     </ul>
   </div>
@@ -309,6 +310,11 @@
     <div class="sub">LOSO; ale práh 0,5 u prevalence 0,04–0,41 % nic neklasifikuje (F1=0) — rare-event pitfall</div>
   </div>
   <div class="num-card">
+    <div class="label">LOSO F1-optimální práh (nekruhový)</div>
+    <div class="value">3/3 pokusy selhaly</div>
+    <div class="sub">degeneruje na 1 odlehlý bod; Botnet-51 recall=0 — žádný fixní práh zde nefunguje</div>
+  </div>
+  <div class="num-card">
     <div class="label">H4 kalibrace, Brier skóre</div>
     <div class="value">0.683 → 0.434</div>
     <div class="sub">průměr přes 3 LOSO foldy, zlepšení 3/3</div>
@@ -330,8 +336,8 @@
   </div>
   <div class="num-card">
     <div class="label">Testy (lib, bez broker/lab)</div>
-    <div class="value">110 / 110</div>
-    <div class="sub">0 selhání (broker testy vyžadují živý Redis, nesouvisí); 13 #[ignore] (reálná CTU-13 data)</div>
+    <div class="value">111 / 111</div>
+    <div class="sub">0 selhání lokálně; CI (bez Redis/Docker nástrojů) zelené po opravě #[ignore] na lab:: testech</div>
   </div>
   <div class="num-card">
     <div class="label">Lab testy (Docker)</div>
