@@ -423,4 +423,39 @@ mod tests {
             );
         }
     }
+
+    /// Nasledna otazka z `docs/diplomka/eval/cross-dataset-ctu13.md`: byla 300s
+    /// ablace B horsi nez A kvuli fragmentaci nizko-objemoveho C2 beaconingu
+    /// tumbling oknem (hypoteza, nepotvrzena dalsim merenim)? Sweep `time_window_s`
+    /// misto nechat to jako nepotvrzenou domnenku.
+    #[test]
+    #[ignore = "vyzaduje stazeny CTU-13 vyrez, viz docs/diplomka/dataset-registry.md"]
+    fn ctu13_time_window_sweep_tests_fragmentation_hypothesis() {
+        let dataset = Ctu13Source
+            .load(&dataset_path(
+                "labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv",
+            ))
+            .expect("parse ctu13 excerpt");
+
+        let a = run_ablation(&dataset, 300, AblationVariant::A);
+        println!(
+            "CTU-13 ablace A (okno irelevantni, cely capture): precision={:.3} recall={:.3} f1={:.3}",
+            a.confusion.precision(),
+            a.confusion.recall(),
+            a.confusion.f1()
+        );
+
+        for window_s in [60i64, 300, 900, 1800, 3600, 7200] {
+            let b = run_ablation(&dataset, window_s, AblationVariant::B);
+            println!(
+                "CTU-13 ablace B, time_window_s={window_s}: TP={} FP={} precision={:.3} recall={:.3} f1={:.3} events={}",
+                b.confusion.true_positive,
+                b.confusion.false_positive,
+                b.confusion.precision(),
+                b.confusion.recall(),
+                b.confusion.f1(),
+                b.correlated_event_count,
+            );
+        }
+    }
 }
