@@ -31,7 +31,9 @@ Done = každý bod zaškrtnutý a ověřitelný čtením repa, ne subjektivní p
 
 ## Priorita dalších kroků
 
-1. **Deliverable 15** (začíná hned, ve stejném tahu): nový/upravený lab cíl s 2-3 nálezy různé jistoty → reálné měření H3 (VOI vs. blanket) + H1 na druhém cíli.
-2. Po D15: zapsat H2/H5 "mimo rozsah" zápis s odůvodněním do `souhrn-vysledku-a-hypotez.md`.
-3. Po tom: doplnit regresní asserty na IoT-23 baseline čísla (malý, levný krok, dokončuje Definition-of-Done bod).
-4. Teprve pak, pokud čas/rozsah dovolí: zvážit threat-model dokument (sekce 11 ho jmenuje jako očekávaný výstup) jako konsolidaci už existujícího rozptýleného obsahu (design doc sekce 4/9.3/12 + `h3-measurement-difficulty.md`), ne nový výzkum.
+1. [x] **Deliverable 15/16**: multiservice lab (4 cíle) → reálné měření H3 (VOI vs. blanket, 16× méně kontrol) + H1 na 2. nezávislém cíli. `docs/diplomka/eval/h3-voi-vs-blanket-multiservice-lab.md`.
+2. [x] H2/H5 "mimo rozsah" zápis s odůvodněním do `souhrn-vysledku-a-hypotez.md`.
+3. [x] Regresní asserty na IoT-23 baseline čísla (ablace A TP/FP/FN/TN, triviální baseline, ablace D event count).
+4. [x] **Deliverable 17**: threat-model dokument (sekce 11 ho jmenuje jako očekávaný výstup) — konsolidace existujícího rozptýleného obsahu (design doc sekce 4/9.2/9.3/12, eval reporty) do `docs/diplomka/threat-model.md`, ne nový výzkum.
+
+**Všechny body z tohoto master plánu jsou k 29.10.2026 hotové.** Definition of Done (výše) je plně zaškrtnutý. Další práce na projektu pokračuje podle nového rozhodnutí (uživatel/vedoucí), ne podle automatického navyšování rozsahu — další velké investice (statistický aparát, rozšíření datasetů, kalibrace/Case Memory) zůstávají vědomě odložené z důvodů zapsaných výše v sekci "Rozhodnutí", ne zapomenuté.

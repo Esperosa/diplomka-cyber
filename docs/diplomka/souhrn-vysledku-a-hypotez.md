@@ -1,4 +1,4 @@
-# Souhrn výsledků (Deliverables 1–16) a vztah k výzkumným hypotézám H1–H5
+# Souhrn výsledků (Deliverables 1–17) a vztah k výzkumným hypotézám H1–H5
 
 **Status: konsolidace k 29. 10. 2026, OPRAVENO po nezávislém master-plan auditu (3 agenti, Opus + pragmatik + skeptik).** Návrhový dokument (sekce 11) definuje 5 výzkumných hypotéz pro diplomku. Tento dokument mapuje, co z dosavadních deliverables tyto hypotézy skutečně testuje — **honestně**, včetně částečně negativních výsledků, ne jako seznam úspěchů.
 
@@ -32,6 +32,7 @@
 | 12 | H1 poprvé reálně změřeno (lehký aktivní sken vs. + hlubší aktivní ověření, opraveno v bodě 15.1) | `src/lab.rs` | Hotovo |
 | 13 | H3 měření zablokováno potvrzeným strukturním důvodem (ne domněnkou) | `docs/diplomka/eval/h3-measurement-difficulty.md` | Hotovo |
 | 16 | Multiservice lab (4 cíle), H3 poprvé změřeno (VOI vs. blanket, 16× méně kontrol), H1 na 2. nezávislém cíli | `src/lab.rs`, `docs/diplomka/eval/h3-voi-vs-blanket-multiservice-lab.md` | Hotovo |
+| 17 | Model hrozeb (konsolidace, návrh sekce 11 jmenuje jako povinný výstup) + regresní asserty na IoT-23 baseline čísla | `docs/diplomka/threat-model.md`, `src/eval/dataset_replay.rs` | Hotovo |
 | 14 | Oprava CTU-13 label bugu + triviální baseline + hash fix (nezávislý audit, kolo 1) | `src/eval/ground_truth.rs`, `src/eval/dataset_replay.rs` | Hotovo |
 | 15 | Oprava Virut/RBot, H1 terminologie, IoT-23 stejná třída chyby jako bod 14.1, regresní asserty na CTU-13 čísla (nezávislý audit, kolo 2) | `src/eval/sources/iot23.rs`, `docs/diplomka/eval/h1-passive-vs-active.md` | Hotovo |
 

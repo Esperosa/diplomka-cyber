@@ -1,0 +1,33 @@
+# Model hrozeb a hranice platnosti důkazů (Deliverable 16)
+
+**Status: konsolidace k 29. 10. 2026.** Návrh (sekce 11, "Očekávané výstupy") jmenuje "model hrozeb" jako samostatný požadovaný výstup diplomky. Tento dokument ho nevytváří od nuly — konsoliduje obsah, který už existuje rozptýlený v návrhu (sekce 4, 9.2, 9.3, 12) a v jednotlivých eval reportech (`docs/diplomka/eval/*.md`), do jednoho místa. Žádný bod zde nebyl vymyšlen nově; u každého je odkaz na zdroj.
+
+Dokument má dvě části, protože "hrozba" tu znamená dvě různé věci: (A) hrozby vůči síti, kterou by Bakula měla chránit (adversary model), a (B) hrozby vůči platnosti samotných empirických tvrzení této diplomky (validity threats) — ta druhá část je pro vědeckou prokazatelnost důležitější a dosavadní práce se jí fakticky už řídila, jen to nebylo zapsáno na jednom místě.
+
+## A. Adversary model — co Bakula (v rozsahu diplomky) umí a neumí pozorovat
+
+**Rozsah je omezen na analytické jádro** (Identity/Correlation/Hypothesis/Verification Planner), ne na enforcement. Firewall/DNS filtrování/IPS blokování/SOAR playbooky (návrh sekce 4) jsou mimo rozsah diplomky — návrh sám je řadí jako "širší dlouhodobá produktová ambice" (sekce 11), ne podmínku splnění.
+
+- **Žádná endpoint telemetrie, žádné dešifrování TLS.** Síťová viditelnost je nutně neúplná (riziko #2, sekce 12) — Bakula nemůže tvrdit 100% detekci. Nejistota `coverage`/`missing-data indicator` (sekce 9.1) je proto architektonickou nutností, ne detailem.
+- **DoH/DoT a externí resolvery omezují DNS viditelnost** (sekce 4.2) — zařízení, které obchází lokální resolver, je mimo dosah DNS-based detekce i v hypotetickém budoucím rozšíření.
+- **Tři senzory nad jedním tokem nejsou tři nezávislé důkazy** (riziko #4, sekce 12) — přesně to, co H2 ve svém doslovném znění žádá řešit (korekce závislosti zdrojů), a přesně to, co dosavadní single-sensor datasety (IoT-23, CTU-13) ani nemohou testovat (viz `souhrn-vysledku-a-hypotez.md`, sekce H2).
+- **Nekalibrovaná skóre nejsou pravděpodobnosti** (riziko #5) — `hypothesis.rs` tohle vědomě nefabrikuje (`probability: None`, dokumentováno jako limitace), přesně kvůli tomuto riziku.
+- **Adversarial learning / poisoning**: žádné automatické učení z neověřených událostí nesmí ovlivnit enforcement (riziko #8). Case Memory ještě neexistuje; až bude, musí (per návrh) přijímat jen verifikované label sources — zapsáno jako budoucí požadavek v `dalsi-postup-master-plan.md`, ne jako už vyřešené.
+
+## B. Hrozby vůči platnosti empirických tvrzení této diplomky
+
+Tohle je prakticky "threat model" vůči samotnému výzkumu — co by mohlo způsobit, že naměřené číslo vypadá platné, ale není. Většina z toho už byla v projektu řešena jako konkrétní, named bug nebo architektonická záruka; tady jsou poprvé vyjmenované na jednom místě.
+
+1. **Label leakage** (ground truth prosakuje do rozhodovacího kódu) — architektonicky vyloučeno strukturou (`src/eval/ground_truth.rs`: paralelní `Vec`, ne join přes klíč; `GroundTruthLabel` se nikdy neimportuje v `correlation.rs`/`decision.rs`/`report.rs`/`model.rs` — ověřeno nezávislým auditem, viz skeptik report v `dalsi-postup-master-plan.md`).
+2. **Cirkulární testování aktivního ověřování** — pokud by "VOI-informovaný výběr" byl navržen se znalostí už změřeného výsledku, test by jen reprodukoval to, co autor už viděl, ne prokázal obecnou schopnost. Řešeno explicitně: `docs/diplomka/eval/h3-measurement-difficulty.md` identifikoval přesně tenhle risk u prvního pokusu (Juice Shop, 1 nález) a odmítl ho vydat za důkaz; `h3-voi-vs-blanket-multiservice-lab.md` ho řeší predregistrovaným manifestem (napsán před skenem) a obecným, ne zpětně odvozeným, predikčním pravidlem.
+3. **Mylně předpokládaná nezávislost evidence** (= riziko #4 výše, promítnuté do měření): CTU-13 "cross-dataset" zjištění stojí na jediném scénáři (Botnet-54/Virut) z 13 dostupných — `cross-dataset-ctu13.md` to explicitně označuje jako limitaci, ne jako prokázanou šíři generalizace.
+4. **Smíchání modalit datasetů jako by byly stejná evidence** (riziko #6, sekce 12: "miliarda řádků neznamená miliardu kvalitně označených incidentů") — IoT-23 (Zeek) a CTU-13 (NetFlow/binetflow) se nikdy neslučují do jednoho labelu; label schema se liší a je to zaznamenáno v `dataset-registry.md`.
+5. **Tichá regrese zveřejněných čísel** — opraveno Deliverable 14/15/16 (N10 audit): `src/eval/dataset_replay.rs` teď obsahuje regresní asserty pinující klíčová čísla z `cross-dataset-ctu13.md`, `baseline-iot23.md` a `ablation-d-multiscale.md`, místo aby zůstala jen v `println!` výstupu rucne přepsaném do dokumentace.
+6. **Chybějící baseline nafukuje zdánlivou kvalitu** — opraveno Deliverable 14 (N2 audit): `trivial_always_positive_baseline()` ukázal, že ablace A na obou datasetech prohrává s triviálním klasifikátorem; bez tohoto srovnání by čísla vypadala jako "rozumná detekce".
+7. **Terminologická nepřesnost maskující co bylo skutečně měřeno** — opraveno Deliverable 15 (N8 audit): H1 měření bylo oznaceno "pasivní vs. pasivní+aktivní", ačkoliv obě varianty byly aktivní nástroje (nmap/httpx vs. +nuclei). Oprava v `h1-passive-vs-active.md` a `souhrn-vysledku-a-hypotez.md`.
+8. **Co replay nikdy sám neprokáže** (sekce 9.3, doslovně): skutečná propustnost fyzické gateway, spolehlivost proprietárních switchů/controllerů, dlouhodobá životnost hardwaru, kompletní chování produkčního HA clusteru, útoky bez příslušné viditelnosti, dopad aktivního skenování na konkrétní zákaznická OT/IoT zařízení. Tyhle oblasti vyžadují specializovaný testbed, partnerskou autorizovanou síť nebo externí měření — diplomka o ně netvrdí víc, než co replay/lab metodika fakticky dovoluje.
+9. **Nedostatek skutečných aktivních cílů** (riziko #12, sekce 12: "historické PCAP nelze znovu oskenovat") — řešeno vlastním reprodukovatelným Docker labem (Deliverable 7, 15/16), vždy jen proti vlastním, autorizovaným, izolovaným kontejnerům na `127.0.0.1` — nikdy proti cizí síti.
+
+## Co je z tohoto modelu hrozeb explicitně mimo rozsah diplomky
+
+Shoduje se s rozhodnutím v `dalsi-postup-master-plan.md`: firewall/DNS/IPS enforcement, multi-tenant izolace, HA/DR, supply-chain (sekce 9 testovací matice, řádky Firewall/DNS/IPS/Multi-tenant/HA-DR/Supply chain), distribuované škálování (H5), a multi-senzorová fúze s korekcí závislosti zdrojů v doslovném znění H2. Důvod je stejný u všech: jde o novou infrastrukturu/funkčnost neúměrnou rozsahu jedné diplomky, ne o skryté riziko, které se ignoruje beze zdůvodnění.
