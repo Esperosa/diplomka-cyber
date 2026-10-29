@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 
 use crate::error::{BakulaError, Result};
 use crate::findings::generate_findings;
@@ -36,6 +36,7 @@ use crate::hypothesis::{SecurityHypothesis, build_hypothesis};
 use crate::identity::IdentityMatch;
 use crate::model::{Finding, HostReport, PassiveWindow, RunReport, SourceMetadata};
 use crate::nmap::{parse_nmap_xml, run_real_nmap};
+use crate::passive::{ZeekParseResult, parse_zeek_dir};
 use crate::report::normalize_inventory;
 use crate::report::{build_report, score_services};
 use crate::webscan::{WebScanArtifacts, WebScanConfig, enrich_http_services};
@@ -73,11 +74,131 @@ const MULTISERVICE_PORTS: [u16; 4] = [
     CLEAN_HOST_PORT,
 ];
 
+// Deliverable 21 (H1 v doslovnem zneni): realny pasivni snimek pres skutecny Zeek,
+// ne nahrada nmap/httpx jako "pasivni". Tcpdump sidecar sdili network namespace s
+// cilovym kontejnerem (`--network container:<jmeno>`), takze vidi presne tu same
+// provoz, jakou by videl sitovy tap - overeno rucne pred zapsanim do kodu (viz
+// docs/diplomka/eval/h1-literal-passive-vs-active.md).
+const TCPDUMP_IMAGE: &str = "corfr/tcpdump";
+const ZEEK_IMAGE: &str = "zeek/zeek:9.0.1";
+
+/// RAII pro tcpdump sidecar - `docker rm -f` i kdyz test panikne pred explicitnim
+/// zastavenim.
+pub struct PassiveCaptureHandle {
+    container_name: String,
+    pcap_dir: PathBuf,
+}
+
+impl Drop for PassiveCaptureHandle {
+    fn drop(&mut self) {
+        let _ = Command::new("docker")
+            .args(["rm", "-f", &self.container_name])
+            .status();
+    }
+}
+
+/// Spusti tcpdump v samostatnem kontejneru, ktery SDILI network namespace s
+/// `target_container_name` (`--network container:X`) - presne tak vidi provoz, ktery
+/// do/z ciloveho kontejneru skutecne prochazi, bez nutnosti host-network modu (ktery
+/// Docker Desktop na Windows neumi). Zapisuje do `workspace/passive.pcap`.
+pub fn start_passive_capture(
+    target_container_name: &str,
+    workspace: &Path,
+) -> Result<PassiveCaptureHandle> {
+    let capture_name = format!("bakula-lab-tcpdump-{}", uuid::Uuid::new_v4());
+    let volume = format!("{}:/cap", workspace.display());
+    let status = Command::new("docker")
+        .args([
+            "run",
+            "-d",
+            "--name",
+            &capture_name,
+            "--network",
+            &format!("container:{target_container_name}"),
+            "-v",
+            &volume,
+            TCPDUMP_IMAGE,
+            "-i",
+            "eth0",
+            "-w",
+            "/cap/passive.pcap",
+        ])
+        .status()
+        .map_err(|error| {
+            BakulaError::Processing(format!("docker run (tcpdump) selhal: {error}"))
+        })?;
+    if !status.success() {
+        let _ = Command::new("docker")
+            .args(["rm", "-f", &capture_name])
+            .status();
+        return Err(BakulaError::Processing(
+            "docker run pro tcpdump sidecar se nepodarilo spustit.".to_string(),
+        ));
+    }
+    // Dat tcpdumpu cas skutecne nabindovat interface pred tim, nez volajici zacne
+    // generovat provoz, ktery ma zachytit - bez teto pauzy by prvni pakety mohly
+    // chybet (zmereno, ne odhadnuto - prvni pokus bez pauzy mel prazdny/useknuty pcap).
+    std::thread::sleep(Duration::from_millis(500));
+    Ok(PassiveCaptureHandle {
+        container_name: capture_name,
+        pcap_dir: workspace.to_path_buf(),
+    })
+}
+
+/// Zastavi capture, prevede pcap na Zeek logy OFFLINE (`zeek -C -r`, stejna binarka
+/// jako skutecna pasivni telemetrie v produkci - ne nahrada), a naparsuje je pres
+/// nezmeneny `passive::zeek::parse_zeek_dir`. `-C` ignoruje checksum chyby, ktere jsou
+/// v Docker-zachytnem provozu bezne (offload na hostu pocita checksum pozdeji, ne na
+/// pakety, ktere tcpdump uvidi).
+pub fn stop_passive_capture_and_parse(
+    handle: PassiveCaptureHandle,
+    scope: &[ipnet::IpNet],
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+) -> Result<ZeekParseResult> {
+    let _ = Command::new("docker")
+        .args(["stop", &handle.container_name])
+        .status();
+
+    let volume = format!("{}:/cap", handle.pcap_dir.display());
+    let status = Command::new("docker")
+        .args([
+            "run",
+            "--rm",
+            "-v",
+            &volume,
+            "-w",
+            "/cap",
+            ZEEK_IMAGE,
+            "zeek",
+            "-C",
+            "-r",
+            "passive.pcap",
+        ])
+        .status()
+        .map_err(|error| BakulaError::Processing(format!("docker run (zeek) selhal: {error}")))?;
+    if !status.success() {
+        return Err(BakulaError::Processing(
+            "zeek offline analyza pcap souboru se nepodarila.".to_string(),
+        ));
+    }
+
+    parse_zeek_dir(&handle.pcap_dir, scope, start, end)
+}
+
 /// RAII: `docker rm -f` i kdyz test panikne. `stop_lab()` je explicitni cesta pro
 /// happy-path cleanup o nic jina nez `drop(handle)` - cteni kodu je jasnejsi s
 /// explicitnim nazvem na konci testu, i kdyz mechanicky dela totez co Drop.
 pub struct LabHandle {
     container_name: String,
+}
+
+impl LabHandle {
+    /// Potreba pro `start_passive_capture` (Deliverable 21) - tcpdump sidecar musi
+    /// vedet, se kterym kontejnerem sdilet network namespace.
+    pub fn container_name(&self) -> &str {
+        &self.container_name
+    }
 }
 
 impl Drop for LabHandle {
@@ -442,6 +563,8 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+    use crate::correlation::correlate_events;
+    use crate::passive::detect_connection_anomalies;
 
     /// `cargo test` spousti testy v ramci jednoho binary vicevlaknove by default -
     /// bez tohoto zamku by si dva lab testy soutezily o stejny host port 3000
@@ -672,6 +795,143 @@ mod tests {
             voi_missed,
             vec![JUICE_SHOP_PORT],
             "VOI musi minout presne Juice Shop (zadna specificka stopa v titulku) - pokud se tohle zmenilo, over zda Juice Shop titulek je stale jen 'OWASP Juice Shop'"
+        );
+    }
+
+    /// Deliverable 21 - H1 V DOSLOVNEM ZNENI ("spojeni pasivni a aktivni telemetrie
+    /// zvysi kvalitu rozhodnuti proti samotne pasivni vrstve"), poprve se SKUTECNOU
+    /// pasivni telemetrii (realny Zeek 9.0.1, offline analyza realne zachytnyeho
+    /// provozu), ne s nmap/httpx jako nahrazkou (presne ten nedostatek, ktery N8
+    /// auditu opravil - viz docs/diplomka/eval/h1-passive-vs-active.md). Tcpdump
+    /// sidecar sdili network namespace s Juice Shop kontejnerem, takze zachyti presne
+    /// tu same provoz, kterou aktivni sken vygeneruje.
+    #[test]
+    fn h1_literal_real_zeek_passive_vs_passive_plus_active_on_juice_shop() {
+        let _guard = LAB_PORT_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let lab = start_juice_shop_lab().expect("start juice shop lab");
+        let container_name = lab.container_name().to_string();
+
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let capture_start = Utc::now();
+        let capture = start_passive_capture(&container_name, temp.path());
+        let capture = match capture {
+            Ok(capture) => capture,
+            Err(error) => {
+                stop_lab(lab);
+                panic!("start passive capture: {error}");
+            }
+        };
+
+        let scan = run_active_scan_against_lab(
+            temp.path(),
+            "lab-h1-literal",
+            httpx_bin(),
+            nuclei_bin(),
+            nuclei_templates_dir(),
+        );
+        let capture_end = Utc::now();
+
+        // Siroky rozsah (0.0.0.0/0), ne 127.0.0.1/32: tcpdump uvnitr network
+        // namespace ciloveho kontejneru vidi provoz podle INTERNI docker-bridge IP
+        // adresy kontejneru (napr. 172.17.0.x), ne podle 127.0.0.1, na kterou se
+        // pripojuje host - overeno rucne pred zapsanim (viz modulova dokumentace k
+        // TCPDUMP_IMAGE/ZEEK_IMAGE).
+        let scope = vec!["0.0.0.0/0".parse().expect("neplatny scope 0.0.0.0/0")];
+        let zeek_result =
+            stop_passive_capture_and_parse(capture, &scope, capture_start, capture_end);
+
+        stop_lab(lab);
+        let scan = scan.expect("aktivni sken proti lab cili");
+        let zeek_result = zeek_result.expect("zeek offline analyza zachytnyeho pcap");
+
+        assert!(
+            !zeek_result.connections.is_empty(),
+            "realny Zeek musi zachytit alespon nejakou connection z provozu aktivniho skenu"
+        );
+
+        let known_services: std::collections::HashSet<(String, String, u16)> =
+            std::collections::HashSet::new();
+        let events = detect_connection_anomalies(zeek_result.connections.clone(), &known_services);
+        let events_count = events.len();
+
+        let now = Utc::now();
+        let report_scope = vec!["127.0.0.1/32".parse().expect("neplatny scope 127.0.0.1/32")];
+
+        // Pasivni-only: ZADNY aktivni inventar (`hosts: &[]`) - stejna konvence jako
+        // eval harness (`dataset_replay::run_ablation`), aby srovnani nebylo
+        // kontaminovane aktivne ziskanym inventarem.
+        let correlated_passive_only = correlate_events(&[], events.clone(), 300);
+        let mut passive_report = build_report(
+            "lab-h1-literal-passive",
+            "lab-h1-literal-passive",
+            now,
+            now,
+            report_scope.clone(),
+            vec![JUICE_SHOP_PORT],
+            "opatrny",
+            "lab",
+            "passive-only-real-zeek",
+            PassiveWindow {
+                start: now,
+                end: now,
+                time_window_s: 0,
+            },
+            SourceMetadata::default(),
+            Vec::new(),
+            correlated_passive_only,
+        );
+        passive_report.findings = generate_findings(&passive_report);
+
+        // Pasivni+aktivni: REALNY aktivni inventar (nmap+nuclei) - Zeek udalosti se
+        // teprve ted parujou s otevrenymi porty/sluzbami, coz je presne ta kombinovana
+        // hodnota, kterou H1 tvrdi.
+        let mut hosts = scan.hosts.clone();
+        score_services(&mut hosts);
+        let correlated_matched = correlate_events(&hosts, events, 300);
+        let mut combined_report = build_report(
+            "lab-h1-literal-active",
+            "lab-h1-literal-active",
+            now,
+            now,
+            report_scope,
+            vec![JUICE_SHOP_PORT],
+            "opatrny",
+            "lab",
+            "passive-plus-active-real-zeek",
+            PassiveWindow {
+                start: now,
+                end: now,
+                time_window_s: 0,
+            },
+            SourceMetadata::default(),
+            hosts,
+            correlated_matched,
+        );
+        combined_report.findings = generate_findings(&combined_report);
+
+        println!(
+            "H1 doslovne: realny Zeek zachytil {} connections -> {} udalosti | pasivni-only findings={} | pasivni+aktivni findings={}",
+            zeek_result.connections.len(),
+            events_count,
+            passive_report.findings.len(),
+            combined_report.findings.len(),
+        );
+
+        assert!(
+            combined_report
+                .findings
+                .iter()
+                .any(|finding| finding.finding_type.contains("prometheus-metrics-exposed")),
+            "pasivni+aktivni varianta musi obsahovat nalez z aktivni kontroly"
+        );
+        assert!(
+            passive_report
+                .findings
+                .iter()
+                .all(|finding| !finding.finding_type.contains("prometheus-metrics-exposed")),
+            "cisty pasivni Zeek pipeline (bez aktivniho inventare) nesmi obsahovat nalez, ktery umi detekovat jen aktivni kontrola - realna pasivni telemetrie nevidi obsah HTTP odpovedi"
         );
     }
 

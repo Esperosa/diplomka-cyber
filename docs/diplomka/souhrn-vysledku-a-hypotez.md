@@ -1,4 +1,4 @@
-# Souhrn výsledků (Deliverables 1–20) a vztah k výzkumným hypotézám H1–H5
+# Souhrn výsledků (Deliverables 1–21) a vztah k výzkumným hypotézám H1–H5
 
 **Status: konsolidace k 29. 10. 2026, OPRAVENO po nezávislém master-plan auditu (3 agenti, Opus + pragmatik + skeptik).** Návrhový dokument (sekce 11) definuje 5 výzkumných hypotéz pro diplomku. Tento dokument mapuje, co z dosavadních deliverables tyto hypotézy skutečně testuje — **honestně**, včetně částečně negativních výsledků, ne jako seznam úspěchů.
 
@@ -36,6 +36,7 @@
 | 18 | CTU-13 rozšířeno ze 1 na 3 scénáře/2 rodiny (Virut, Rbot, Neris) — ablace A prohrává s triviálním baseline 0/3, ne 0/1 | `src/eval/dataset_replay.rs`, `docs/diplomka/eval/ctu13-three-scenarios-dataset-sufficiency.md` | Hotovo |
 | 19 | H4 poprvé částečně potvrzeno — izotonická kalibrace zlepšila Brier skóre na 3/3 LOSO foldech (průměr 0.683→0.434) | `src/eval/calibration.rs`, `src/passive/anomaly.rs`, `docs/diplomka/eval/h4-isotonic-calibration-loso.md` | Hotovo |
 | 20 | Statistický aparát — bootstrap 95% CI na ablaci A/CTU-13 (F1 0.306 [0.271, 0.342], mimo dosah triviálního baseline) | `src/eval/stats.rs`, `docs/diplomka/eval/bootstrap-confidence-intervals.md` | Hotovo |
+| 21 | H1 v doslovném znění poprvé změřeno se skutečným Zeek 9.0.1 (tcpdump sidecar + offline Zeek analýza) — pasivní 3 findings, pasivní+aktivní 5 findings | `src/lab.rs`, `docs/diplomka/eval/h1-literal-real-zeek-passive-vs-active.md` | Hotovo |
 | 14 | Oprava CTU-13 label bugu + triviální baseline + hash fix (nezávislý audit, kolo 1) | `src/eval/ground_truth.rs`, `src/eval/dataset_replay.rs` | Hotovo |
 | 15 | Oprava Virut/RBot, H1 terminologie, IoT-23 stejná třída chyby jako bod 14.1, regresní asserty na CTU-13 čísla (nezávislý audit, kolo 2) | `src/eval/sources/iot23.rs`, `docs/diplomka/eval/h1-passive-vs-active.md` | Hotovo |
 
@@ -43,7 +44,12 @@
 
 ### H1: spojení pasivní a aktivní telemetrie zvýší kvalitu rozhodnutí proti samotné pasivní vrstvě za definovaných nákladů.
 
-**Status: NEZMĚŘENO V DOSLOVNÉM ZNĚNÍ (oprava N8); změřen jen užší dílčí nález na jednom lab cíli.** `docs/diplomka/eval/h1-passive-vs-active.md`: Deliverable 12 porovnávalo lehký aktivní sken (nmap+httpx) vs. + hlubší aktivní ověření (nuclei) — **obě varianty jsou aktivní nástroje, žádná skutečná pasivní telemetrie (Zeek/Suricata) tu nefiguruje.** Původní označení "pasivní vs. pasivní+aktivní" bylo terminologicky nepřesné a je opraveno. Naměřeno: hlubší aktivní varianta má víc findings (2 vs 1) a víc decision akcí (4 vs 3), s malým, změřeným dodatečným nákladem (1 nuclei sken + 1 GET). Klíčové: nález exponovaného `/metrics` (a jeho 7 konkrétních citlivých metrik, Deliverable 11) **vůbec nevznikne** bez hlubší aktivní kontroly — to je strukturní, ne jen statistický rozdíl, a pravděpodobně se přenese i na skutečné H1 (pasivní vs. pasivní+aktivní), ale to je zatím nepotvrzená extrapolace, ne měření. **H1 v doslovném znění vyžaduje lab s paralelním pasivním snímkem, který zatím neexistuje — to je teď nejkonkrétnější, nejlevnější next step (viz souhrn níže).**
+**Status: ZMĚŘENO V DOSLOVNÉM ZNĚNÍ (Deliverable 21).** Dvě vrstvy měření:
+
+1. **Deliverable 12** (opraveno N8): porovnávalo lehký aktivní sken (nmap+httpx) vs. + hlubší aktivní ověření (nuclei) — obě varianty jsou aktivní nástroje, žádná skutečná pasivní telemetrie tu nefigurovala. Naměřeno: hlubší aktivní varianta má víc findings (2 vs 1), víc decision akcí (4 vs 3). Užší dílčí nález, ne H1 samo.
+2. **Deliverable 21 — H1 v doslovném znění, poprvé se skutečným Zeek 9.0.1** (`docs/diplomka/eval/h1-literal-real-zeek-passive-vs-active.md`): tcpdump sidecar sdílející network namespace s Juice Shop kontejnerem zachytil reálný provoz aktivního skenu, Zeek ho offline zpracoval na reálný `conn.log`, naparsovaný nezměněnou produkční `passive::zeek::parse_zeek_dir`. **Naměřeno: čistě pasivní Zeek pipeline (18 connections, 3 anomaly události) dala 3 findings, pasivní+aktivní 5 findings — `prometheus-metrics-exposed` vznikne jen v kombinované variantě.** To je strukturní, ne statistický rozdíl, a poprvé potvrzený na reálné pasivní telemetrii, ne na extrapolaci z aktivní-vs-aktivní náhrady.
+
+**Omezení**: 1 lab cíl, krátký capture (18 connections) — strukturní demonstrace, ne statistické zobecnění.
 
 ### H2: temporal/graph evidence fusion s korekcí závislosti zdrojů sníží falešné incidenty oproti prostému scoringu eventů.
 

@@ -9,6 +9,7 @@ use crate::{
     passive::{ConnectionObservation, event_in_window, in_scope, parse_zeek_ts},
 };
 
+#[allow(private_interfaces)]
 pub struct ZeekParseResult {
     pub events: Vec<NormalizedEvent>,
     pub connections: Vec<ConnectionObservation>,

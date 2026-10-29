@@ -16,6 +16,7 @@ mod zeek;
 pub(crate) use anomaly::detect_connection_anomalies;
 pub(crate) use anomaly::score_connection_keys;
 pub(crate) use zeek::parse_zeek_log;
+pub use zeek::{ZeekParseResult, parse_zeek_dir};
 
 #[derive(Debug, Clone)]
 pub struct PassiveSources {
