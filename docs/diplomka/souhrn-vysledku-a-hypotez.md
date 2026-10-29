@@ -18,6 +18,7 @@
 | 10 | Ablace D (multi-scale), honest "safety net", ne tvrzené zlepšení | `src/correlation_v2.rs` | Hotovo |
 | 11 | Skutečné vykonání vybrané verifikace (ne jen výběr) | `src/lab.rs` | Hotovo |
 | 12 | H1 poprvé reálně změřeno (pasivní vs. pasivní+aktivní) | `src/lab.rs` | Hotovo |
+| 13 | H3 měření zablokováno potvrzeným strukturním důvodem (ne domněnkou) | `docs/diplomka/eval/h3-measurement-difficulty.md` | Hotovo |
 
 ## Vztah k H1–H5
 
@@ -31,7 +32,7 @@
 
 ### H3: typovaná nejistota a VOI-based planner dosáhne stejné či vyšší přesnosti s menším počtem aktivních kontrol oproti pravidelnému plošnému skenu.
 
-**Status: STRUKTURA HOTOVA (Deliverable 4/5/8), MĘŘENÍ HYPOTÉZY NEPROVEDENO.** `plan_verification()` korektně vybírá nejlevnější/nejinformativnější kandidáta na reálném nálezu (Deliverable 8) — ale žádné srovnání "VOI-řízený výběr" vs. "plošný sken všeho" ještě neproběhlo. Tohle je přímo následující krok: vzít CTU-13/IoT-23 nálezy, definovat sadu možných aktivních kontrol pro každý, srovnat VOI-planner výběr vs. "sken všeho" podle počtu provedených kontrol a výsledné přesnosti.
+**Status: STRUKTURA HOTOVA (Deliverable 4/5/8/11), MĘŘENÍ HYPOTÉZY ZABLOKOVÁNO POTVRZENÝM STRUKTURNÍM DŮVODEM (Deliverable 13).** `docs/diplomka/eval/h3-measurement-difficulty.md`: ověřeno přímo v kódu, že `correlate_events()` v celém eval harnessu (ablace A-D) běží vždy s `hosts: &[]` — proto má `observation` nejistota v tomhle harnessu nulovou variancí (vždy `Confidence::Low`), žádný signál k postavení escalate/ne-escalate rozhodnutí. Juice Shop lab naopak reálný inventář má, ale jen 1 finding — žádná variace k porovnání. **Potvrzený, konkrétní požadavek na další krok**: dataset/lab s párovaným aktivním inventářem A více nálezy současně — žádný dosavadní zdroj tuhle kombinaci nemá.
 
 ### H4: verzované učení a kalibrace z ověřených případů zlepší přenositelnost na neviděná data oproti statickým heuristikám.
 
@@ -43,4 +44,4 @@
 
 ## Co z tohoto plyne pro další postup
 
-**H1, H2 a H4 mají teď reálná, měřená čísla** (H1 na jednom lab cíli, H2/H4 na cross-dataset ablacích) — včetně honest negativních/částečných výsledků, ne jen implementovanou strukturu. **H3 má hotovou infrastrukturu (planner i exekuce), ale chybí jí srovnávací měření proti plošnému skenu** — to je nejbližší smysluplný další krok, protože nevyžaduje novou infrastrukturu, jen definici "blanket scan" protikladu a srovnání nákladu/přesnosti. **H5 je zatím zcela netknutá** a vyžaduje distribuovanou infrastrukturu, kterou projekt ještě nemá.
+**H1, H2 a H4 mají teď reálná, měřená čísla** (H1 na jednom lab cíli, H2/H4 na cross-dataset ablacích) — včetně honest negativních/částečných výsledků, ne jen implementovanou strukturu. **H3 je strukturně zablokovaná potvrzeným důvodem** (žádný dosavadní zdroj nemá současně aktivní inventář i více nálezů) — další krok musí buď přidat druhý/třetí lab cíl s odlišnými nálezy, nebo najít/postavit dataset s párovaným active+passive snímkem, než bude mít smysl cokoliv měřit. **H5 je zatím zcela netknutá** a vyžaduje distribuovanou infrastrukturu, kterou projekt ještě nemá.
