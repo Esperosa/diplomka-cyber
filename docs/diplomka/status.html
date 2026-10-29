@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 20:45</strong> ·
-  commit <code>a28caa0</code> ·
+  Poslední aktualizace: <strong>29. 10. 2026, 21:05</strong> ·
+  commit <code>31cf495</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -217,13 +217,25 @@
       <li><span class="badge badge-green mini">zjištěno</span> přepnutí na ablace B/C/D jako výchozí by bylo podle vlastních čísel ZHORŠENÍ (B: F1 0,306→0,124) a rozbilo by <code class="file">tests/mas_deep.rs</code> — žádné naivní "přepojení"</li>
       <li><span class="badge badge-green mini">zjištěno</span> jediný skutečný runtime extension point v celém crate je <code class="file">vuln::VulnerabilityProvider</code> — framework style to zatím není</li>
       <li><span class="badge badge-green mini">hotovo</span> golden-snapshot regresní test (<code class="file">tests/golden_snapshot.rs</code>) — bezpečnostní síť pro další fáze, ověřen stabilní přes opakované běhy i negativní kontrolou</li>
-      <li><span class="badge badge-gray mini">další krok</span> Fáze 1–6 (Opusův plán): pipeline do lib beze změny chování → traity pro detektory/findingy → stínové aditivní zapojení → přepínače → změna výchozího chování jen na základě měření</li>
+      <li><span class="badge badge-green mini">hotovo</span> nezávislá kontrola (2 levné modely, haiku+fable) na golden-snapshot testu — nezávisle našly stejné 3 reálné mezery (CRLF na Windows checkoutu, zastaralá <code class="file">--ignored</code> zpráva, chybějící volatile pole), všechny opraveny a ověřeny</li>
     </ul>
   </div>
 </details>
 
 <details class="stage" open>
-  <summary><span class="badge badge-yellow">fáze 1 — probíhá</span> <span class="stage-title">H5 korektnost + H2 fúze</span> <span class="stage-sub">bounded, dny až 2 týdny</span></summary>
+  <summary><span class="badge badge-yellow">fáze 1 (architektura) — probíhá</span> <span class="stage-title">Pipeline do lib beze změny chování</span> <span class="stage-sub">mechanický refaktor, golden-snapshot ověřuje každý krok</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> <code class="file">Workspace::save_run</code>: 21 pozičních parametrů → <code class="file">RunArtifacts</code> struct</li>
+      <li><span class="badge badge-green mini">hotovo</span> <code class="file">report::build_source_metadata</code>: 21 pozičních parametrů → <code class="file">SourceInputs</code> struct</li>
+      <li><span class="badge badge-gray mini">zbývá</span> přesun <code class="file">run_pipeline</code> (~1010 řádků) do <code class="file">src/pipeline/mod.rs</code> jako <code class="file">Pipeline::run(&amp;PipelineConfig)</code></li>
+      <li><span class="badge badge-gray mini">zbývá</span> sjednocení trojího přepočtu <code class="file">summary</code> do jedné funkce</li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage" open>
+  <summary><span class="badge badge-yellow">fáze 1 (H2/H5) — probíhá</span> <span class="stage-title">H5 korektnost + H2 fúze</span> <span class="stage-sub">bounded, dny až 2 týdny</span></summary>
   <div class="stage-body">
     <ul class="items">
       <li><span class="badge badge-green mini">hotovo</span> H5: <code class="file">claimed_by</code> fencing opraven (split-brain bug), lease navázaný na config — <code class="file">src/platform.rs</code></li>
