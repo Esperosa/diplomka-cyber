@@ -67,9 +67,90 @@ pub(crate) fn bootstrap_metric_ci(
     }
 }
 
+/// Plocha pod precision-recall krivkou (average precision), pocitana ze (score,
+/// label) dvojic BEZ vazby na konkretni prah - Deliverable 28, reakce na pozadavek
+/// "zjistit, jestli slaby vysledek je spatny signal nebo jen spatne zvoleny prah".
+/// Nahodny/konstantni klasifikator ma PR-AUC = prevalence (podil pozitivnich mezi
+/// known klici) - to je spravny "nahodny" baseline pro srovnani, analogicky 0.5 u
+/// ROC-AUC. Pokud skore ma PR-AUC vyrazne nad prevalenci, signal NESE uzitecnou
+/// informaci, i kdyz aktualne zvoleny prah (3.2) ji nevyuziva dobre.
+pub(crate) fn pr_auc(pairs: &[(f64, bool)]) -> f64 {
+    let total_positive = pairs.iter().filter(|(_, label)| *label).count();
+    if total_positive == 0 {
+        return 0.0;
+    }
+
+    let mut sorted: Vec<&(f64, bool)> = pairs.iter().collect();
+    sorted.sort_by(|left, right| {
+        right
+            .0
+            .partial_cmp(&left.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut true_positive = 0usize;
+    let mut false_positive = 0usize;
+    let mut average_precision = 0.0_f64;
+    let mut previous_recall = 0.0_f64;
+
+    for (_, label) in sorted {
+        if *label {
+            true_positive += 1;
+        } else {
+            false_positive += 1;
+        }
+        if *label {
+            let precision = true_positive as f64 / (true_positive + false_positive) as f64;
+            let recall = true_positive as f64 / total_positive as f64;
+            average_precision += (recall - previous_recall) * precision;
+            previous_recall = recall;
+        }
+    }
+    average_precision
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Klasicky referencni prepocet (stejne vstupy jako scikit-learn
+    /// `average_precision_score` dokumentacni priklad: y_true=[1,0,1,0],
+    /// y_score=[0.9,0.8,0.7,0.6]) - ocekavana hodnota 5/6 = 0.8333... overena rucne:
+    /// 1. bod (0.9,True): precision=1/1, recall=1/2 -> prispevek 0.5*1.0=0.5
+    /// 2. bod (0.7,True): precision=2/3, recall=1 -> prispevek 0.5*0.6667=0.3333
+    #[test]
+    fn pr_auc_matches_hand_computed_reference_example() {
+        let pairs = vec![(0.9, true), (0.8, false), (0.7, true), (0.6, false)];
+        let auc = pr_auc(&pairs);
+        assert!((auc - 5.0 / 6.0).abs() < 1e-9, "pr_auc={auc}");
+    }
+
+    #[test]
+    fn pr_auc_is_one_for_perfect_separation() {
+        let pairs = vec![(0.9, true), (0.8, true), (0.2, false), (0.1, false)];
+        assert!((pr_auc(&pairs) - 1.0).abs() < 1e-9);
+    }
+
+    /// Skore, ktere NENESE zadnou informaci o labelu - rovnomerne interleaved
+    /// pozitivni/negativni (1 pozitivni na kazdych 10 polozek) se stejnym skore (0.5)
+    /// pro vsechny. Pri remíze stabilni sort zachova vstupni poradi, takze na kazdem
+    /// z 10 "kontrolnich bodu" (kazdy 10. prvek) je precision presne 1/10 - rucne
+    /// odvozeny presny vysledek AP=0.1=prevalence, ne jen odhad.
+    #[test]
+    fn pr_auc_of_uninformative_interleaved_score_equals_prevalence_exactly() {
+        let mut pairs: Vec<(f64, bool)> = Vec::new();
+        for block in 0..10 {
+            for position in 0..10 {
+                let _ = block;
+                pairs.push((0.5, position == 9));
+            }
+        }
+        let auc = pr_auc(&pairs);
+        assert!(
+            (auc - 0.1).abs() < 1e-9,
+            "rovnomerne interleaved neinformativni skore musi dat presne prevalenci (0.1), dostal jsem {auc}"
+        );
+    }
 
     #[test]
     fn bootstrap_ci_on_perfect_classifier_is_tight_around_one() {

@@ -16,6 +16,8 @@ mod zeek;
 // Re-exporty pro src/eval (dataset replay baseline) - beze zmeny viditelnosti celych modulu.
 pub(crate) use anomaly::detect_connection_anomalies;
 pub(crate) use anomaly::score_connection_keys;
+#[allow(unused_imports)]
+pub(crate) use anomaly::score_source_hosts;
 pub(crate) use zeek::parse_zeek_log;
 pub use zeek::{ZeekParseResult, parse_zeek_dir};
 

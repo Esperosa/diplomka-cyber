@@ -779,6 +779,138 @@ mod tests {
         }
     }
 
+    /// Deliverable 28 (reakce na pozadavek "je slaby vysledek ablace A spatny signal,
+    /// nebo jen spatne zvoleny prah 3.2?"): PR-AUC meri rozlisovaci silu kontinualniho
+    /// skore NEZAVISLE na prahu. Pokud je PR-AUC vyrazne nad prevalenci (= PR-AUC
+    /// nahodneho/konstantniho klasifikatoru), signal NESE uzitecnou informaci a zlepseni
+    /// je otazkou lepsiho prahu/kalibrace, ne noveho detektoru. Pokud je PR-AUC blizko
+    /// prevalenci, signal sam o sobe nerozlisuje a je potreba lepsi detekce, ne jen
+    /// jiny prah.
+    #[test]
+    #[ignore = "vyzaduje stazene CTU-13 vyrezy, viz docs/diplomka/dataset-registry.md"]
+    fn ctu13_pr_auc_diagnoses_whether_score_has_discriminative_power_or_just_bad_threshold() {
+        let scenario_paths = [
+            "labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv",
+            "labs/datasets/ctu13/Botnet-51/capture20110818.binetflow.excerpt.csv",
+            "labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv",
+        ];
+
+        for path in scenario_paths {
+            let dataset = Ctu13Source
+                .load(&dataset_path(path))
+                .unwrap_or_else(|error| panic!("parse {path}: {error}"));
+            let points = scored_points(&dataset);
+            assert!(
+                !points.is_empty(),
+                "{path} nevyprodukoval zadne skorovane body"
+            );
+
+            let pairs: Vec<(f64, bool)> = points
+                .iter()
+                .map(|point| (point.score, point.is_malicious))
+                .collect();
+            let prevalence = points.iter().filter(|point| point.is_malicious).count() as f64
+                / points.len() as f64;
+            let auc = crate::eval::stats::pr_auc(&pairs);
+
+            println!(
+                "{path}: PR-AUC={auc:.4} prevalence(nahodny baseline)={prevalence:.4} rozdil={:+.4}",
+                auc - prevalence
+            );
+        }
+    }
+
+    /// Deliverable 28, pokracovani diagnozy: `score_connection_keys` (agregace podle
+    /// CILE) ma slabe PR-AUC na CTU-13. Hypoteza: CTU-13 ground truth je definovana
+    /// podle ZDROJE (bot = infikovany HOST, ne anomalni sluzba), takze agregace podle
+    /// src_ip (`score_source_hosts`, vcetne noveho rysu "pocet distinktnich cilu")
+    /// by mela mit lepsi rozlisovaci silu. Ground truth tady je "ma tenhle src_ip
+    /// alespon jeden malicious flow" - jina definice nez u destinace, ale presne ta,
+    /// kterou CTU-13 label skutecne popisuje (infikovany bot, ne anomalni sluzba).
+    #[test]
+    #[ignore = "vyzaduje stazene CTU-13 vyrezy, viz docs/diplomka/dataset-registry.md"]
+    fn ctu13_source_centric_scoring_vs_destination_centric_pr_auc_comparison() {
+        let scenario_paths = [
+            "labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv",
+            "labs/datasets/ctu13/Botnet-51/capture20110818.binetflow.excerpt.csv",
+            "labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv",
+        ];
+
+        for path in scenario_paths {
+            let dataset = Ctu13Source
+                .load(&dataset_path(path))
+                .unwrap_or_else(|error| panic!("parse {path}: {error}"));
+
+            // Destinace-centricka varianta (existujici score_connection_keys pres
+            // scored_points) - uz zmereno vyse, pro srovnani ve stejnem vystupu.
+            let dest_points = scored_points(&dataset);
+            let dest_pairs: Vec<(f64, bool)> = dest_points
+                .iter()
+                .map(|point| (point.score, point.is_malicious))
+                .collect();
+            let dest_prevalence = dest_points
+                .iter()
+                .filter(|point| point.is_malicious)
+                .count() as f64
+                / dest_points.len().max(1) as f64;
+            let dest_auc = crate::eval::stats::pr_auc(&dest_pairs);
+
+            // Zdroj-centricka varianta (nova score_source_hosts) - ground truth je
+            // "ma tenhle src_ip alespon 1 malicious flow", ne "ma tenhle (dst,proto,
+            // port) klic alespon 1 malicious flow".
+            let scores = crate::passive::score_source_hosts(&dataset.observations);
+            let mut malicious_sources: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            for (observation, label) in dataset.observations.iter().zip(dataset.labels.iter()) {
+                if label.is_malicious() {
+                    if let Some(src_ip) = &observation.src_ip {
+                        malicious_sources.insert(src_ip.clone());
+                    }
+                }
+            }
+            let src_pairs: Vec<(f64, bool)> = scores
+                .iter()
+                .map(|(src_ip, score)| (*score, malicious_sources.contains(src_ip)))
+                .collect();
+            let src_prevalence = src_pairs.iter().filter(|(_, label)| *label).count() as f64
+                / src_pairs.len().max(1) as f64;
+            let src_auc = crate::eval::stats::pr_auc(&src_pairs);
+
+            // Raw PR-AUC neni mezi destinacni a zdrojovou variantou primo srovnatelne
+            // - prevalence (podil pozitiv) je u kazde JINA (zdrojova je radove nizsi,
+            // protoze jen par hostu je bot mezi tisici), a PR-AUC je prevalenci shora
+            // ovlivnena nezavisle na kvalite skore. Spravne srovnatelna metrika je
+            // LIFT = PR-AUC / prevalence (kolikrat lepe nez nahodny klasifikator se
+            // STEJNOU prevalenci) - scale-invariant pres ruzne zakladni sazby.
+            let dest_lift = if dest_prevalence > 0.0 {
+                dest_auc / dest_prevalence
+            } else {
+                0.0
+            };
+            let src_lift = if src_prevalence > 0.0 {
+                src_auc / src_prevalence
+            } else {
+                0.0
+            };
+
+            println!(
+                "{path}: DESTINACE-centricka PR-AUC={dest_auc:.4} prevalence={dest_prevalence:.4} LIFT={dest_lift:.2}x (n={}) | ZDROJ-centricka PR-AUC={src_auc:.4} prevalence={src_prevalence:.4} LIFT={src_lift:.2}x (n={})",
+                dest_points.len(),
+                src_pairs.len(),
+            );
+
+            // Regresni pojistka na klicovy nalez (Deliverable 28, dokumentovano v
+            // docs/diplomka/eval/source-centric-scoring-pr-auc.md): zdroj-centricke
+            // skore musi mit VYRAZNE vyssi lift nez destinace-centricke na KAZDEM ze 3
+            // scenaru - pokud budouci zmena detekcni logiky tohle porusi, musi test
+            // selhat, ne tise zmizet z vystupu.
+            assert!(
+                src_lift > dest_lift * 2.0,
+                "{path}: zdroj-centricky lift ({src_lift:.2}x) musi byt aspon 2x vyssi nez destinace-centricky ({dest_lift:.2}x)"
+            );
+        }
+    }
+
     /// Nasledna otazka z `docs/diplomka/eval/cross-dataset-ctu13.md`: byla 300s
     /// ablace B horsi nez A kvuli fragmentaci nizko-objemoveho C2 beaconingu
     /// tumbling oknem (hypoteza, nepotvrzena dalsim merenim)? Sweep `time_window_s`

@@ -94,6 +94,82 @@ pub(crate) fn score_connection_keys(
         .collect()
 }
 
+/// Deliverable 28 (diagnosticky experiment, produkcni-plan.md): `score_connection_keys`
+/// agreguje podle CILE (dst_ip,proto,port) - odpovida otazce "je tahle SLUZBA
+/// anomalni". CTU-13 ground truth je ale definovana podle ZDROJE (je TENHLE HOST
+/// soucasti botnetu) - jiny jednotka analyzy. Tahle funkce agreguje podle src_ip a
+/// pridava pocet DISTINKTNICH cilu (typicky indikator C2/scanning chovani infikovaneho
+/// hosta, ktery `score_connection_keys` vubec nezachycuje). PR-AUC srovnani s
+/// `score_connection_keys` rozhodne, jestli je tahle jina jednotka analyzy skutecne
+/// lepsi, ne jen jina. VYSLEDEK: ano, vyrazne (24-90x lift nad nahodou na vsech 3
+/// scenarich CTU-13, viz docs/diplomka/eval/source-centric-scoring-pr-auc.md) - ale
+/// zapojeni do `detect_connection_anomalies`/produkcniho rozhodovani je dalsi,
+/// samostatny krok (bezi jen jako diagnosticky test zatim).
+#[allow(dead_code)]
+pub(crate) fn score_source_hosts(connections: &[ConnectionObservation]) -> HashMap<String, f64> {
+    let mut aggregates: HashMap<String, ConnectionAggregate> = HashMap::new();
+    let mut distinct_destinations: HashMap<String, HashSet<(String, String, u16)>> = HashMap::new();
+
+    for connection in connections {
+        let Some(src_ip) = connection.src_ip.clone() else {
+            continue;
+        };
+        let Some(port) = connection.dst_port else {
+            continue;
+        };
+        let aggregate = aggregates.entry(src_ip.clone()).or_insert_with(|| {
+            ConnectionAggregate::new(connection.timestamp, Some(src_ip.clone()))
+        });
+        aggregate.observe(connection);
+        distinct_destinations.entry(src_ip).or_default().insert((
+            connection.dst_ip.clone(),
+            connection.proto.clone(),
+            port,
+        ));
+    }
+
+    if aggregates.len() < 4 {
+        return HashMap::new();
+    }
+
+    let mut count_values = aggregates
+        .values()
+        .map(|item| item.count as f64)
+        .collect::<Vec<_>>();
+    let mut pps_values = aggregates
+        .values()
+        .map(|item| item.max_pps)
+        .collect::<Vec<_>>();
+    let mut distinct_dest_values = distinct_destinations
+        .values()
+        .map(|set| set.len() as f64)
+        .collect::<Vec<_>>();
+    let (count_median, count_mad) = median_and_mad(&mut count_values);
+    let (pps_median, pps_mad) = median_and_mad(&mut pps_values);
+    let (distinct_dest_median, distinct_dest_mad) = median_and_mad(&mut distinct_dest_values);
+
+    aggregates
+        .into_iter()
+        .filter(|(_, aggregate)| aggregate.count >= 3)
+        .map(|(src_ip, aggregate)| {
+            let distinct_dest_count = distinct_destinations
+                .get(&src_ip)
+                .map(|set| set.len() as f64)
+                .unwrap_or(0.0);
+            let timeout_component = aggregate.timeout_ratio() * 4.0;
+            let score = robust_zscore(aggregate.count as f64, count_median, count_mad)
+                .max(robust_zscore(aggregate.max_pps, pps_median, pps_mad))
+                .max(robust_zscore(
+                    distinct_dest_count,
+                    distinct_dest_median,
+                    distinct_dest_mad,
+                ))
+                .max(timeout_component);
+            (src_ip, score)
+        })
+        .collect()
+}
+
 fn unexpected_traffic_events(
     unexpected: HashMap<ServiceKey, (u32, DateTime<Utc>)>,
 ) -> Vec<NormalizedEvent> {
