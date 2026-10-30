@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>30. 10. 2026, 21:40</strong> ·
-  commit <code>25b7c4e</code> ·
+  Poslední aktualizace: <strong>30. 10. 2026, 22:10</strong> ·
+  commit <code>69d8997</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -293,8 +293,10 @@
       <li><span class="badge badge-green mini">hotovo</span> <b>jednorázový job bez backoffu po selhání</b> — nekonečné okamžité opakování (např. sken nedostupné sítě); opraveno exponenciální backoff (30s→240s) + vzdání se po 5 pokusech na ~30 dní</li>
       <li><span class="badge badge-green mini">hotovo</span> <b>lease se nikdy neobnovovala během běhu jobu</b> — reálný blokátor pro H5: dlouhý běh (nmap+nuclei) mohl být 2× souběžně spuštěn jiným workerem; opraveno periodickým obnovováním na pozadí v <code class="file">worker_cycle</code> — <code class="file">src/platform.rs</code></li>
       <li><span class="badge badge-gray mini">vědomě NEuděláno (scope-creep)</span> Postgres migrace H5, observability/metrics stack, Kubernetes, SBOM/signing, multi-tenant/HA-DR, firewall/DNS/IPS, plošný unwrap-sweep, přepnutí výchozího detektoru na B/C/D — shoda všech 3 agentů, žádný nový fakt stávající odložení nepřevažuje</li>
-      <li><span class="badge badge-yellow mini">zjištěno, neopraveno</span> <code class="file">external_sql.rs</code> (452 řádků Postgres vrstvy) — 0 testů, 0 CI coverage, dokumentace tvrdí "otestováno"; <code class="file">hypothesis.rs</code>/<code class="file">verification_planner.rs</code>/<code class="file">identity.rs</code> nemají žádný produkční vstupní bod (ne měřené odmítnutí jako B/C/D, prostě žádná cesta) — oba čekají na vlastní, samostatný krok</li>
+      <li><span class="badge badge-yellow mini">zjištěno, neopraveno</span> <code class="file">external_sql.rs</code> (452 řádků Postgres vrstvy) — 0 testů, 0 CI coverage, dokumentace tvrdí "otestováno"</li>
       <li><span class="badge badge-yellow mini">zjištěno, neopraveno</span> žádný Dockerfile/docker-compose, žádné structured logging (jen <code class="file">println!</code>), žádné scope mantinely pro aktivní skenování — zapsáno jako budoucí práce, ne tichá mezera</li>
+      <li><span class="badge badge-green mini">hotovo (navazující krok)</span> <b>CI odhalilo 2 skutečné regrese</b> v oprávách výše (CSRF guard byl univerzální místo jen pro anonymního admina → rozbilo <code class="file">server_respektuje_api_token</code>; obnovovací vlákno leasy blokovalo <code class="file">worker_cycle</code> i u rychlých jobů → posunulo leader-election timing) — oba opraveny, CI znovu zelené, nový regresní test na druhý nález</li>
+      <li><span class="badge badge-green mini">hotovo (navazující krok)</span> <b><code class="file">identity.rs</code> dostal svůj první produkční vstupní bod</b> — <code class="file">pipeline::run_pipeline</code> volá <code class="file">identity::resolve_and_annotate</code> stínově/aditivně (nový <code class="file">HostReport.asset_id</code>/<code class="file">identity_note</code>, beze změny <code class="file">host_key</code>/decision/triage); stav rezolveru přežívá mezi CLI běhy v <code class="file">identity-registry.json</code> (<code class="file">storage::write_atomic</code>). <code class="file">hypothesis.rs</code>/<code class="file">verification_planner.rs</code> zůstávají bez vstupního bodu — zbývají</li>
     </ul>
   </div>
 </details>
