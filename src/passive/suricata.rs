@@ -17,9 +17,42 @@ pub fn parse_suricata(
 ) -> Result<Vec<NormalizedEvent>> {
     let content = fs::read_to_string(path)?;
     let mut events = Vec::new();
-    for line in content.lines().filter(|line| !line.trim().is_empty()) {
-        let row: serde_json::Value = serde_json::from_str(line)?;
-        let timestamp = parse_suricata_ts(row["timestamp"].as_str().unwrap_or_default())?;
+    for (line_no, raw_line) in content.lines().enumerate() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let row: serde_json::Value = match serde_json::from_str(line) {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "VAROVANI: {} radek {}: nelze naparsovat JSON ({error}), radek se vynecha",
+                    path.display(),
+                    line_no + 1
+                );
+                continue;
+            }
+        };
+
+        // Audit nalez (30.10.2026, produkcni gap analyza): bezna konfigurace eve.json
+        // loguje i zaznamy typu flow/http/dns/tls/stats, ne jen "alert" - ty nenesou
+        // signaturu/severity, co tento parser cte, a bez filtru se z nich stavaly
+        // falesne nalezy (napr. HTTP flow na portu 80 -> "insecure_auth_possible").
+        if row["event_type"].as_str() != Some("alert") {
+            continue;
+        }
+
+        let timestamp = match parse_suricata_ts(row["timestamp"].as_str().unwrap_or_default()) {
+            Ok(timestamp) => timestamp,
+            Err(error) => {
+                eprintln!(
+                    "VAROVANI: {} radek {}: {error}, radek se vynecha",
+                    path.display(),
+                    line_no + 1
+                );
+                continue;
+            }
+        };
         let dst_ip = row["dest_ip"].as_str().unwrap_or_default().to_string();
         if dst_ip.is_empty() || !in_scope(scope, &dst_ip) || !event_in_window(timestamp, start, end)
         {
@@ -74,5 +107,95 @@ fn classify_signature(signature: &str, dst_port: Option<u16>) -> String {
         "insecure_auth_possible".to_string()
     } else {
         "suricata_alert".to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use chrono::Duration;
+    use tempfile::NamedTempFile;
+
+    use super::*;
+
+    fn scope() -> Vec<IpNet> {
+        vec!["10.0.0.0/24".parse().expect("scope")]
+    }
+
+    fn window() -> (DateTime<Utc>, DateTime<Utc>) {
+        let end = Utc::now();
+        (end - Duration::hours(1), end)
+    }
+
+    fn write_lines(lines: &[String]) -> NamedTempFile {
+        let mut file = NamedTempFile::new().expect("tempfile");
+        for line in lines {
+            writeln!(file, "{line}").expect("write radku do fixtury");
+        }
+        file
+    }
+
+    /// Audit nalez (produkcni gap analyza, 30.10.2026): bez filtru na "event_type"
+    /// se kazdy ne-alert zaznam z bezneho eve.json (flow/http/dns/...) stal
+    /// falesnym nalezem - konkretne HTTP flow na portu 80 davalo
+    /// "insecure_auth_possible", presne tu samou klasifikaci jako skutecny alert.
+    #[test]
+    fn non_alert_event_types_are_ignored() {
+        let (start, end) = window();
+        let ts = (start + Duration::minutes(10)).to_rfc3339();
+        let flow_line = format!(
+            r#"{{"timestamp":"{ts}","event_type":"flow","src_ip":"10.0.0.9","src_port":51000,"dest_ip":"10.0.0.5","dest_port":80,"proto":"TCP"}}"#
+        );
+        let alert_line = format!(
+            r#"{{"timestamp":"{ts}","flow_id":1,"event_type":"alert","src_ip":"10.0.0.9","src_port":51000,"dest_ip":"10.0.0.5","dest_port":443,"proto":"TCP","alert":{{"signature_id":100,"signature":"ET SCAN nmap","severity":2}}}}"#
+        );
+        let file = write_lines(&[flow_line, alert_line]);
+
+        let events = parse_suricata(file.path(), &scope(), start, end).expect("parse");
+
+        assert_eq!(
+            events.len(),
+            1,
+            "non-alert zaznam (flow) nesmi vyprodukovat finding"
+        );
+        assert_eq!(events[0].message, "ET SCAN nmap");
+    }
+
+    /// Audit nalez: `?` na JSON parse chybe shodilo cely soubor (a tedy cely
+    /// `monitor --continuous` beh) na jednom poskozenem/rozepsanem radku.
+    #[test]
+    fn malformed_json_line_is_skipped_not_fatal() {
+        let (start, end) = window();
+        let ts = (start + Duration::minutes(5)).to_rfc3339();
+        let alert_line = format!(
+            r#"{{"timestamp":"{ts}","flow_id":2,"event_type":"alert","src_ip":"10.0.0.9","src_port":51000,"dest_ip":"10.0.0.5","dest_port":443,"proto":"TCP","alert":{{"signature_id":200,"signature":"ET POLICY test","severity":2}}}}"#
+        );
+        let file = write_lines(&["{not valid json".to_string(), alert_line]);
+
+        let events = parse_suricata(file.path(), &scope(), start, end)
+            .expect("poskozeny radek nesmi shodit cely parse");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].message, "ET POLICY test");
+    }
+
+    /// Stejna trida chyby jako u JSON parse - neplatny/chybejici timestamp na
+    /// jednom radku nesmi shodit zpracovani zbytku souboru.
+    #[test]
+    fn invalid_timestamp_line_is_skipped_not_fatal() {
+        let (start, end) = window();
+        let ts = (start + Duration::minutes(5)).to_rfc3339();
+        let bad_ts_line = r#"{"timestamp":"not-a-timestamp","event_type":"alert","dest_ip":"10.0.0.5","dest_port":443,"alert":{"signature_id":1,"signature":"bad ts","severity":1}}"#.to_string();
+        let good_line = format!(
+            r#"{{"timestamp":"{ts}","flow_id":3,"event_type":"alert","src_ip":"10.0.0.9","src_port":51000,"dest_ip":"10.0.0.5","dest_port":443,"proto":"TCP","alert":{{"signature_id":300,"signature":"ok","severity":2}}}}"#
+        );
+        let file = write_lines(&[bad_ts_line, good_line]);
+
+        let events = parse_suricata(file.path(), &scope(), start, end)
+            .expect("neplatny timestamp nesmi shodit cely parse");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].message, "ok");
     }
 }

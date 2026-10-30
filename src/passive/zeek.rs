@@ -4,12 +4,13 @@ use chrono::{DateTime, Utc};
 use ipnet::IpNet;
 
 use crate::{
-    error::Result,
+    error::{BakulaError, Result},
     model::{NormalizedEvent, Severity},
     passive::{ConnectionObservation, event_in_window, in_scope, parse_zeek_ts},
 };
 
 #[allow(private_interfaces)]
+#[derive(Debug)]
 pub struct ZeekParseResult {
     pub events: Vec<NormalizedEvent>,
     pub connections: Vec<ConnectionObservation>,
@@ -27,7 +28,16 @@ pub fn parse_zeek_dir(
     let notice_path = path.join("notice.log");
     if notice_path.exists() {
         for row in parse_zeek_log(&notice_path)? {
-            let timestamp = parse_zeek_ts(row.get("ts").map(String::as_str).unwrap_or("0"))?;
+            let timestamp = match parse_zeek_ts(row.get("ts").map(String::as_str).unwrap_or("0")) {
+                Ok(timestamp) => timestamp,
+                Err(error) => {
+                    eprintln!(
+                        "VAROVANI: {} radek s neplatnym 'ts' ({error}), radek se vynecha",
+                        notice_path.display()
+                    );
+                    continue;
+                }
+            };
             let dst_ip = row
                 .get("id.resp_h")
                 .cloned()
@@ -78,7 +88,16 @@ pub fn parse_zeek_dir(
     let http_path = path.join("http.log");
     if http_path.exists() {
         for row in parse_zeek_log(&http_path)? {
-            let timestamp = parse_zeek_ts(row.get("ts").map(String::as_str).unwrap_or("0"))?;
+            let timestamp = match parse_zeek_ts(row.get("ts").map(String::as_str).unwrap_or("0")) {
+                Ok(timestamp) => timestamp,
+                Err(error) => {
+                    eprintln!(
+                        "VAROVANI: {} radek s neplatnym 'ts' ({error}), radek se vynecha",
+                        http_path.display()
+                    );
+                    continue;
+                }
+            };
             let dst_ip = row.get("id.resp_h").cloned().unwrap_or_default();
             if dst_ip.is_empty()
                 || !in_scope(scope, &dst_ip)
@@ -140,7 +159,16 @@ pub fn parse_zeek_dir(
     let conn_path = path.join("conn.log");
     if conn_path.exists() {
         for row in parse_zeek_log(&conn_path)? {
-            let timestamp = parse_zeek_ts(row.get("ts").map(String::as_str).unwrap_or("0"))?;
+            let timestamp = match parse_zeek_ts(row.get("ts").map(String::as_str).unwrap_or("0")) {
+                Ok(timestamp) => timestamp,
+                Err(error) => {
+                    eprintln!(
+                        "VAROVANI: {} radek s neplatnym 'ts' ({error}), radek se vynecha",
+                        conn_path.display()
+                    );
+                    continue;
+                }
+            };
             let dst_ip = row.get("id.resp_h").cloned().unwrap_or_default();
             if dst_ip.is_empty()
                 || !in_scope(scope, &dst_ip)
@@ -204,6 +232,20 @@ pub(crate) fn parse_zeek_log(path: &Path) -> Result<Vec<HashMap<String, String>>
         if line.starts_with('#') || line.trim().is_empty() {
             continue;
         }
+        // Audit nalez (30.10.2026, produkcni gap analyza): tenhle parser umi jen
+        // Zeek TSV format (#fields hlavicka). Zeek v JSON formatu (JSON::use_json=T)
+        // NEMA #fields radek - bez tyhle kontroly by `fields` zustalo prazdne,
+        // kazdy radek by se naparsoval na prazdnou HashMap a cely soubor by tise
+        // vratil 0 udalosti (nastroj by tvrdil "vse ciste", protoze nic nevidel).
+        // Nahle selhani s jasnou chybou je bezpecnejsi nez tiche tiseni dat.
+        if fields.is_empty() {
+            return Err(BakulaError::Processing(format!(
+                "Zeek log {} nema TSV '#fields' hlavicku - bud je poskozeny, nebo je to \
+                 JSON format (JSON::use_json), ktery tento parser neumi. Pouzijte TSV \
+                 vystup (vychozi Zeek format) nebo prevedte pres 'zeek -C -r <pcap> local'.",
+                path.display()
+            )));
+        }
         let values = line.split('\t').collect::<Vec<_>>();
         let mut row = HashMap::new();
         for (index, field) in fields.iter().enumerate() {
@@ -247,5 +289,64 @@ fn combine_optional(left: Option<u64>, right: Option<u64>) -> Option<u64> {
         (Some(a), None) => Some(a),
         (None, Some(b)) => Some(b),
         (None, None) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Duration;
+    use tempfile::TempDir;
+
+    use super::*;
+
+    fn scope() -> Vec<IpNet> {
+        vec!["10.0.0.0/24".parse().expect("scope")]
+    }
+
+    fn window() -> (DateTime<Utc>, DateTime<Utc>) {
+        let end = Utc::now();
+        (end - Duration::hours(2), end)
+    }
+
+    /// Audit nalez (30.10.2026, produkcni gap analyza): Zeek v JSON formatu
+    /// (JSON::use_json=T) nema '#fields' TSV hlavicku. Drive se takovy soubor
+    /// tise naparsoval na 0 udalosti/spojeni bez jakehokoliv varovani - nastroj
+    /// by tvrdil "vse ciste", protoze nic nevidel. Ted to musi selhat nahle a
+    /// hlasite, ne tise.
+    #[test]
+    fn json_format_conn_log_fails_loudly_instead_of_silently_returning_zero() {
+        let dir = TempDir::new().expect("tempdir");
+        let (start, end) = window();
+        let ts = (start + Duration::minutes(5)).timestamp();
+        let json_line = format!(
+            r#"{{"ts":{ts}.0,"uid":"C1","id.orig_h":"10.0.0.9","id.orig_p":51000,"id.resp_h":"10.0.0.5","id.resp_p":443,"proto":"tcp"}}"#
+        );
+        fs::write(dir.path().join("conn.log"), json_line).expect("write conn.log");
+
+        let error = parse_zeek_dir(dir.path(), &scope(), start, end)
+            .expect_err("JSON format bez '#fields' hlavicky musi selhat nahlas");
+        assert!(error.to_string().contains("#fields"));
+    }
+
+    /// Stejna trida chyby jako u Suricaty: jeden radek s neplatnym 'ts' nesmi
+    /// shodit zpracovani zbytku souboru (a tedy celeho `monitor --continuous` behu).
+    #[test]
+    fn malformed_timestamp_row_in_conn_log_is_skipped_not_fatal() {
+        let dir = TempDir::new().expect("tempdir");
+        let (start, end) = window();
+        let good_ts = (start + Duration::minutes(5)).timestamp();
+        let content = format!(
+            "#separator \\x09\n\
+             #fields\tts\tuid\tid.orig_h\tid.orig_p\tid.resp_h\tid.resp_p\tproto\tduration\torig_bytes\tresp_bytes\torig_pkts\tresp_pkts\tmissed_bytes\tconn_state\thistory\n\
+             #types\ttime\tstring\taddr\tport\taddr\tport\tstring\tinterval\tcount\tcount\tcount\tcount\tcount\tstring\tstring\n\
+             not-a-timestamp\tC1\t10.0.0.9\t51000\t10.0.0.5\t443\ttcp\t1.0\t100\t200\t1\t1\t0\tSF\tShadAfF\n\
+             {good_ts}.0\tC2\t10.0.0.9\t51000\t10.0.0.5\t443\ttcp\t1.0\t100\t200\t1\t1\t0\tSF\tShadAfF\n"
+        );
+        fs::write(dir.path().join("conn.log"), content).expect("write conn.log");
+
+        let result = parse_zeek_dir(dir.path(), &scope(), start, end)
+            .expect("neplatny 'ts' radek nesmi shodit cely parse");
+        assert_eq!(result.connections.len(), 1);
+        assert_eq!(result.connections[0].src_port, Some(51000));
     }
 }
