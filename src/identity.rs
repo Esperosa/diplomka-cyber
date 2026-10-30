@@ -17,9 +17,11 @@
 //! stále nejsou k dispozici - zobecnění nad jednu plochou podsíť a krátký časový úsek
 //! zůstává budoucí práce.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fs, path::Path};
 
-use crate::model::HostReport;
+use serde::{Deserialize, Serialize};
+
+use crate::{error::Result, model::HostReport, storage};
 
 pub type AssetId = String;
 
@@ -48,7 +50,7 @@ impl IdentityMatch {
 /// Udržuje stav mezi běhy (MAC/IP mapování), proto je to `struct` s `&mut self`, ne čistá
 /// funkce - `storage.rs` dnes ukládá běhy jednotlivě bez cross-run asset registru, tohle
 /// je první místo, které tu kontinuitu zavádí.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct IdentityResolver {
     asset_by_mac: HashMap<String, AssetId>,
     asset_by_ip_only: HashMap<String, AssetId>,
@@ -119,6 +121,44 @@ impl IdentityResolver {
     }
 }
 
+/// Produkční plán (core wiring, 30.10.2026): první skutečný produkční vstupní
+/// bod pro tuhle vrstvu - dřív se `IdentityResolver` volal jen z `src/lab.rs`/
+/// `src/identity_lab.rs` (testovací harness), nikdy z `pipeline::run_pipeline`.
+/// Stínově/aditivně (stejná disciplína jako H2 fúze): `host_key`/`host_id` se
+/// nemění, jen se doplní `asset_id`/`identity_note` na každý `HostReport`.
+///
+/// `IdentityResolver` je stavový a vyžaduje chronologické pořadí volání mezi
+/// běhy - CLI invokace jsou ale jednorázové procesy, takže stav musí žít v
+/// souboru (`registry_path`), ne v paměti. **Známé omezení, vědomě
+/// nedořešené**: načtení→úprava→zápis tady NENÍ zamčené proti souběžným
+/// zápisům - dva pipeline běhy nad stejným workspace souběžně by si mohly
+/// tiše přepsat jeden druhého přiřazení nových asset_id (ztracená aktualizace,
+/// ne korupce - `storage::write_atomic` korupci už vylučuje). Stejná
+/// nedořešená třída rizika jako `storage.rs`'s `save_run` read-modify-write
+/// na `index.json` - není to nová regrese, je to existující mezera v tom, jak
+/// tenhle workspace dnes řeší souběžný přístup víc procesů. Řešení (zámek
+/// nebo DB) je budoucí práce, ne blokátor pro tenhle aditivní krok.
+pub fn resolve_and_annotate(hosts: &mut [HostReport], registry_path: &Path) -> Result<()> {
+    let mut resolver: IdentityResolver = if registry_path.exists() {
+        let bytes = fs::read(registry_path)?;
+        serde_json::from_slice(&bytes).map_err(crate::error::BakulaError::Json)?
+    } else {
+        IdentityResolver::new()
+    };
+
+    for host in hosts.iter_mut() {
+        let identity_match = resolver.resolve(host);
+        host.asset_id = Some(identity_match.asset_id().to_string());
+        host.identity_note = match &identity_match {
+            IdentityMatch::Ambiguous { reason, .. } => Some(reason.clone()),
+            IdentityMatch::Same(_) | IdentityMatch::New(_) => None,
+        };
+    }
+
+    let bytes = serde_json::to_vec_pretty(&resolver).map_err(crate::error::BakulaError::Json)?;
+    storage::write_atomic(registry_path, &bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,6 +172,8 @@ mod tests {
             hostname: None,
             mac: mac.map(ToString::to_string),
             vendor: None,
+            asset_id: None,
+            identity_note: None,
             services: Vec::new(),
         }
     }
@@ -231,6 +273,62 @@ mod tests {
             asset_ids.len(),
             2,
             "nová logika musí vidět 2 zařízení, ne 4"
+        );
+    }
+
+    /// Audit nalez (skeptik, produkcni gap analyza 30.10.2026): `identity.rs`
+    /// nemel zadny produkcni vstupni bod - `IdentityResolver` zil jen v
+    /// pameti jednoho testu/labu, nikdy ne pres 2 ODDELENE procesy (coz CLI
+    /// invokace vzdy jsou). Tenhle test overuje presne tu cross-run
+    /// kontinuitu pres skutecny soubor na disku - 2 nezavisla volani
+    /// `resolve_and_annotate` (simulace 2 samostatnych `bakula-program`
+    /// behu) musi dat stejny `asset_id` pri DHCP renewal (stejna MAC, nova IP).
+    #[test]
+    fn resolve_and_annotate_persists_identity_across_two_separate_calls() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let registry_path = temp.path().join("identity-registry.json");
+
+        // Prvni beh vidi 2 zarizeni (A, pak B) - B tedy NENI prvni MAC, co
+        // resolver kdy videl (dostane "druhe" ID). Bez perzistence by druhy
+        // beh zacinal s cerstvym resolverem, kde by B byla (chybne) prvni
+        // MAC, co kdy videl - a dostala by "prvni" ID, ne to, co uz ma z
+        // prvniho behu. Zamerne NEporovnavam jen stejnou pozici v obou behu
+        // (to by nahodne vyslo stejne i bez perzistence).
+        let mut run1_hosts = vec![
+            host("10.0.0.5", Some("aa:bb:cc:00:00:0a")), // A
+            host("10.0.0.6", Some("aa:bb:cc:00:00:0b")), // B
+        ];
+        resolve_and_annotate(&mut run1_hosts, &registry_path).expect("prvni beh");
+        let b_asset_id_run1 = run1_hosts[1].asset_id.clone().expect("asset_id nastaven");
+
+        // Druhy, NEZAVISLY beh (nova fn volani = jako novy CLI proces) - jen
+        // DHCP renewal zarizeni B (stejna MAC, nova IP), B je tu JEDINY host.
+        let mut run2_hosts = vec![host("10.0.0.9", Some("aa:bb:cc:00:00:0b"))];
+        resolve_and_annotate(&mut run2_hosts, &registry_path).expect("druhy beh");
+        let b_asset_id_run2 = run2_hosts[0].asset_id.clone().expect("asset_id nastaven");
+
+        assert_eq!(
+            b_asset_id_run1, b_asset_id_run2,
+            "DHCP renewal pres 2 nezavisla volani (ruzne procesy) musi dat stejny asset_id, ne 'prvni ID cerstveho resolveru'"
+        );
+        assert!(run2_hosts[0].identity_note.is_none());
+    }
+
+    #[test]
+    fn resolve_and_annotate_surfaces_ambiguous_match_as_identity_note() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let registry_path = temp.path().join("identity-registry.json");
+
+        let mut run1_hosts = vec![host("10.0.0.5", Some("aa:bb:cc:00:00:01"))];
+        resolve_and_annotate(&mut run1_hosts, &registry_path).expect("prvni beh");
+
+        // Stejna IP, JINA MAC - NAT/vymena zarizeni, nesmi se tise slit.
+        let mut run2_hosts = vec![host("10.0.0.5", Some("aa:bb:cc:00:00:02"))];
+        resolve_and_annotate(&mut run2_hosts, &registry_path).expect("druhy beh");
+
+        assert!(
+            run2_hosts[0].identity_note.is_some(),
+            "ambiguous shoda (NAT/vymena HW) musi zustat viditelna, ne tise zmizet"
         );
     }
 }

@@ -484,9 +484,11 @@
   ],
   "hosts": [
     {
+      "asset_id": "asset:1",
       "host_id": "host:192.168.56.10",
       "host_key": "192.168.56.10",
       "hostname": "web-frontend",
+      "identity_note": null,
       "ip": "192.168.56.10",
       "mac": null,
       "services": [
@@ -642,9 +644,11 @@
       "vendor": null
     },
     {
+      "asset_id": "asset:2",
       "host_id": "host:192.168.56.20",
       "host_key": "192.168.56.20",
       "hostname": "admin-gateway",
+      "identity_note": null,
       "ip": "192.168.56.20",
       "mac": null,
       "services": [
@@ -754,9 +758,11 @@
       "vendor": null
     },
     {
+      "asset_id": "asset:3",
       "host_id": "host:192.168.56.30",
       "host_key": "192.168.56.30",
       "hostname": "fileserver",
+      "identity_note": null,
       "ip": "192.168.56.30",
       "mac": null,
       "services": [

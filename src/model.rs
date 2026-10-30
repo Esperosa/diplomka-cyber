@@ -244,6 +244,17 @@ pub struct HostReport {
     pub mac: Option<String>,
     #[serde(default)]
     pub vendor: Option<String>,
+    /// Produkční plán (core wiring, 30.10.2026): cross-run identita z
+    /// `identity::resolve_and_annotate` - doplňkový identifikátor NAD
+    /// `host_key` (ten se nemění, zůstává stabilní jen uvnitř běhu). `None`,
+    /// dokud `resolve_and_annotate` nebylo zavoláno (např. testovací fixtury).
+    #[serde(default)]
+    pub asset_id: Option<String>,
+    /// Vyplněno jen u `IdentityMatch::Ambiguous` (IP dřív patřila jiné MAC) -
+    /// vědomě NEslučuje automaticky, jen signalizuje nejistotu, co by tiché
+    /// sloučení dvou různých zařízení udělalo nebezpečnějším.
+    #[serde(default)]
+    pub identity_note: Option<String>,
     pub services: Vec<ServiceReport>,
 }
 

@@ -805,6 +805,8 @@ mod tests {
             hostname: Some("db".to_string()),
             mac: None,
             vendor: None,
+            asset_id: None,
+            identity_note: None,
             services: vec![
                 ServiceReport {
                     service_id: "svc:192.168.1.50/tcp/3306".to_string(),

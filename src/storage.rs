@@ -290,7 +290,7 @@ impl Workspace {
 /// atomicke `rename` (na stejnem svazku je `rename` atomicky na POSIX i na
 /// Windows/NTFS) zajisti, ze vysledek je vzdy bud cely stary, nebo cely novy
 /// obsah - nikdy nic mezi tim.
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     let extension = path
         .extension()
         .and_then(|value| value.to_str())

@@ -26,7 +26,8 @@ use clap::Args;
 use ipnet::IpNet;
 
 use crate::{
-    automation, config, context, correlation, cpe, decision, diff, findings, intel, lanes,
+    automation, config, context, correlation, cpe, decision, diff, findings, identity, intel,
+    lanes,
     model::{MonitoringLane, NormalizedEvent, RunReport, Severity, TriageAction},
     nmap, passive, paths, pentest, report, simulation,
     storage::{RunArtifacts, Workspace},
@@ -884,6 +885,13 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
         correlation::correlate_events(&hosts, passive_events, passive_window.time_window_s);
     let unmapped_events = report::attach_events(&mut hosts, correlated);
     report::score_services(&mut hosts);
+    // Produkční plán (core wiring, 30.10.2026): první skutečný produkční
+    // vstupní bod pro `identity.rs` - stínově/aditivně, jen doplní
+    // `asset_id`/`identity_note` na každý host, beze změny `host_key`/
+    // decision/triage logiky. Musí běžet AŽ TADY (ne dřív), protože hloubkové
+    // ověření výš může `hosts` znovu sestavit z `normalize_inventory`.
+    identity::resolve_and_annotate(&mut hosts, &args.workspace.join("identity-registry.json"))
+        .map_err(|error| anyhow::Error::new(error).context("Identity resolver selhal"))?;
     let correlator_runtime_ms = correlator_started_at.elapsed().as_millis() as u64;
     mas_agent_metrics.push(MasAgentMetric {
         role: "correlator",

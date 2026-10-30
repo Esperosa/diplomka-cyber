@@ -74,6 +74,8 @@ pub fn normalize_inventory(parsed: ParsedInventory) -> Vec<HostReport> {
                 hostname: host.hostname,
                 mac: host.mac,
                 vendor: host.vendor,
+                asset_id: None,
+                identity_note: None,
                 services,
             }
         })
