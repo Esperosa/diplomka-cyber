@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>30. 10. 2026, 23:00</strong> ·
-  commit <code>ea2a220</code> ·
+  Poslední aktualizace: <strong>30. 10. 2026, 23:10</strong> ·
+  commit <code>fca9108</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -299,6 +299,7 @@
       <li><span class="badge badge-green mini">hotovo</span> <b><code class="file">identity.rs</code> dostal svůj první produkční vstupní bod</b> — <code class="file">pipeline::run_pipeline</code> volá <code class="file">identity::resolve_and_annotate</code> stínově/aditivně (nový <code class="file">HostReport.asset_id</code>/<code class="file">identity_note</code>, beze změny <code class="file">host_key</code>/decision/triage); stav rezolveru přežívá mezi CLI běhy v <code class="file">identity-registry.json</code> (<code class="file">storage::write_atomic</code>)</li>
       <li><span class="badge badge-green mini">hotovo</span> <b><code class="file">hypothesis.rs</code> dostal svůj první produkční vstupní bod</b> — nové <code class="file">RunReport.hypotheses</code> (stínové/aditivní), <code class="file">hypothesis::build_hypotheses_for_report</code> doplní identitu/inventář ke každému findingu. Reálný bug nalezen a opraven PŘED zapojením: poziční index do <code class="file">hosts</code> by po re-sortu v <code class="file">build_report</code> přiřadil nejistotu špatnému hostu — opraveno na mapu klíčovanou <code class="file">host_key</code></li>
       <li><span class="badge badge-yellow mini">zbývá</span> <code class="file">verification_planner.rs</code> — potřebuje katalog kandidátů z reálných aktivních kontrol + mantinely rozsahu (A9), větší krok</li>
+      <li><span class="badge badge-green mini">hotovo</span> supply-chain audit (<code class="file">rustsec/audit-check</code> v CI) — dřív "levné, bez kontroverze, ale nikdy neprovedeno"; vědomě informativní (<code class="file">continue-on-error</code>), dokud někdo neprohlédne první výsledek</li>
       <li><span class="badge badge-green mini">hotovo</span> <code class="file">ENTERPRISE_BACKENDS.md</code> tvrdil, že celá vrstva je "otestovaná" — opraveno po sekcích, jen Redis broker to skutečně je (Postgres i HA/rollout mají 0 dedikovaných testů)</li>
       <li><span class="badge badge-green mini">hotovo</span> <code class="file">httpx</code>/<code class="file">nuclei</code> natvrdo <code class="file">.exe</code> na všech platformách — na Linuxu (reálné nasazení) by se nástroje nikdy nenašly; opraveno <code class="file">paths::exe_name</code></li>
       <li><span class="badge badge-green mini">hotovo, CI zelené</span> <b>Docker nasazení</b> — <code class="file">Dockerfile</code> (multi-stage, nmap přes apt, non-root), <code class="file">docker-compose.yml</code> (Redis + server, <code class="file">--require-api-token</code> vynucený ve výchozím stavu kompozice), README sekce, CI smoke test — lokálně neověřeno (rozbité Docker Desktop), ale CI skutečně sestavil image, spustil kontejner a dostal odpověď na <code class="file">/api/health</code> na reálném Linuxu</li>
