@@ -27,6 +27,7 @@ pub fn parse_suricata(
         }
 
         let src_ip = row["src_ip"].as_str().map(ToString::to_string);
+        let src_port = row["src_port"].as_u64().map(|value| value as u16);
         let proto = row["proto"].as_str().unwrap_or("tcp").to_ascii_lowercase();
         let dst_port = row["dest_port"].as_u64().map(|value| value as u16);
         let signature = row["alert"]["signature"]
@@ -45,6 +46,7 @@ pub fn parse_suricata(
             event_id,
             timestamp,
             src_ip,
+            src_port,
             dst_ip,
             proto,
             dst_port,

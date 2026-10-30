@@ -662,6 +662,7 @@ mod tests {
                 event_id: event_id.to_string(),
                 timestamp: Utc::now(),
                 src_ip: Some("192.168.56.200".to_string()),
+                src_port: None,
                 dst_ip: "192.168.56.250".to_string(),
                 proto: "tcp".to_string(),
                 dst_port: Some(8080),

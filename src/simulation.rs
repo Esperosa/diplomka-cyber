@@ -172,6 +172,11 @@ struct SuricataAlertSpec {
     timestamp: DateTime<Utc>,
     flow_id: i64,
     src_ip: String,
+    /// H2 krok 4 (produkcni-plan.md) - bez tohohle pole `fusion::fuse_same_flow_events`
+    /// nemohlo nikdy rozpoznat, ze nektery z techto alertu popisuje PRESNE stejny tok
+    /// jako sousedni `ZeekNoticeSpec`/`ZeekHttpSpec` (realne eve.json ma `src_port`
+    /// vzdy, simulace ho drive vubec nenesla - audit nalez pri zapojeni fuze).
+    src_port: u16,
     dest_ip: String,
     dest_port: u16,
     proto: String,
@@ -278,6 +283,9 @@ fn build_fixed_pair() -> (ScenarioBundle, ScenarioBundle) {
                 base_time + Duration::seconds(60),
                 1001,
                 "192.168.56.2",
+                // Stejny src_port jako sousedni ZeekNoticeSpec (uid "C1") nize - stejny
+                // fyzicky tok pozorovany 2 senzory, presne pripad, co H2 fuze testuje.
+                53211,
                 &admin.ip,
                 23,
                 "TELNET plaintext management traffic",
@@ -288,6 +296,8 @@ fn build_fixed_pair() -> (ScenarioBundle, ScenarioBundle) {
                 base_time + Duration::seconds(100),
                 1002,
                 "192.168.56.3",
+                // Stejny src_port jako sousedni ZeekHttpSpec (uid "H1") nize.
+                54001,
                 &web.ip,
                 80,
             ),
@@ -378,6 +388,8 @@ fn build_fixed_pair() -> (ScenarioBundle, ScenarioBundle) {
                 base_time + Duration::minutes(30) + Duration::seconds(60),
                 2001,
                 "192.168.56.2",
+                // Stejny src_port jako sousedni ZeekNoticeSpec (uid "C8") nize.
+                53211,
                 "192.168.56.20",
                 23,
                 "TELNET plaintext management traffic",
@@ -388,6 +400,9 @@ fn build_fixed_pair() -> (ScenarioBundle, ScenarioBundle) {
                 timestamp: base_time + Duration::minutes(30) + Duration::seconds(130),
                 flow_id: 2002,
                 src_ip: "192.168.56.6".to_string(),
+                // Bez odpovidajiciho Zeek pozorovani stejneho toku - suricata-only alert,
+                // nema se s cim slucovat.
+                src_port: 55006,
                 dest_ip: "192.168.56.10".to_string(),
                 dest_port: 8080,
                 proto: "TCP".to_string(),
@@ -554,6 +569,8 @@ fn build_random_pair(
             base_time + Duration::seconds(45),
             3000 + index as i64,
             "10.0.0.2",
+            // Stejny src_port jako sousedni ZeekNoticeSpec (R{index}N1) nize.
+            53000 + index as u16,
             &admin_ip,
             notice_port,
             signature,
@@ -564,6 +581,8 @@ fn build_random_pair(
             base_time + Duration::seconds(90),
             3200 + index as i64,
             "10.0.0.3",
+            // Stejny src_port jako sousedni ZeekHttpSpec (R{index}H1) nize.
+            54000 + index as u16,
             &web_ip,
             80,
         ),
@@ -729,6 +748,8 @@ fn build_random_pair(
             base_time + Duration::minutes(25) + Duration::seconds(45),
             4000 + index as i64,
             "10.0.0.2",
+            // Stejny src_port jako sousedni ZeekNoticeSpec (R{index}N9) nize.
+            53100 + index as u16,
             &admin_ip,
             notice_port,
             signature,
@@ -739,6 +760,9 @@ fn build_random_pair(
             timestamp: base_time + Duration::minutes(25) + Duration::seconds(100),
             flow_id: 4200 + index as i64,
             src_ip: "10.0.0.11".to_string(),
+            // Jiny src_ip/dst_ip nez kterykoli zeek zaznam v tomhle scenariem - zadne
+            // odpovidajici pozorovani, nema se s cim slucovat.
+            src_port: 57200 + index as u16,
             dest_ip: web_ip.clone(),
             dest_port: if add_new_service { 8080 } else { 80 },
             proto: "TCP".to_string(),
@@ -873,6 +897,9 @@ fn append_dense_telemetry(
                         + offset as i64 * 4
                         + burst as i64,
                     src_ip: format!("10.1.{}.{}", (offset % 16) + 1, (burst % 200) + 2),
+                    // Jina src_ip namespace nez `notices`/`http_rows` (10.2.x.y/10.3.x.y)
+                    // nize - zadne odpovidajici pozorovani, nema se s cim slucovat.
+                    src_port: 55_000 + (offset % 500) as u16 * 3 + burst as u16,
                     dest_ip: host.ip.clone(),
                     dest_port: service.port,
                     proto: "TCP".to_string(),
@@ -1056,10 +1083,11 @@ fn render_suricata(alerts: &[SuricataAlertSpec]) -> String {
         .iter()
         .map(|alert| {
             format!(
-                r#"{{"timestamp":"{}","flow_id":{},"src_ip":"{}","dest_ip":"{}","dest_port":{},"proto":"{}","event_type":"alert","alert":{{"signature_id":{},"signature":"{}","severity":{}}}}}"#,
+                r#"{{"timestamp":"{}","flow_id":{},"src_ip":"{}","src_port":{},"dest_ip":"{}","dest_port":{},"proto":"{}","event_type":"alert","alert":{{"signature_id":{},"signature":"{}","severity":{}}}}}"#,
                 rfc3339(alert.timestamp),
                 alert.flow_id,
                 alert.src_ip,
+                alert.src_port,
                 alert.dest_ip,
                 alert.dest_port,
                 alert.proto,
@@ -1219,6 +1247,7 @@ fn plaintext_alert(
     timestamp: DateTime<Utc>,
     flow_id: i64,
     src_ip: &str,
+    src_port: u16,
     dest_ip: &str,
     dest_port: u16,
     signature: &str,
@@ -1229,6 +1258,7 @@ fn plaintext_alert(
         timestamp,
         flow_id,
         src_ip: src_ip.to_string(),
+        src_port,
         dest_ip: dest_ip.to_string(),
         dest_port,
         proto: "TCP".to_string(),
@@ -1242,6 +1272,7 @@ fn http_basic_alert(
     timestamp: DateTime<Utc>,
     flow_id: i64,
     src_ip: &str,
+    src_port: u16,
     dest_ip: &str,
     dest_port: u16,
 ) -> SuricataAlertSpec {
@@ -1249,6 +1280,7 @@ fn http_basic_alert(
         timestamp,
         flow_id,
         src_ip: src_ip.to_string(),
+        src_port,
         dest_ip: dest_ip.to_string(),
         dest_port,
         proto: "TCP".to_string(),

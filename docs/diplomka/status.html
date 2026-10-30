@@ -136,7 +136,7 @@
       <li><span class="badge badge-green mini">hotovo</span> <b>ověřeno, jestli se LIFT překládá do klasifikace</b>: naivní přenos prahu 3.2 selže (F1≈triviální baseline); LOSO kalibrace zlepší Brier dramaticky (0,78→0,0004), ale práh 0,5 u prevalence 0,04–0,41 % nic neklasifikuje — honestní rare-event pitfall, argument pro VOI nad fixním prahem</li>
       <li><span class="badge badge-green mini">hotovo</span> <b>definitivní uzávěr vlákna o prahu</b>: ani nekruhová LOSO F1-optimalizace (práh z trénovacích foldů) nefunguje — degeneruje na přeučení na 1 odlehlý bod, na Botnet-51 úplně selže (recall=0). LIFT zůstává reálný; binární prah je u tohoto jevu špatný rozhodovací mechanismus</li>
       <li><span class="badge badge-yellow mini">zbývá</span> vědomě NEzapojeno do produkční detekce přes fixní práh (Deliverable 30 ukázalo, že by to bylo špatné rozhodnutí) — čeká na VOI/typovanou nejistotu místo binárního prahu</li>
-      <li><span class="badge badge-yellow mini">probíhá</span> skutečná multi-senzorová fúze s korekcí závislosti zdrojů (H2 doslovně) — ZPĚT V ROZSAHU (29.10.2026, produkční reframing), join-key hotov, viz Produkční plán níže</li>
+      <li><span class="badge badge-green mini">hotovo</span> skutečná multi-senzorová fúze s korekcí závislosti zdrojů (H2 doslovně), zapojená do produkční cesty, validováno na dual-senzorových datech — viz Produkční plán níže</li>
     </ul>
   </div>
 </details>
@@ -273,7 +273,7 @@
       <li><span class="badge badge-green mini">hotovo</span> H2: Community ID join-key, ověřeno proti reálnému Zeek 9.0.1 i Suricata 8.0.7 (bajtově identické) — <code class="file">src/passive/community_id.rs</code></li>
       <li><span class="badge badge-green mini">hotovo</span> H2: zapojeno do schématu — <code class="file">ConnectionObservation.src_port</code> + <code class="file">community_id()</code>, 0 regrese na reálných datech (CTU-13, H1 Zeek test)</li>
       <li><span class="badge badge-green mini">hotovo</span> H2: dependency-aware fúzní logika — stejný tok ze 2+ senzorů = MAX, ne SOUČET — <code class="file">src/fusion.rs</code></li>
-      <li><span class="badge badge-yellow mini">probíhá</span> H2: zapojení fúze do <code class="file">correlation_v2.rs</code>/<code class="file">decision.rs</code> + validace na reálných dual-sensor datech</li>
+      <li><span class="badge badge-green mini">hotovo</span> H2: zapojení fúze do produkční cesty (<code class="file">passive::load_and_normalize</code>, <code class="file">decision.rs::rank_finding</code>) + validace na reálných dual-sensor datech — golden-snapshot fixtura (8→6 korelovaných událostí po sloučení duplicitních potvrzení), unit test na nezávisle naměřené Zeek/Suricata referenční hodnotě</li>
     </ul>
   </div>
 </details>
@@ -320,8 +320,8 @@
   </tr>
   <tr>
     <td><strong>H2</strong><br><span style="color:var(--muted)">graph fusion s korekcí zdrojů</span></td>
-    <td><span class="badge badge-yellow">zpět v rozsahu, probíhá</span></td>
-    <td>Community ID + schema wiring + dependency-aware fúzní logika hotovy a testovány (poprvé v projektu kód, co literálně implementuje H2 claim). Zapojení do rozhodování + validace na reálných dual-sensor datech zbývá — viz Produkční plán výše.</td>
+    <td><span class="badge badge-green">prokázáno</span></td>
+    <td>Community ID + schema wiring + dependency-aware fúzní logika zapojené do produkční cesty (<code class="file">passive::load_and_normalize</code>, <code class="file">decision.rs</code>). Validováno end-to-end na golden-snapshot fixtuře (8→6 korelovaných událostí po sloučení duplicitního potvrzení ze 2 senzorů) i na nezávisle naměřené reálné Zeek/Suricata community_id hodnotě. H5-style multi-host re-validace na živých senzorech zůstává budoucí práce — viz Produkční plán výše.</td>
   </tr>
   <tr>
     <td><strong>H3</strong><br><span style="color:var(--muted)">VOI planner ≤ blanket scan</span></td>

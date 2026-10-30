@@ -58,6 +58,9 @@ pub fn parse_zeek_dir(
                 ),
                 timestamp,
                 src_ip: row.get("id.orig_h").cloned(),
+                src_port: row
+                    .get("id.orig_p")
+                    .and_then(|value| value.parse::<u16>().ok()),
                 dst_ip,
                 proto: "tcp".to_string(),
                 dst_port,
@@ -116,6 +119,9 @@ pub fn parse_zeek_dir(
                     ),
                     timestamp,
                     src_ip: row.get("id.orig_h").cloned(),
+                    src_port: row
+                        .get("id.orig_p")
+                        .and_then(|value| value.parse::<u16>().ok()),
                     dst_ip,
                     proto: "tcp".to_string(),
                     dst_port,

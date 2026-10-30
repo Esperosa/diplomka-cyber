@@ -66,6 +66,10 @@ pub(crate) fn load_and_normalize(
 
     events.extend(detector.detect(connections, &known_services));
 
+    // H2 krok 4 (produkcni-plan.md): eventy od ruznych senzoru (suricata/zeek) se stejnym
+    // community_id jsou stejny fyzicky tok, ne dve nezavisla potvrzeni - viz `fusion.rs`.
+    let mut events = crate::fusion::fuse_same_flow_events(events);
+
     events.sort_by(|left, right| left.timestamp.cmp(&right.timestamp));
     Ok(events)
 }
@@ -145,6 +149,25 @@ impl ConnectionObservation {
         };
         community_id::community_id_v1(src_ip, src_port, dst_ip, dst_port, proto_num)
     }
+}
+
+/// H2 krok 4 (produkcni-plan.md): stejny vypocet jako `ConnectionObservation::community_id`
+/// vyse, ale pro uz-normalizovany `NormalizedEvent` - `fusion::fuse_same_flow_events` bezi
+/// PO detekci/normalizaci, ne na syrovych connections, takze potrebuje svou vlastni cestu
+/// ke stejnemu join-key. `None` za stejnych podminek jako u `ConnectionObservation` (chybi
+/// src_ip/src_port, nebo proto neni tcp/udp/sctp).
+pub(crate) fn normalized_event_community_id(event: &NormalizedEvent) -> Option<String> {
+    let src_ip: IpAddr = event.src_ip.as_deref()?.parse().ok()?;
+    let dst_ip: IpAddr = event.dst_ip.parse().ok()?;
+    let src_port = event.src_port?;
+    let dst_port = event.dst_port?;
+    let proto_num = match event.proto.as_str() {
+        "tcp" => 6,
+        "udp" => 17,
+        "sctp" => 132,
+        _ => return None,
+    };
+    community_id::community_id_v1(src_ip, src_port, dst_ip, dst_port, proto_num)
 }
 
 #[cfg(test)]

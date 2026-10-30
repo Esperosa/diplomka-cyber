@@ -107,8 +107,7 @@
         "service_key=192.168.56.10/tcp/80",
         "service_name=http",
         "product=Apache httpd | version=2.4.49 | port_state=open",
-        "suricata | http_basic_without_tls | ip+port | HTTP Basic credentials over plaintext channel",
-        "zeek | http_basic_without_tls | ip+port | HTTP pozorovani: /login"
+        "suricata+zeek | http_basic_without_tls | ip+port | [H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] HTTP Basic credentials over plaintext channel"
       ],
       "finding_id": "finding:http_basic_without_tls:192.168.56.10:192.168.56.10/tcp/80",
       "finding_type": "http_basic_without_tls",
@@ -405,8 +404,7 @@
         "service_key=192.168.56.20/tcp/23",
         "service_name=telnet",
         "product=BusyBox telnetd | version=1.36.1 | port_state=open",
-        "suricata | plaintext_protocol | ip+port | TELNET plaintext management traffic",
-        "zeek | plaintext_protocol | ip+port | Telnet management session observed"
+        "suricata+zeek | plaintext_protocol | ip+port | [H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] TELNET plaintext management traffic"
       ],
       "finding_id": "finding:plaintext_management_protocol:192.168.56.20:192.168.56.20/tcp/23",
       "finding_type": "plaintext_management_protocol",
@@ -549,37 +547,14 @@
                 "dst_port": 80,
                 "event_id": "suricata:1002:<EPOCH>",
                 "event_type": "http_basic_without_tls",
-                "message": "HTTP Basic credentials over plaintext channel",
+                "message": "[H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] HTTP Basic credentials over plaintext channel",
                 "proto": "tcp",
                 "raw_ref": "<TMP>/zakladni/suricata/eve.json",
                 "rule_id": "2100011",
                 "severity": "high",
-                "source": "suricata",
+                "source": "suricata+zeek",
                 "src_ip": "192.168.56.3",
-                "timestamp": "<TIMESTAMP>"
-              }
-            },
-            {
-              "correlation": {
-                "confidence": "high",
-                "host_id": "host:192.168.56.10",
-                "method": "ip+port",
-                "service_id": "svc:192.168.56.10/tcp/80",
-                "time_window_s": 3600
-              },
-              "event": {
-                "count": 1,
-                "dst_ip": "192.168.56.10",
-                "dst_port": 80,
-                "event_id": "zeek:H1:http:<EPOCH>",
-                "event_type": "http_basic_without_tls",
-                "message": "HTTP pozorovani: /login",
-                "proto": "tcp",
-                "raw_ref": "<TMP>/zakladni/zeek/http.log",
-                "rule_id": "heuristika:http",
-                "severity": "high",
-                "source": "zeek",
-                "src_ip": "192.168.56.3",
+                "src_port": 54001,
                 "timestamp": "<TIMESTAMP>"
               }
             }
@@ -745,37 +720,14 @@
                 "dst_port": 23,
                 "event_id": "suricata:1001:<EPOCH>",
                 "event_type": "plaintext_protocol",
-                "message": "TELNET plaintext management traffic",
+                "message": "[H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] TELNET plaintext management traffic",
                 "proto": "tcp",
                 "raw_ref": "<TMP>/zakladni/suricata/eve.json",
                 "rule_id": "2100010",
                 "severity": "medium",
-                "source": "suricata",
+                "source": "suricata+zeek",
                 "src_ip": "192.168.56.2",
-                "timestamp": "<TIMESTAMP>"
-              }
-            },
-            {
-              "correlation": {
-                "confidence": "high",
-                "host_id": "host:192.168.56.20",
-                "method": "ip+port",
-                "service_id": "svc:192.168.56.20/tcp/23",
-                "time_window_s": 3600
-              },
-              "event": {
-                "count": 1,
-                "dst_ip": "192.168.56.20",
-                "dst_port": 23,
-                "event_id": "zeek:C1:<EPOCH>",
-                "event_type": "plaintext_protocol",
-                "message": "Telnet management session observed",
-                "proto": "tcp",
-                "raw_ref": "<TMP>/zakladni/zeek/notice.log",
-                "rule_id": "Plaintext::Telnet",
-                "severity": "medium",
-                "source": "zeek",
-                "src_ip": "192.168.56.2",
+                "src_port": 53211,
                 "timestamp": "<TIMESTAMP>"
               }
             }
@@ -834,6 +786,7 @@
                 "severity": "low",
                 "source": "zeek",
                 "src_ip": null,
+                "src_port": null,
                 "timestamp": "<TIMESTAMP>"
               }
             },
@@ -858,6 +811,7 @@
                 "severity": "high",
                 "source": "zeek",
                 "src_ip": "192.168.56.90",
+                "src_port": null,
                 "timestamp": "<TIMESTAMP>"
               }
             },
@@ -882,6 +836,7 @@
                 "severity": "high",
                 "source": "zeek",
                 "src_ip": "192.168.56.90",
+                "src_port": null,
                 "timestamp": "<TIMESTAMP>"
               }
             },
@@ -906,6 +861,7 @@
                 "severity": "high",
                 "source": "zeek",
                 "src_ip": "192.168.56.90",
+                "src_port": null,
                 "timestamp": "<TIMESTAMP>"
               }
             }
@@ -1321,7 +1277,7 @@
       "recommended_tools": [],
       "source": "live-observer",
       "status": "ok",
-      "summary": "Live/pasivní vrstva vidí 4 lane a 8 korelovaných událostí.",
+      "summary": "Live/pasivní vrstva vidí 4 lane a 6 korelovaných událostí.",
       "title": "Agent live-observer"
     },
     {
@@ -1366,7 +1322,7 @@
     {
       "evidence": [
         "traffic_forensics=true",
-        "events=8",
+        "events=6",
         "live_lanes=4"
       ],
       "lane_id": "agent:traffic-forensics",
@@ -1618,9 +1574,9 @@
       "evidence": [
         "deduction=cve-exposure-implies-exploitability-review count=6",
         "deduction=plaintext-management-implies-credential-risk count=3",
-        "induction=traffic-patterns events=8 anomaly_findings=8 live_lanes=4",
+        "induction=traffic-patterns events=6 anomaly_findings=8 live_lanes=4",
         "abduction=service-identity-or-correlation-gap hypotheses=12 action=verify-before-mitigate",
-        "decision-frontier target=192.168.56.10/tcp/80 decision=mitigate score=1.00 reasons=plaintext-login|passive-evidence",
+        "decision-frontier target=192.168.56.10/tcp/80 decision=mitigate score=1.00 reasons=plaintext-login|passive-evidence|multi-sensor-confirmed",
         "context-window hosts=3 services=6 findings=26 triage=0"
       ],
       "lane_id": "lane:decision:inference-graph",
@@ -1637,8 +1593,8 @@
     },
     {
       "evidence": [
-        "score=1.00 decision=mitigate target=192.168.56.10/tcp/80 type=http_basic_without_tls severity=High confidence=High reasons=plaintext-login|passive-evidence",
-        "score=1.00 decision=mitigate target=192.168.56.20/tcp/23 type=plaintext_management_protocol severity=High confidence=High reasons=plaintext-login|passive-evidence",
+        "score=1.00 decision=mitigate target=192.168.56.10/tcp/80 type=http_basic_without_tls severity=High confidence=High reasons=plaintext-login|passive-evidence|multi-sensor-confirmed",
+        "score=1.00 decision=mitigate target=192.168.56.20/tcp/23 type=plaintext_management_protocol severity=High confidence=High reasons=plaintext-login|passive-evidence|multi-sensor-confirmed",
         "score=0.96 decision=mitigate target=192.168.56.10/tcp/443 type=high_risk_cve_exposure severity=High confidence=High reasons=cve-intel",
         "score=0.96 decision=mitigate target=192.168.56.10/tcp/80 type=high_risk_cve_exposure severity=High confidence=High reasons=cve-intel",
         "score=0.87 decision=verify target=192.168.56.30/host-only type=service_overload_risk severity=High confidence=Low reasons=traffic-pattern|passive-evidence|needs-verification",
@@ -1725,7 +1681,7 @@
         "identity_ratio=1.00",
         "forensic_ports=0",
         "findings_per_host=1.00",
-        "weights=0.21/0.20/0.29",
+        "weights=0.21/0.20/0.28",
         "consensus_head=sigmoid(weighted)",
         "state=review"
       ],
@@ -1779,7 +1735,7 @@
       ],
       "source": "suricata",
       "status": "ok",
-      "summary": "Suricata zdroj byl načten, korelovaných událostí v okně: 8.",
+      "summary": "Suricata zdroj byl načten, korelovaných událostí v okně: 6.",
       "title": "Suricata pasivní telemetry"
     },
     {
@@ -1794,7 +1750,7 @@
       ],
       "source": "zeek",
       "status": "ok",
-      "summary": "Zeek zdroj byl načten, korelovaných událostí v okně: 8.",
+      "summary": "Zeek zdroj byl načten, korelovaných událostí v okně: 6.",
       "title": "Zeek pasivní telemetry"
     },
     {
@@ -2256,7 +2212,7 @@
     "automation_agents_total": 22,
     "automation_rounds_total": 3,
     "cves_total": 6,
-    "events_total": 8,
+    "events_total": 6,
     "findings_total": 26,
     "forensic_targets_total": 3,
     "hosts_total": 3,

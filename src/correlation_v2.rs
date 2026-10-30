@@ -30,6 +30,12 @@ type TargetsByWindow = HashMap<(i64, String), HashMap<ServiceKey, DateTime<Utc>>
 struct WindowedAggregate {
     first_seen: Option<DateTime<Utc>>,
     representative_src_ip: Option<String>,
+    /// H2 krok 4 (produkcni-plan.md): potreba pro `community_id` na emitovanych
+    /// eventech. Stejne zjednoduseni jako `representative_src_ip` - pokud by okno
+    /// agregovalo vice ruznych flows (ruzne src_port), tohle je jen PRVNI pozorovany,
+    /// ne presna identifikace "toho jednoho" toku; pro `count>=3` ze STEJNE src_ip na
+    /// STEJNY cil (typicky pripad, kdy fuze dava smysl) je to spravna hodnota.
+    representative_src_port: Option<u16>,
     count: u32,
     timeout_like: u32,
     overload_votes: u32,
@@ -49,6 +55,7 @@ impl WindowedAggregate {
         }
         if self.representative_src_ip.is_none() {
             self.representative_src_ip = connection.src_ip.clone();
+            self.representative_src_port = connection.src_port;
         }
 
         let timeout_like = is_timeout_like(connection);
@@ -216,6 +223,7 @@ fn windowed_events(
                 event_id: format!("windowed:unexpected:{dst_ip}:{proto}:{port}:{window_start}"),
                 timestamp: first_seen,
                 src_ip: aggregate.representative_src_ip.clone(),
+                src_port: aggregate.representative_src_port,
                 dst_ip: dst_ip.clone(),
                 proto: proto.clone(),
                 dst_port: Some(port),
@@ -237,6 +245,7 @@ fn windowed_events(
                 event_id: format!("windowed:timeout:{dst_ip}:{proto}:{port}:{window_start}"),
                 timestamp: first_seen,
                 src_ip: aggregate.representative_src_ip.clone(),
+                src_port: aggregate.representative_src_port,
                 dst_ip: dst_ip.clone(),
                 proto: proto.clone(),
                 dst_port: Some(port),
@@ -262,6 +271,7 @@ fn windowed_events(
                 event_id: format!("windowed:rate:{dst_ip}:{proto}:{port}:{window_start}"),
                 timestamp: first_seen,
                 src_ip: aggregate.representative_src_ip.clone(),
+                src_port: aggregate.representative_src_port,
                 dst_ip: dst_ip.clone(),
                 proto: proto.clone(),
                 dst_port: Some(port),
@@ -284,6 +294,7 @@ fn windowed_events(
                 event_id: format!("windowed:loss:{dst_ip}:{proto}:{port}:{window_start}"),
                 timestamp: first_seen,
                 src_ip: aggregate.representative_src_ip.clone(),
+                src_port: aggregate.representative_src_port,
                 dst_ip: dst_ip.clone(),
                 proto: proto.clone(),
                 dst_port: Some(port),
@@ -304,6 +315,7 @@ fn windowed_events(
                 event_id: format!("windowed:overload:{dst_ip}:{proto}:{port}:{window_start}"),
                 timestamp: first_seen,
                 src_ip: aggregate.representative_src_ip.clone(),
+                src_port: aggregate.representative_src_port,
                 dst_ip,
                 proto,
                 dst_port: Some(port),
@@ -383,6 +395,9 @@ pub(crate) fn detect_windowed_anomalies_linked(
             event_id: format!("windowed:multi_target:{src_ip}:{window_start}"),
             timestamp: earliest,
             src_ip: Some(src_ip.clone()),
+            // Nejde o jediny tok (spojuje vice cilu/portu), takze jeden src_port
+            // by byl zavadejici - zadny community_id na tomhle eventu neni spravny.
+            src_port: None,
             dst_ip: target_list.first().cloned().unwrap_or_default(),
             proto: "multi".to_string(),
             dst_port: None,

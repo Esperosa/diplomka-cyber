@@ -611,6 +611,14 @@ pub(crate) fn rank_finding(
         score += 0.1;
         reasons.push("passive-evidence".to_string());
     }
+    if is_multi_sensor_confirmed(finding) {
+        // H2 krok 4 (produkcni-plan.md): fusion.rs uz zabranilo naivnimu SOUCTU
+        // (stejny tok od 2 senzoru se neukladal jako 2 oddelene eventy), takze
+        // tenhle bonus NENI druhe pricteni te same evidence - je to ohraniceny
+        // odmen za genuinni cross-senzorovou korroboraci (jiny senzor, stejny tok).
+        score += 0.06;
+        reasons.push("multi-sensor-confirmed".to_string());
+    }
     if finding
         .service_key
         .as_ref()
@@ -735,6 +743,17 @@ fn is_traffic_signal(finding: &Finding) -> bool {
 fn is_uncertain_finding_type(finding: &Finding) -> bool {
     finding.finding_type == "identification_gap"
         || finding.finding_type == "correlation_uncertainty"
+}
+
+/// H2 krok 4 (produkcni-plan.md): `fusion::fuse_same_flow_events` oznacuje eventy
+/// sloucene od >=2 ruznych senzoru markerem `[H2 fuze:` v `message` - ten se do
+/// `Finding.evidence` dostava pres `findings.rs`'s `build_*_evidence` helpery (ctou
+/// `item.event.message`). Stejny idiom jako `is_cve_signal`/`is_plaintext_signal`.
+fn is_multi_sensor_confirmed(finding: &Finding) -> bool {
+    finding
+        .evidence
+        .iter()
+        .any(|item| item.contains("[H2 fuze:"))
 }
 
 fn has_passive_evidence(finding: &Finding) -> bool {

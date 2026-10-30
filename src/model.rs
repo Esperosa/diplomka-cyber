@@ -376,6 +376,11 @@ pub struct NormalizedEvent {
     pub event_id: String,
     pub timestamp: DateTime<Utc>,
     pub src_ip: Option<String>,
+    /// H2 krok 4 (produkcni-plan.md): potreba pro `community_id`, aby
+    /// `fusion::fuse_same_flow_events` poznalo stejny fyzicky tok pozorovany
+    /// vice senzory. `None`, kde senzor/agregace zdrojovy port nema (napr.
+    /// ablace A, ktera agreguje pres vice ruznych flows do jedne service-key).
+    pub src_port: Option<u16>,
     pub dst_ip: String,
     pub proto: String,
     pub dst_port: Option<u16>,
