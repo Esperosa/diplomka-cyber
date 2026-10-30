@@ -1,7 +1,8 @@
 # Produkcni gap audit (30.10.2026): minimalni, bounded nasazeni pro 1
-# detekcni uzel - server + Redis pro broker (H5). NEOVERENO skutecnym
-# `docker compose up` (viz komentar v Dockerfile) - pred prvnim realnym
-# nasazenim overit a zapsat do produkcni-plan.md.
+# detekcni uzel - server + Redis pro broker (H5). `docker compose config`
+# overil syntax, CI `docker` job overil, ze samotny image skutecne bezi
+# (viz komentar v Dockerfile) - `docker compose up` samotny jeste lokalne
+# nezkouseno (rozbite Docker Desktop na vyvojovem stroji teto session).
 #
 # `--require-api-token` je tu zapnuty vedome (ne CLI/server.rs vychozi
 # `false`) - audit nalez z teto session byl prave "anonymous-admin je

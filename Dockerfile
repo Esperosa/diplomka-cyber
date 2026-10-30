@@ -3,14 +3,12 @@
 # bylo doslovne pravda. Multi-stage build: UI bundle (Node/esbuild), Rust
 # binarka (--release), a nakonec minimalni runtime image.
 #
-# NEOVERENO skutecnym `docker build`/`docker run` (Docker Desktop na vyvojovem
-# stroji teto session nejde nastartovat - zapsano uz driv v produkcni-plan.md
-# pri H5/broker praci). Napsano primo podle `src/paths.rs`'s runtime-base
-# rozlisovani (exe adresar -> cwd -> compile-time fallback) a overenych
-# zavislosti (rusqlite "bundled", reqwest "rustls-tls" - zadne libsqlite3/
-# libssl na runtime nejsou potreba). Pred prvnim realnym nasazenim overit
-# `docker build . && docker run --rm -p 8080:8080 <image> server spust ...`
-# a vysledek zapsat do produkcni-plan.md jako samostatny, overeny krok.
+# Lokalne neoverene (Docker Desktop na vyvojovem stroji teto session nejde
+# nastartovat), ale CI `docker` job (.github/workflows/ci.yml) skutecne
+# sestavi tenhle image, spusti kontejner a overi odpoved na /api/health na
+# realnem Linuxu - prvni beh po pridani tohoto Dockerfile prosel (zelene CI,
+# viz produkcni-plan.md). Pred prvnim realnym nasazenim (ne jen CI smoke
+# testem) jeste doporuceno rucne zkusit `docker compose up` s realnymi daty.
 
 FROM node:22-slim AS ui-builder
 WORKDIR /src

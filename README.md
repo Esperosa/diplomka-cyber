@@ -59,10 +59,10 @@ Pro rychlé vyzkoušení bez tokenu (jen lokálně, ne přes nedůvěryhodnou s�
 docker compose run --rm -p 8080:8080 bakula server spust --workspace /data/workspace --host 0.0.0.0
 ```
 
-**Neověřeno skutečným `docker build`/`docker run`** – vývojové prostředí této
-práce má rozbité Docker Desktop (daemon se nespustí). Před prvním reálným nasazením ověřit a
-zapsat výsledek do `docs/diplomka/produkcni-plan.md`. `docker compose config`
-syntax ověřil.
+Lokálně neověřeno (vývojové prostředí této práce má rozbité Docker Desktop –
+daemon se nespustí), ale CI (`.github/workflows/ci.yml`, job „Docker build
+smoke test") image skutečně sestaví, spustí kontejner a ověří odpověď na
+`/api/health` na reálném Linuxu – první běh po tomto Dockerfile prošel.
 
 Aktivní skenování (`--spustit-nmap`) potřebuje `nmap` (v image je přes apt);
 volitelné web kontroly (`--web-fingerprint`/`--web-checks`) potřebují
