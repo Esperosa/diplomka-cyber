@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>30. 10. 2026, 22:10</strong> ·
-  commit <code>69d8997</code> ·
+  Poslední aktualizace: <strong>30. 10. 2026, 22:25</strong> ·
+  commit <code>a37b819</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -297,6 +297,8 @@
       <li><span class="badge badge-yellow mini">zjištěno, neopraveno</span> žádný Dockerfile/docker-compose, žádné structured logging (jen <code class="file">println!</code>), žádné scope mantinely pro aktivní skenování — zapsáno jako budoucí práce, ne tichá mezera</li>
       <li><span class="badge badge-green mini">hotovo (navazující krok)</span> <b>CI odhalilo 2 skutečné regrese</b> v oprávách výše (CSRF guard byl univerzální místo jen pro anonymního admina → rozbilo <code class="file">server_respektuje_api_token</code>; obnovovací vlákno leasy blokovalo <code class="file">worker_cycle</code> i u rychlých jobů → posunulo leader-election timing) — oba opraveny, CI znovu zelené, nový regresní test na druhý nález</li>
       <li><span class="badge badge-green mini">hotovo (navazující krok)</span> <b><code class="file">identity.rs</code> dostal svůj první produkční vstupní bod</b> — <code class="file">pipeline::run_pipeline</code> volá <code class="file">identity::resolve_and_annotate</code> stínově/aditivně (nový <code class="file">HostReport.asset_id</code>/<code class="file">identity_note</code>, beze změny <code class="file">host_key</code>/decision/triage); stav rezolveru přežívá mezi CLI běhy v <code class="file">identity-registry.json</code> (<code class="file">storage::write_atomic</code>). <code class="file">hypothesis.rs</code>/<code class="file">verification_planner.rs</code> zůstávají bez vstupního bodu — zbývají</li>
+      <li><span class="badge badge-green mini">hotovo</span> <code class="file">ENTERPRISE_BACKENDS.md</code> tvrdil, že celá vrstva je "otestovaná" — opraveno po sekcích, jen Redis broker to skutečně je (Postgres i HA/rollout mají 0 dedikovaných testů)</li>
+      <li><span class="badge badge-green mini">hotovo</span> <code class="file">httpx</code>/<code class="file">nuclei</code> natvrdo <code class="file">.exe</code> na všech platformách — na Linuxu (reálné nasazení) by se nástroje nikdy nenašly; opraveno <code class="file">paths::exe_name</code></li>
     </ul>
   </div>
 </details>
