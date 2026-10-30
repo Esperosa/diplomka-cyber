@@ -655,6 +655,7 @@ mod tests {
     fn iot23_nine_scenarios_four_families_dataset_sufficiency_check() {
         let mut f1_scores: Vec<f64> = Vec::new();
         let mut beats_trivial_baseline: Vec<bool> = Vec::new();
+        let mut f1_minus_trivial: Vec<f64> = Vec::new();
         let mut false_positive_rates: Vec<(String, usize, usize)> = Vec::new();
 
         for (label, relative_path) in IOT23_COMMITTED_SCENARIOS {
@@ -707,6 +708,7 @@ mod tests {
             );
             f1_scores.push(f1);
             beats_trivial_baseline.push(f1 > trivial_f1);
+            f1_minus_trivial.push(f1 - trivial_f1);
         }
 
         let n = f1_scores.len();
@@ -722,6 +724,16 @@ mod tests {
                 .iter()
                 .filter(|beats| **beats)
                 .count()
+        );
+        // Deliverable 31 (statisticky aparat, median "vypada lepe" nestaci jako
+        // "statisticky prukazne"): parovy Wilcoxon znamenkovy poradovy test na
+        // f1(ablace A) - f1(trivialni baseline) pres vsech N malware scenaru.
+        // N=6 je presne na hranici, kde test ma vubec nejakou silu - zapsano
+        // honestne jako orientacni, ne jako definitivni dukaz.
+        let wilcoxon = crate::eval::stats::wilcoxon_signed_rank_test(&f1_minus_trivial);
+        println!(
+            "IoT-23 Wilcoxon (F1 ablace A vs. trivialni baseline, n_effective={}): W={:.1} p={:.4} (n=6 je na hranici site pro tenhle test, orientacni vysledek)",
+            wilcoxon.n_effective, wilcoxon.w_statistic, wilcoxon.p_value_two_sided
         );
         for (label, fp, total) in &false_positive_rates {
             println!(
@@ -839,7 +851,7 @@ mod tests {
     fn ctu13_thirteen_scenarios_seven_families_dataset_sufficiency_check() {
         let mut f1_scores: Vec<f64> = Vec::new();
         let mut beats_trivial_baseline: Vec<bool> = Vec::new();
-
+        let mut f1_minus_trivial: Vec<f64> = Vec::new();
         for (label, relative_path) in CTU13_ALL_SCENARIOS {
             let dataset = Ctu13Source
                 .load(&dataset_path(relative_path))
@@ -867,6 +879,7 @@ mod tests {
 
             f1_scores.push(f1);
             beats_trivial_baseline.push(f1 > trivial_f1);
+            f1_minus_trivial.push(f1 - trivial_f1);
         }
 
         let n = f1_scores.len();
@@ -882,6 +895,15 @@ mod tests {
                 .iter()
                 .filter(|beats| **beats)
                 .count()
+        );
+        // Deliverable 31: parovy Wilcoxon znamenkovy poradovy test na
+        // f1(ablace A) - f1(trivialni baseline) pres vsech 13 scenaru. N=13 je
+        // prvni pripad v tomhle projektu, kde test ma skutecnou statistickou silu
+        // (n>=6, viz src/eval/stats.rs modulova dokumentace).
+        let wilcoxon = crate::eval::stats::wilcoxon_signed_rank_test(&f1_minus_trivial);
+        println!(
+            "CTU-13 Wilcoxon (F1 ablace A vs. trivialni baseline, n_effective={}): W={:.1} p={:.6}",
+            wilcoxon.n_effective, wilcoxon.w_statistic, wilcoxon.p_value_two_sided
         );
 
         // Honestni, nefabrikovany pozadavek na N=13: ablace A musi byt zmerena
@@ -1269,6 +1291,20 @@ mod tests {
         let median_dest = median_of_sorted(&sorted_dest);
         println!(
             "Souhrn pres {n} scenaru: zdroj-centricky lift >= 2x destinace-centricky v {beats_count}/{n} scenarich | median zdroj-centricky lift={median_src:.2}x median destinace-centricky lift={median_dest:.2}x"
+        );
+
+        // Deliverable 31: parovy Wilcoxon test na src_lift - dest_lift pres
+        // vsech 13 scenaru - formalni doplnek k median srovnani vyse, overuje,
+        // ze rozdil neni jen artefakt poradi/vyberu (Botnet-44 protiprikladu).
+        let lift_differences: Vec<f64> = src_lifts
+            .iter()
+            .zip(dest_lifts.iter())
+            .map(|(src, dest)| src - dest)
+            .collect();
+        let wilcoxon = crate::eval::stats::wilcoxon_signed_rank_test(&lift_differences);
+        println!(
+            "CTU-13 Wilcoxon (zdroj-centricky lift vs. destinace-centricky lift, n_effective={}): W={:.1} p={:.6}",
+            wilcoxon.n_effective, wilcoxon.w_statistic, wilcoxon.p_value_two_sided
         );
 
         // Honestni, nefabrikovany pozadavek: zdroj-centricke skore musi byt LEPSI
