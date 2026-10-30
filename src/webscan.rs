@@ -57,17 +57,18 @@ pub fn enrich_http_services(
     fs::create_dir_all(&temp_dir)?;
 
     let mut artifacts = WebScanArtifacts::default();
+    let httpx_name = paths::exe_name("httpx");
     let httpx_path = if config.enable_httpx || config.enable_nuclei {
         Some(resolve_tool_path(
             config.httpx_bin.as_deref(),
-            "httpx.exe",
+            &httpx_name,
             &[
                 workspace
                     .join("tools")
                     .join("projectdiscovery")
                     .join("httpx")
-                    .join("httpx.exe"),
-                paths::project_path(&["tools", "projectdiscovery", "httpx", "httpx.exe"]),
+                    .join(&httpx_name),
+                paths::project_path(&["tools", "projectdiscovery", "httpx", httpx_name.as_str()]),
             ],
         )?)
     } else {
@@ -93,16 +94,17 @@ pub fn enrich_http_services(
     };
 
     if config.enable_nuclei {
+        let nuclei_name = paths::exe_name("nuclei");
         let nuclei_path = resolve_tool_path(
             config.nuclei_bin.as_deref(),
-            "nuclei.exe",
+            &nuclei_name,
             &[
                 workspace
                     .join("tools")
                     .join("projectdiscovery")
                     .join("nuclei")
-                    .join("nuclei.exe"),
-                paths::project_path(&["tools", "projectdiscovery", "nuclei", "nuclei.exe"]),
+                    .join(&nuclei_name),
+                paths::project_path(&["tools", "projectdiscovery", "nuclei", nuclei_name.as_str()]),
             ],
         )?;
         let templates_dir = config
@@ -749,8 +751,9 @@ fn severity_from_text(value: &str) -> Severity {
 mod tests {
     use super::{
         default_nuclei_templates_dir, extract_port_from_url, parse_httpx_line, parse_nuclei_line,
-        parse_response_time_ms,
+        parse_response_time_ms, resolve_tool_path,
     };
+    use crate::paths;
     use std::fs;
 
     #[test]
@@ -785,6 +788,33 @@ mod tests {
             Some(8443)
         );
         assert_eq!(extract_port_from_url("http://127.0.0.1/"), Some(80));
+    }
+
+    /// Audit nalez (30.10.2026, produkcni gap analyza): `webscan.rs`/`pipeline/mod.rs`
+    /// mely natvrdo "httpx.exe"/"nuclei.exe" bez ohledu na platformu - na
+    /// Linuxu (realisticke nasazeni vedle Zeeku/Suricaty) by nenasly nastroj
+    /// nainstalovany pod spravnym jmenem bez pripony. Fixtura pouziva
+    /// `paths::exe_name`, takze test je platne i na Windows (kde se bug
+    /// nikdy neprojevil - "faketool.exe" uz je spravne jmeno).
+    #[test]
+    fn resolve_tool_path_requires_the_platform_correct_executable_name() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let platform_name = paths::exe_name("faketool");
+        let tool_path = temp.path().join(&platform_name);
+        fs::write(&tool_path, b"#!/bin/sh\n").expect("write fake tool");
+
+        if platform_name != "faketool.exe" {
+            let hardcoded_windows_defaults = vec![temp.path().join("faketool.exe")];
+            assert!(
+                resolve_tool_path(None, "faketool.exe", &hardcoded_windows_defaults).is_err(),
+                "stary bug (natvrdo '.exe') nesmi na teto platforme najit soubor \
+                 '{platform_name}' pod jmenem 'faketool.exe'"
+            );
+        }
+
+        let resolved = resolve_tool_path(None, &platform_name, std::slice::from_ref(&tool_path))
+            .expect("platformove spravne jmeno (paths::exe_name) musi soubor najit");
+        assert_eq!(resolved, tool_path);
     }
 
     #[test]

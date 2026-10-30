@@ -198,30 +198,32 @@ fn auto_enable_vulners(args: &mut BehArgs) {
 }
 
 fn auto_enable_web_tools(args: &mut BehArgs) {
+    let httpx_name = paths::exe_name("httpx");
     if can_resolve_tool(
         args.httpx_bin.as_deref(),
-        "httpx.exe",
+        &httpx_name,
         &[
             args.workspace
                 .join("tools")
                 .join("projectdiscovery")
                 .join("httpx")
-                .join("httpx.exe"),
-            paths::project_path(&["tools", "projectdiscovery", "httpx", "httpx.exe"]),
+                .join(&httpx_name),
+            paths::project_path(&["tools", "projectdiscovery", "httpx", httpx_name.as_str()]),
         ],
     ) {
         args.web_fingerprint = true;
     }
+    let nuclei_name = paths::exe_name("nuclei");
     if can_resolve_tool(
         args.nuclei_bin.as_deref(),
-        "nuclei.exe",
+        &nuclei_name,
         &[
             args.workspace
                 .join("tools")
                 .join("projectdiscovery")
                 .join("nuclei")
-                .join("nuclei.exe"),
-            paths::project_path(&["tools", "projectdiscovery", "nuclei", "nuclei.exe"]),
+                .join(&nuclei_name),
+            paths::project_path(&["tools", "projectdiscovery", "nuclei", nuclei_name.as_str()]),
         ],
     ) {
         args.web_checks = true;
