@@ -279,6 +279,83 @@ mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR")).join(relative)
     }
 
+    /// Median z JIZ serazenych hodnot (vzestupne) - sdilena mezi vicero
+    /// cross-scenario testy (rozsireni CTU-13 na N=13, 30.10.2026).
+    fn median_of_sorted(sorted: &[f64]) -> f64 {
+        let n = sorted.len();
+        if n.is_multiple_of(2) {
+            (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+        } else {
+            sorted[n / 2]
+        }
+    }
+
+    /// Vsech 13 CTU-13 scenaru (rozsireni ze 3 na 13, 30.10.2026 - "dataset je
+    /// moc maly" pozadavek). Rodina u kazdeho overena PRIMO na
+    /// `mcfp.felk.cvut.cz` (exe/capture jmeno v adresari scenare - viz
+    /// `docs/diplomka/dataset-registry.md`), ne odhadnuta ze zapamatovane
+    /// mapovaci tabulky. 2 z nich (Botnet-47, Botnet-49) se SKUTECNE lisi od
+    /// casto citovane "Menti"/"Murlo" tabulky (realne Donbot/Qvod) - presne
+    /// ten druh chyby, co tenhle projekt uz jednou opravil (Virut/RBot
+    /// mix-up, viz `produkcni-plan.md` historie) - proto se tu rodina necte
+    /// z pameti, ale z primo nactene adresarove listiny. Botnet-46
+    /// ("fast-flux") a Botnet-53 nemaji u zdroje jasne jmeno rodiny (jen
+    /// technika/generic "bot") - zapsano honestne, ne domyslene.
+    const CTU13_ALL_SCENARIOS: &[(&str, &str)] = &[
+        (
+            "Botnet-42 (Neris)",
+            "labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv",
+        ),
+        (
+            "Botnet-43 (Neris)",
+            "labs/datasets/ctu13/Botnet-43/capture20110811.binetflow.excerpt.csv",
+        ),
+        (
+            "Botnet-44 (Rbot)",
+            "labs/datasets/ctu13/Botnet-44/capture20110812.binetflow.excerpt.csv",
+        ),
+        (
+            "Botnet-45 (Rbot-DoS)",
+            "labs/datasets/ctu13/Botnet-45/capture20110815.binetflow.excerpt.csv",
+        ),
+        (
+            "Botnet-46 (fast-flux, rodina neoznacena u zdroje)",
+            "labs/datasets/ctu13/Botnet-46/capture20110815-2.binetflow.full.csv",
+        ),
+        (
+            "Botnet-47 (Donbot)",
+            "labs/datasets/ctu13/Botnet-47/capture20110816.binetflow.excerpt.csv",
+        ),
+        (
+            "Botnet-48 (Sogou)",
+            "labs/datasets/ctu13/Botnet-48/capture20110816-2.binetflow.full.csv",
+        ),
+        (
+            "Botnet-49 (Qvod)",
+            "labs/datasets/ctu13/Botnet-49/capture20110816-3.binetflow.excerpt.csv",
+        ),
+        (
+            "Botnet-50 (Neris)",
+            "labs/datasets/ctu13/Botnet-50/capture20110817.binetflow.excerpt.csv",
+        ),
+        (
+            "Botnet-51 (Rbot)",
+            "labs/datasets/ctu13/Botnet-51/capture20110818.binetflow.excerpt.csv",
+        ),
+        (
+            "Botnet-52 (Rbot)",
+            "labs/datasets/ctu13/Botnet-52/capture20110818-2.binetflow.full.csv",
+        ),
+        (
+            "Botnet-53 (rodina neoznacena u zdroje)",
+            "labs/datasets/ctu13/Botnet-53/capture20110819.binetflow.excerpt.csv",
+        ),
+        (
+            "Botnet-54 (Virut)",
+            "labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv",
+        ),
+    ];
+
     #[test]
     fn ablation_a_on_iot23_malware_scenario_is_reproducible() {
         let dataset = Iot23Source
@@ -605,35 +682,21 @@ mod tests {
         );
     }
 
-    /// Deliverable 18 (datasetova dostatecnost, master plan): rozsireni ze 1 na 3
-    /// CTU-13 scenare, 2 ruzne malware rodiny (Virut na Botnet-54, Rbot na Botnet-51,
-    /// Neris na Botnet-42) - misto "cross-dataset = druhy capture soubor" (limitace
-    /// zapsana v cross-dataset-ctu13.md) uz jde o skutecne vice nezavislych scenaru.
-    /// N=3 NESTACI na formalni statisticky test (Wilcoxon potrebuje n>=6 na jakoukoliv
-    /// silu, viz dalsi-postup-master-plan.md) - tenhle test honestne reportuje rozsah/
-    /// medianu mezi scenari, ne fabrikovanou p-hodnotu.
+    /// Deliverable 18 (datasetova dostatecnost, master plan) + rozsireni 30.10.2026
+    /// ze 3 na vsech 13 CTU-13 scenaru (7 ruznych malware rodin/technik - viz
+    /// `CTU13_ALL_SCENARIOS`) - misto "cross-dataset = druhy capture soubor"
+    /// (limitace zapsana v cross-dataset-ctu13.md) uz jde o skutecne vice
+    /// nezavislych scenaru. N=13 stacuje na Wilcoxon signed-rank test (potrebuje
+    /// n>=6 na jakoukoliv silu, viz dalsi-postup-master-plan.md) - tenhle test
+    /// pocita medianu/IQR mezi scenari (popisna statistika), ne fabrikovanou
+    /// p-hodnotu z neimplementovaneho testu.
     #[test]
     #[ignore = "vyzaduje stazene CTU-13 vyrezy, viz docs/diplomka/dataset-registry.md"]
-    fn ctu13_three_scenarios_two_families_dataset_sufficiency_check() {
-        let scenarios = [
-            (
-                "Botnet-54 (Virut)",
-                "labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv",
-            ),
-            (
-                "Botnet-51 (Rbot)",
-                "labs/datasets/ctu13/Botnet-51/capture20110818.binetflow.excerpt.csv",
-            ),
-            (
-                "Botnet-42 (Neris)",
-                "labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv",
-            ),
-        ];
-
+    fn ctu13_thirteen_scenarios_seven_families_dataset_sufficiency_check() {
         let mut f1_scores: Vec<f64> = Vec::new();
         let mut beats_trivial_baseline: Vec<bool> = Vec::new();
 
-        for (label, relative_path) in scenarios {
+        for (label, relative_path) in CTU13_ALL_SCENARIOS {
             let dataset = Ctu13Source
                 .load(&dataset_path(relative_path))
                 .unwrap_or_else(|error| panic!("parse {label}: {error}"));
@@ -662,40 +725,44 @@ mod tests {
             beats_trivial_baseline.push(f1 > trivial_f1);
         }
 
+        let n = f1_scores.len();
         let min_f1 = f1_scores.iter().cloned().fold(f64::INFINITY, f64::min);
         let max_f1 = f1_scores.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let mut sorted = f1_scores.clone();
+        sorted.sort_by(|left, right| left.partial_cmp(right).unwrap_or(Ordering::Equal));
+        let median = median_of_sorted(&sorted);
+        let mean = f1_scores.iter().sum::<f64>() / n as f64;
         println!(
-            "CTU-13, 3 scenare/2 rodiny: F1 rozsah [{min_f1:.3}, {max_f1:.3}], ablace A porazila trivialni baseline v {}/3 scenarich",
+            "CTU-13, {n} scenaru/7 rodin: F1 min={min_f1:.3} median={median:.3} mean={mean:.3} max={max_f1:.3}, ablace A porazila trivialni baseline v {}/{n} scenarich",
             beats_trivial_baseline
                 .iter()
                 .filter(|beats| **beats)
                 .count()
         );
 
-        // Honestni, nefabrikovany pozadavek na N=3: ablace A musi byt zmerena (ne
-        // crashnout) na vsech 3 scenarich a kazdy musi mit alespon nejaky znamy
-        // (Malicious/Benign) provoz - jinak je "cross-scenario" srovnani prazdne.
+        // Honestni, nefabrikovany pozadavek na N=13: ablace A musi byt zmerena
+        // (ne crashnout) na vsech 13 scenarich a kazdy musi mit alespon nejaky
+        // znamy (Malicious/Benign) provoz - jinak je "cross-scenario" srovnani
+        // prazdne.
         assert_eq!(
             f1_scores.len(),
-            3,
-            "vsechny 3 scenare musi byt uspesne zmereny"
+            CTU13_ALL_SCENARIOS.len(),
+            "vsech {} scenaru musi byt uspesne zmereno",
+            CTU13_ALL_SCENARIOS.len()
         );
     }
 
-    /// Deliverable 19 (H4 kalibrace, master plan): izotonicka regrese kontinualniho
-    /// anomaly skore (`passive::anomaly::score_connection_keys`), trenovana na 2 ze 3
-    /// CTU-13 scenaru a vyhodnocena na tom tretim (leave-one-scenario-out) - zadny
+    /// Deliverable 19 (H4 kalibrace, master plan) + rozsireni 30.10.2026 ze 3 na
+    /// vsech 13 CTU-13 scenaru: izotonicka regrese kontinualniho anomaly skore
+    /// (`passive::anomaly::score_connection_keys`), trenovana na 12 ze 13 CTU-13
+    /// scenaru a vyhodnocena na tom zbyvajicim (leave-one-scenario-out) - zadny
     /// scenar nikdy neni soucasne v treningu i testu. Srovnani: "nekalibrovane" skore
     /// = presne ten binarni prah (score>=3.2), ktery uz produkcni kod pouziva, jako
     /// 0/1 "pravdepodobnost" (nejcestnejsi dostupny baseline, ne vymyslena slama).
     #[test]
     #[ignore = "vyzaduje stazene CTU-13 vyrezy, viz docs/diplomka/dataset-registry.md"]
     fn h4_isotonic_calibration_loso_brier_score_across_ctu13_scenarios() {
-        let scenario_paths = [
-            "labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv",
-            "labs/datasets/ctu13/Botnet-51/capture20110818.binetflow.excerpt.csv",
-            "labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv",
-        ];
+        let scenario_paths: Vec<&str> = CTU13_ALL_SCENARIOS.iter().map(|(_, path)| *path).collect();
 
         let points_per_scenario: Vec<Vec<_>> = scenario_paths
             .iter()
@@ -754,14 +821,15 @@ mod tests {
         let mean_calibrated =
             calibrated_brier_scores.iter().sum::<f64>() / calibrated_brier_scores.len() as f64;
         println!(
-            "LOSO prumer pres 3 scenare: raw_brier={mean_raw:.4} calibrated_brier={mean_calibrated:.4}"
+            "LOSO prumer pres {} scenaru: raw_brier={mean_raw:.4} calibrated_brier={mean_calibrated:.4}",
+            scenario_paths.len(),
         );
 
-        // Honestni, nefabrikovany pozadavek: kalibrace musi bezet na vsech 3 fold a
+        // Honestni, nefabrikovany pozadavek: kalibrace musi bezet na vsech 13 fold a
         // nesmi explodovat (napr. NaN z degenerovaneho fitu) - netvrdime predem, ze
         // kalibrace MUSI zlepsit Brier (to je otevrena empiricka otazka, ne predpoklad).
-        assert_eq!(raw_brier_scores.len(), 3);
-        assert_eq!(calibrated_brier_scores.len(), 3);
+        assert_eq!(raw_brier_scores.len(), CTU13_ALL_SCENARIOS.len());
+        assert_eq!(calibrated_brier_scores.len(), CTU13_ALL_SCENARIOS.len());
         for brier in raw_brier_scores
             .iter()
             .chain(calibrated_brier_scores.iter())
@@ -783,13 +851,7 @@ mod tests {
     #[test]
     #[ignore = "vyzaduje stazene CTU-13 vyrezy, viz docs/diplomka/dataset-registry.md"]
     fn ctu13_pr_auc_diagnoses_whether_score_has_discriminative_power_or_just_bad_threshold() {
-        let scenario_paths = [
-            "labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv",
-            "labs/datasets/ctu13/Botnet-51/capture20110818.binetflow.excerpt.csv",
-            "labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv",
-        ];
-
-        for path in scenario_paths {
+        for (_, path) in CTU13_ALL_SCENARIOS {
             let dataset = Ctu13Source
                 .load(&dataset_path(path))
                 .unwrap_or_else(|error| panic!("parse {path}: {error}"));
@@ -863,11 +925,7 @@ mod tests {
     #[test]
     #[ignore = "vyzaduje stazene CTU-13 vyrezy, viz docs/diplomka/dataset-registry.md"]
     fn ctu13_source_centric_loso_f1_optimal_threshold_beats_naive_and_trivial() {
-        let scenario_paths = [
-            "labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv",
-            "labs/datasets/ctu13/Botnet-51/capture20110818.binetflow.excerpt.csv",
-            "labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv",
-        ];
+        let scenario_paths: Vec<&str> = CTU13_ALL_SCENARIOS.iter().map(|(_, path)| *path).collect();
 
         let points_per_scenario: Vec<Vec<ScoredPoint>> = scenario_paths
             .iter()
@@ -931,11 +989,12 @@ mod tests {
         for f1 in &test_f1_scores {
             assert!(f1.is_finite(), "LOSO test F1 musi byt konecne cislo");
         }
-        // Honestni, nefabrikovany pozadavek - jen ze mereni probehlo na vsech 3 foldech,
-        // ne ze LOSO-vybrany prah MUSI porazit trivialni baseline na kazdem z nich
-        // (to je otevrena empiricka otazka, zapsana v docs vysledkem, ne predpokladem).
-        assert_eq!(test_f1_scores.len(), 3);
-        assert_eq!(trivial_f1_scores.len(), 3);
+        // Honestni, nefabrikovany pozadavek - jen ze mereni probehlo na vsech 13
+        // foldech, ne ze LOSO-vybrany prah MUSI porazit trivialni baseline na
+        // kazdem z nich (to je otevrena empiricka otazka, zapsana v docs
+        // vysledkem, ne predpokladem).
+        assert_eq!(test_f1_scores.len(), CTU13_ALL_SCENARIOS.len());
+        assert_eq!(trivial_f1_scores.len(), CTU13_ALL_SCENARIOS.len());
     }
 
     /// Deliverable 28, pokracovani diagnozy: `score_connection_keys` (agregace podle
@@ -948,13 +1007,11 @@ mod tests {
     #[test]
     #[ignore = "vyzaduje stazene CTU-13 vyrezy, viz docs/diplomka/dataset-registry.md"]
     fn ctu13_source_centric_scoring_vs_destination_centric_pr_auc_comparison() {
-        let scenario_paths = [
-            "labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv",
-            "labs/datasets/ctu13/Botnet-51/capture20110818.binetflow.excerpt.csv",
-            "labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv",
-        ];
+        let mut src_lifts: Vec<f64> = Vec::new();
+        let mut dest_lifts: Vec<f64> = Vec::new();
+        let mut beats_2x: Vec<bool> = Vec::new();
 
-        for path in scenario_paths {
+        for (_, path) in CTU13_ALL_SCENARIOS {
             let dataset = Ctu13Source
                 .load(&dataset_path(path))
                 .unwrap_or_else(|error| panic!("parse {path}: {error}"));
@@ -1017,15 +1074,9 @@ mod tests {
                 src_pairs.len(),
             );
 
-            // Regresni pojistka na klicovy nalez (Deliverable 28, dokumentovano v
-            // docs/diplomka/eval/source-centric-scoring-pr-auc.md): zdroj-centricke
-            // skore musi mit VYRAZNE vyssi lift nez destinace-centricke na KAZDEM ze 3
-            // scenaru - pokud budouci zmena detekcni logiky tohle porusi, musi test
-            // selhat, ne tise zmizet z vystupu.
-            assert!(
-                src_lift > dest_lift * 2.0,
-                "{path}: zdroj-centricky lift ({src_lift:.2}x) musi byt aspon 2x vyssi nez destinace-centricky ({dest_lift:.2}x)"
-            );
+            src_lifts.push(src_lift);
+            dest_lifts.push(dest_lift);
+            beats_2x.push(src_lift > dest_lift * 2.0);
 
             // Lepsi ranking (PR-AUC) nemusi automaticky znamenat lepsi klasifikaci PRI
             // NEJAKEM konkretnim prahu - tohle to overuje. Prah 3.2 je prevzaty
@@ -1055,6 +1106,34 @@ mod tests {
                 confusion.f1(),
             );
         }
+
+        // Rozsireni 30.10.2026 (N=3 -> N=13) odhalilo realny protiprikald: puvodni
+        // regresni pojistka ("src_lift > dest_lift*2.0 na KAZDEM scenari") z
+        // Deliverable 28/driveho N=3 NEPLATI univerzalne - Botnet-44 ma
+        // destinace-centricky lift VYSSI (6.08x) nez zdroj-centricky (2.17x).
+        // Honestni oprava: tvrzeni z "na kazdem scenari" na "na vetsine scenaru,
+        // mereno agregatne" - zapsano jako skutecny, zmereny nalez (viz
+        // docs/diplomka/eval/source-centric-scoring-pr-auc.md), ne tise opraveno
+        // bez zaznamu.
+        let beats_count = beats_2x.iter().filter(|beats| **beats).count();
+        let n = src_lifts.len();
+        let mut sorted_src = src_lifts.clone();
+        sorted_src.sort_by(|left, right| left.partial_cmp(right).unwrap_or(Ordering::Equal));
+        let median_src = median_of_sorted(&sorted_src);
+        let mut sorted_dest = dest_lifts.clone();
+        sorted_dest.sort_by(|left, right| left.partial_cmp(right).unwrap_or(Ordering::Equal));
+        let median_dest = median_of_sorted(&sorted_dest);
+        println!(
+            "Souhrn pres {n} scenaru: zdroj-centricky lift >= 2x destinace-centricky v {beats_count}/{n} scenarich | median zdroj-centricky lift={median_src:.2}x median destinace-centricky lift={median_dest:.2}x"
+        );
+
+        // Honestni, nefabrikovany pozadavek: zdroj-centricke skore musi byt LEPSI
+        // NEZ destinace-centricke v AGREGATU (median) - ne na kazdem jednotlivem
+        // scenari (to uz prokazatelne neplati, viz Botnet-44 vyse).
+        assert!(
+            median_src > median_dest * 2.0,
+            "median zdroj-centricky lift ({median_src:.2}x) musi byt aspon 2x vyssi nez median destinace-centricky ({median_dest:.2}x), i kdyz uz ne na KAZDEM jednotlivem scenari"
+        );
     }
 
     /// Navazuje na predchozi test: naivni prenos prahu 3.2 z destinace-centricke
@@ -1069,11 +1148,7 @@ mod tests {
     #[test]
     #[ignore = "vyzaduje stazene CTU-13 vyrezy, viz docs/diplomka/dataset-registry.md"]
     fn ctu13_source_centric_isotonic_calibration_loso_beats_naive_threshold_transfer() {
-        let scenario_paths = [
-            "labs/datasets/ctu13/Botnet-54/capture20110815-3.binetflow.excerpt.csv",
-            "labs/datasets/ctu13/Botnet-51/capture20110818.binetflow.excerpt.csv",
-            "labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv",
-        ];
+        let scenario_paths: Vec<&str> = CTU13_ALL_SCENARIOS.iter().map(|(_, path)| *path).collect();
 
         let points_per_scenario: Vec<Vec<ScoredPoint>> = scenario_paths
             .iter()

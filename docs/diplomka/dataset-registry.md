@@ -61,8 +61,50 @@ curl -s -r 150000000-181457280 "$URL42" | tail -n +2 > body.tmp
 cat header.tmp body.tmp > labs/datasets/ctu13/Botnet-42/capture20110810.binetflow.excerpt.csv
 ```
 
+### Rozšíření 30.10.2026 — zbývajících 10 scénářů, plná sada 13/13
+
+**Impuls**: uživatel výslovně odmítl N=3 jako statisticky/datově průkazné ("dataset testů je stále moc malý"). CTU-13 (akademický paper "An empirical comparison of botnet detection methods", mcfp.weebly.com) má přesně 13 scénářů — tahle session doplnila zbývajících 10, čímž je **poprvé pokryta celá, standardní, publikovaná CTU-13 sada, ne jen výběr 3**.
+
+**Rodina u každého scénáře ověřena PŘÍMO na `mcfp.felk.cvut.cz`** (jméno exe vzorku a/nebo capture název v adresáři scénáře), **ne odhadnuta ze zapamatované mapovací tabulky** — stejná disciplína, co tento projekt už jednou vynutila opravu (Virut/RBot mix-up, viz historie výše v tomto dokumentu). Dva scénáře se od často citované "scénář 6 = Menti, scénář 8 = Murlo" tabulky skutečně liší: přímo zjištěno **Donbot** (Botnet-47) a **Qvod** (Botnet-49), ne Menti/Murlo. Dva scénáře (Botnet-46, Botnet-53) nemají u zdroje jednoznačné jméno rodiny (jen capture technika "fast-flux" / generické "bot") — zapsáno honestně jako neoznačené, ne domyšlené.
+
+Tři scénáře (Botnet-46/48/52) mají celý soubor pod 30 MB — stažen celý (ne výřez). U tří scénářů (Botnet-43/44/45) byla raná část capture (prvních 30 MB) málo nebo vůbec zastoupená malware provozem — ověřeno přímo sondami na více offsetech (stejná disciplína jako u Botnet-42 výše), výřez sestaven z hustší oblasti. Zbývající čtyři (Botnet-47/49/50/53) mají dost malware provozu už v prvních 30 MB.
+
+| Scénář | Rodina (ověřeno přímo) | Cesta (lokální, gitignored) | Velikost | SHA-256 | Flows | Malicious |
+|---|---|---|---|---|---|---|
+| CTU-Malware-Capture-Botnet-43, scénář 2, 30 MB od offsetu 60 000 000 B | Neris | `labs/datasets/ctu13/Botnet-43/capture20110811.binetflow.excerpt.csv` | 31 457 330 B | `72aff359dfdd7e4534fe6033771324f1094a7d44a98ca81ad91f14b4529a0d80` | 229 265 | 10 263 |
+| CTU-Malware-Capture-Botnet-44, scénář 3, 30 MB od offsetu 475 000 000 B | Rbot | `labs/datasets/ctu13/Botnet-44/capture20110812.binetflow.excerpt.csv` | 31 457 370 B | `23c323a23484fef6e8fce57c2c578e6d7ef6ce6ec4aa67ba89ae67f75cfd01e0` | 231 592 | 4 757 |
+| CTU-Malware-Capture-Botnet-45, scénář 4, 30 MB od offsetu 58 000 000 B | Rbot (DoS varianta) | `labs/datasets/ctu13/Botnet-45/capture20110815.binetflow.excerpt.csv` | 31 457 365 B | `726a30ca60915cd304949dbc43a54b496f328db7de1c42a716979acdd1cceca2` | 229 288 | 469 |
+| CTU-Malware-Capture-Botnet-46, scénář 5, celý soubor | "fast-flux" (rodina neoznačena u zdroje) | `labs/datasets/ctu13/Botnet-46/capture20110815-2.binetflow.full.csv` | 17 766 203 B | `ef5c9ed6895d4ca5aec723449dae30054ccd1f6b091713a52ffcb681ff78a02c` | 129 832 | 901 |
+| CTU-Malware-Capture-Botnet-47, scénář 6, prvních 30 MB | Donbot (NE "Menti" — ověřeno přímo, mapovací tabulka se mýlí) | `labs/datasets/ctu13/Botnet-47/capture20110816.binetflow.excerpt.csv` | 31 457 281 B | `107a93bc1923a50a2a8c15e1b9ad785011dcf028f470df99691d157914521482` | 228 608 | 1 552 |
+| CTU-Malware-Capture-Botnet-48, scénář 7, celý soubor | Sogou | `labs/datasets/ctu13/Botnet-48/capture20110816-2.binetflow.full.csv` | 15 630 512 B | `df0b5338190b967bd340a0d6c1bb3c34d1bbfb4b7ffa764c2dd26f77f1a26680` | 114 077 | 63 |
+| CTU-Malware-Capture-Botnet-49, scénář 8, prvních 30 MB | Qvod (NE "Murlo" — ověřeno přímo, mapovací tabulka se mýlí) | `labs/datasets/ctu13/Botnet-49/capture20110816-3.binetflow.excerpt.csv` | 31 457 281 B | `72935df0e450755278550c0289b363f93b2e8d6175d96339462f1da376bc050f` | 228 413 | 381 |
+| CTU-Malware-Capture-Botnet-50, scénář 9, prvních 30 MB | Neris | `labs/datasets/ctu13/Botnet-50/capture20110817.binetflow.excerpt.csv` | 31 457 281 B | `dc49523e0f11c6bb418784d4cc0703c6bbdbfe340fbf7d98583b963d44255e43` | 229 364 | 50 |
+| CTU-Malware-Capture-Botnet-52, scénář 11, celý soubor | Rbot | `labs/datasets/ctu13/Botnet-52/capture20110818-2.binetflow.full.csv` | 14 596 615 B | `cee542d4b5efe4fa1cd59b87ece5aaea9a13d8f0abe56cd07cee31590736428c` | 107 251 | 8 164 |
+| CTU-Malware-Capture-Botnet-53, scénář 12, prvních 30 MB | rodina neoznačena u zdroje ("bot") | `labs/datasets/ctu13/Botnet-53/capture20110819.binetflow.excerpt.csv` | 31 457 281 B | `8a7d096e2aa40c8da267cf50987a6775dccfdeb8d3b0dd9f9d551c0ad8bd745e` | 228 811 | 1 720 |
+
+**Souhrn po rozšíření: 13/13 standardních CTU-13 scénářů, ~2,64 milionu flows celkem, ~27 000 malicious flows, 7 odlišných rodin/technik** (Neris×3, Rbot×4, Virut×1, "fast-flux"×1, Donbot×1, Sogou×1, Qvod×1, neoznačeno×1) — proti dřívějšímu N=3 (3 rodiny, ~688 000 flows). Použito v `src/eval/dataset_replay.rs`'s sdílené `CTU13_ALL_SCENARIOS` konstantě, nahrazující 6 dříve nezávisle hardcoded N=3 seznamů.
+
+**Reprodukce stažení zbývajících 10** (stejný vzor jako výše; offsety u Botnet-43/44/45 zjištěny sondováním více bodů v souboru, ne odhadem):
+```
+# Cele soubory (<30MB)
+curl -s "https://mcfp.felk.cvut.cz/publicDatasets/CTU-Malware-Capture-Botnet-46/detailed-bidirectional-flow-labels/capture20110815-2.binetflow" -o labs/datasets/ctu13/Botnet-46/capture20110815-2.binetflow.full.csv
+curl -s "https://mcfp.felk.cvut.cz/publicDatasets/CTU-Malware-Capture-Botnet-48/detailed-bidirectional-flow-labels/capture20110816-2.binetflow" -o labs/datasets/ctu13/Botnet-48/capture20110816-2.binetflow.full.csv
+curl -s "https://mcfp.felk.cvut.cz/publicDatasets/CTU-Malware-Capture-Botnet-52/detailed-bidirectional-flow-labels/capture20110818-2.binetflow" -o labs/datasets/ctu13/Botnet-52/capture20110818-2.binetflow.full.csv
+
+# Prvnich 30MB (dost malware provozu uz na zacatku)
+curl -s -r 0-31457280 "https://mcfp.felk.cvut.cz/publicDatasets/CTU-Malware-Capture-Botnet-47/detailed-bidirectional-flow-labels/capture20110816.binetflow" -o labs/datasets/ctu13/Botnet-47/capture20110816.binetflow.excerpt.csv
+curl -s -r 0-31457280 "https://mcfp.felk.cvut.cz/publicDatasets/CTU-Malware-Capture-Botnet-49/detailed-bidirectional-flow-labels/capture20110816-3.binetflow" -o labs/datasets/ctu13/Botnet-49/capture20110816-3.binetflow.excerpt.csv
+curl -s -r 0-31457280 "https://mcfp.felk.cvut.cz/publicDatasets/CTU-Malware-Capture-Botnet-50/detailed-bidirectional-flow-labels/capture20110817.binetflow" -o labs/datasets/ctu13/Botnet-50/capture20110817.binetflow.excerpt.csv
+curl -s -r 0-31457280 "https://mcfp.felk.cvut.cz/publicDatasets/CTU-Malware-Capture-Botnet-53/detailed-bidirectional-flow-labels/capture20110819.binetflow" -o labs/datasets/ctu13/Botnet-53/capture20110819.binetflow.excerpt.csv
+
+# Offset-based (rana cast capture ma malo/zadny malware provoz, ověřeno sondou)
+curl -s -r 0-200 "$URL43" | head -1 > h.tmp; curl -s -r 60000000-91457279 "$URL43" | tail -n +2 > b.tmp; cat h.tmp b.tmp > labs/datasets/ctu13/Botnet-43/capture20110811.binetflow.excerpt.csv
+curl -s -r 0-200 "$URL44" | head -1 > h.tmp; curl -s -r 475000000-506457279 "$URL44" | tail -n +2 > b.tmp; cat h.tmp b.tmp > labs/datasets/ctu13/Botnet-44/capture20110812.binetflow.excerpt.csv
+curl -s -r 0-200 "$URL45" | head -1 > h.tmp; curl -s -r 58000000-89457279 "$URL45" | tail -n +2 > b.tmp; cat h.tmp b.tmp > labs/datasets/ctu13/Botnet-45/capture20110815.binetflow.excerpt.csv
+```
+
 ## Budoucí vlny (naplánováno, ne implementováno)
 
-- **Vlna 1 (zbytek):** CICIDS2017/2018, CICIoT2023, UNSW-NB15 — každý jako nová `ScenarioSource` implementace v `src/eval/sources/`.
+- **Vlna 1 (zbytek):** CICIDS2017/2018, CICIoT2023, UNSW-NB15 — každý jako nová `ScenarioSource` implementace v `src/eval/sources/`, jiné schéma/parser než CTU-13's binetflow.
 - **Vlna 2:** threat intel enrichment (NVD/KEV/EPSS, URLhaus, ThreatFox, OTX).
 - **Vlna 3:** Mininet/Containerlab generátor syntetických scénářů — zdroj prakticky neomezeného objemu kontrolovaných scénářů (DHCP/NAT churn, vlastní firewall/DNS/IPS politiky), včetně identity-churn scénářů, které IoT-23 ani CTU-13 nepokrývají.

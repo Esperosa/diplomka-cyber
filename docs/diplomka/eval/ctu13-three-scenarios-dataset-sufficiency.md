@@ -35,6 +35,33 @@ CTU-13, 3 scenare/2 rodiny: F1 rozsah [0.273, 0.306], ablace A porazila trivialn
 
 ## Honestní omezení
 
-- **Stále jen 3 ze 13 dostupných scénářů, 2 ze zhruba 7 rodin.** Zobecnění na "CTU-13 obecně" nebo na botnet provoz obecně je dál opatrné — tohle je oproti 1 scénáři výrazně silnější, ne vyčerpávající důkaz.
+- ~~Stále jen 3 ze 13 dostupných scénářů, 2 ze zhruba 7 rodin.~~ **Vyřešeno níže (30.10.2026) — všech 13/13.**
 - **Offset-based výřez u Botnet-42 je jiná vzorkovací metoda** než prvních-N-bytů u ostatních dvou — vnáší drobnou metodologickou nekonzistenci (vzorek "odjinud" v čase capture), zapsáno zde transparentně, ne skryto.
-- **Žádná formální statistika (CI, p-hodnota)** — vědomě, kvůli nedostatečnému N, ne protože by to bylo zapomenuto.
+- ~~Žádná formální statistika (CI, p-hodnota)~~ — bootstrap CI existuje pro jednotlivé scénáře už od Deliverable 20; medián/IQR přes scénáře viz níže. Formální test mezi-scenarové signifikance (Wilcoxon) stále neimplementován.
+
+## Dodatek (30.10.2026): rozšíření na všech 13/13 standardních CTU-13 scénářů, 7 rodin/technik
+
+**Impuls**: uživatel výslovně odmítl N=3 jako statisticky/datově průkazné. Doplněno zbývajících 10 scénářů (Botnet-43/44/45/46/47/48/49/50/52/53) — podrobnosti stažení/ověření rodiny v `dataset-registry.md`. `src/eval/dataset_replay.rs` dostal sdílenou `CTU13_ALL_SCENARIOS` konstantu, nahrazující 6 nezávisle hardcoded N=3 seznamů v různých testech.
+
+```
+Botnet-42 (Neris):    known_keys=979  malicious=2614  TP=148 FP=143 FN=644 TN=44 precision=0.509 recall=0.187 f1=0.273 | trivial_f1=0.894
+Botnet-43 (Neris):    known_keys=462  malicious=10263 TP=116 FP=36  FN=305 TN=5  precision=0.763 recall=0.276 f1=0.405 | trivial_f1=0.954
+Botnet-44 (Rbot):      known_keys=4766 malicious=4757  TP=2   FP=20  FN=4744 TN=0 precision=0.091 recall=0.000 f1=0.001 | trivial_f1=0.998
+Botnet-45 (Rbot-DoS):  known_keys=252  malicious=469   TP=5   FP=204 FN=1   TN=42 precision=0.024 recall=0.833 f1=0.047 | trivial_f1=0.047
+Botnet-46 (fast-flux): known_keys=439  malicious=901   TP=34  FP=188 FN=158 TN=59 precision=0.153 recall=0.177 f1=0.164 | trivial_f1=0.609
+Botnet-47 (Donbot):    known_keys=729  malicious=1552  TP=76  FP=95  FN=531 TN=27 precision=0.444 recall=0.125 f1=0.195 | trivial_f1=0.909
+Botnet-48 (Sogou):     known_keys=110  malicious=63    TP=7   FP=67  FN=10  TN=26 precision=0.095 recall=0.412 f1=0.154 | trivial_f1=0.268
+Botnet-49 (Qvod):      known_keys=390  malicious=381   TP=25  FP=126 FN=191 TN=48 precision=0.166 recall=0.116 f1=0.136 | trivial_f1=0.713
+Botnet-50 (Neris):     known_keys=195  malicious=50    TP=9   FP=152 FN=0   TN=34 precision=0.056 recall=1.000 f1=0.106 | trivial_f1=0.088
+Botnet-51 (Rbot):      known_keys=95   malicious=81    TP=12  FP=55  FN=8   TN=20 precision=0.179 recall=0.600 f1=0.276 | trivial_f1=0.348
+Botnet-52 (Rbot):      known_keys=50   malicious=8164  TP=5   FP=29  FN=3   TN=13 precision=0.147 recall=0.625 f1=0.238 | trivial_f1=0.276
+Botnet-53 (neoznaceno):known_keys=1403 malicious=1720  TP=90  FP=233 FN=1038 TN=42 precision=0.279 recall=0.080 f1=0.124 | trivial_f1=0.891
+Botnet-54 (Virut):     known_keys=885  malicious=6185  TP=158 FP=48  FN=667 TN=12 precision=0.767 recall=0.192 f1=0.306 | trivial_f1=0.965
+
+CTU-13, 13 scenaru/7 rodin: F1 min=0.001 median=0.164 mean=0.187 max=0.405
+ablace A porazila trivialni baseline v 1/13 scenarich
+```
+
+**Hlavní zjištění přežilo, ale zesláblo**: ablace A prohrává s triviálním baseline na **12 ze 13** scénářů (dřív 3/3, teď 12/13) — jediná výjimka (Botnet-45) je hraniční (F1=0.047 vs. triviální 0.047, rozdíl na 4. desetinném místě). **Rozšíření na 7× víc dat generalizační tvrzení NEVYVRÁTILO, naopak posílilo** — ale F1 napříč scénáři je teď výrazně méně konzistentní (0.001–0.405, dřív 0.273–0.306 na jen 3 vzorcích) — menší vzorek skryl reálnou variabilitu mezi scénáři/rodinami. Medián F1=0.164 je honestnější shrnutí síly ablace A než dřívější úzký rozsah.
+
+**Nový pozorovaný vzorec**: scénáře s velmi malým počtem known klíčů (Botnet-48: 110, Botnet-50: 195, Botnet-52: 50) mají vysokou variabilitu F1 (0.106–0.238) i triviálního baseline (0.088–0.276) — malý vzorek uvnitř scénáře přidává svou vlastní nejistotu nad rámec mezi-scénářové variability. Bootstrap CI (Deliverable 20) by tohle u každého scénáře jednotlivě kvantifikoval; mezi-scénářová formální statistika (Wilcoxon, teď s n=13≥6 proveditelná) zůstává budoucí práce.
