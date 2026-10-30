@@ -33,7 +33,7 @@ use crate::{
     triage, validation, vuln, webscan,
 };
 
-#[derive(Args, Debug, Clone)]
+#[derive(Args, Debug, Clone, Default)]
 pub struct BehArgs {
     #[arg(long)]
     pub workspace: PathBuf,
@@ -1432,4 +1432,205 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     )?;
     workspace.enforce_retention(app_config.retention.max_runs, app_config.retention.keep_raw)?;
     Ok(report)
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::NamedTempFile;
+
+    use super::*;
+
+    /// Retrospektivni audit (2 nezavisle haiku review, 29.10.2026) spravne
+    /// odhalil, ze golden-snapshot test NEPOKRYVA chybove vetve
+    /// `validate_pipeline_args`/`validate_monitor_args` (fixtura je vzdy
+    /// platna) - golden pouziva jen `--pentest`/`--production`/vadne cesty
+    /// NIKDY. Tyhle testy to zavirajin primo, bez nutnosti spoustet cely
+    /// binary pipeline.
+    fn minimal_valid_args(nmap_xml: &Path) -> BehArgs {
+        BehArgs {
+            workspace: PathBuf::from("."),
+            nazev: "test".to_string(),
+            scope: vec!["192.168.1.0/24".parse().expect("scope")],
+            ports: vec![80],
+            profile: "bezny".to_string(),
+            provider: "demo".to_string(),
+            nmap_xml: Some(nmap_xml.to_path_buf()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn validate_pipeline_args_rejects_empty_scope() {
+        let nmap = NamedTempFile::new().expect("tempfile");
+        let mut args = minimal_valid_args(nmap.path());
+        args.scope.clear();
+
+        let error = validate_pipeline_args(&args).expect_err("prazdny scope musi selhat");
+        assert!(error.to_string().contains("--scope"));
+    }
+
+    #[test]
+    fn validate_pipeline_args_rejects_missing_nmap_source() {
+        let mut args = minimal_valid_args(Path::new("irrelevant.xml"));
+        args.nmap_xml = None;
+        args.spustit_nmap = false;
+
+        let error = validate_pipeline_args(&args).expect_err("bez --nmap-xml i --spustit-nmap");
+        assert!(
+            error.to_string().contains("--nmap-xml")
+                || error.to_string().contains("--spustit-nmap")
+        );
+    }
+
+    #[test]
+    fn validate_pipeline_args_rejects_live_nmap_with_no_ports() {
+        let mut args = minimal_valid_args(Path::new("irrelevant.xml"));
+        args.nmap_xml = None;
+        args.spustit_nmap = true;
+        args.ports.clear();
+
+        let error = validate_pipeline_args(&args).expect_err("--spustit-nmap bez portu");
+        assert!(error.to_string().contains("--ports"));
+    }
+
+    #[test]
+    fn validate_pipeline_args_rejects_nonexistent_nmap_xml_path() {
+        let args = minimal_valid_args(Path::new("this/path/does/not/exist.xml"));
+
+        let error = validate_pipeline_args(&args).expect_err("neexistujici --nmap-xml");
+        assert!(error.to_string().contains("--nmap-xml"));
+    }
+
+    #[test]
+    fn validate_pipeline_args_rejects_nonexistent_zeek_dir() {
+        let nmap = NamedTempFile::new().expect("tempfile");
+        let mut args = minimal_valid_args(nmap.path());
+        args.zeek_dir = Some(PathBuf::from("this/dir/does/not/exist"));
+
+        let error = validate_pipeline_args(&args).expect_err("neexistujici --zeek-dir");
+        assert!(error.to_string().contains("--zeek-dir"));
+    }
+
+    #[test]
+    fn validate_pipeline_args_rejects_production_without_passive_telemetry() {
+        let nmap = NamedTempFile::new().expect("tempfile");
+        let mut args = minimal_valid_args(nmap.path());
+        args.production = true;
+        // Vedome bez suricata_eve/zeek_dir.
+
+        let error = validate_pipeline_args(&args).expect_err("--production bez pasivniho zdroje");
+        assert!(error.to_string().contains("pasiv"));
+    }
+
+    #[test]
+    fn validate_pipeline_args_accepts_minimal_valid_combination() {
+        let nmap = NamedTempFile::new().expect("tempfile");
+        let args = minimal_valid_args(nmap.path());
+
+        validate_pipeline_args(&args).expect("minimalni platna kombinace musi projit");
+    }
+
+    #[test]
+    fn validate_monitor_args_rejects_missing_passive_telemetry() {
+        let nmap = NamedTempFile::new().expect("tempfile");
+        let args = minimal_valid_args(nmap.path());
+
+        let error = validate_monitor_args(&args).expect_err("monitor bez pasivniho zdroje");
+        assert!(
+            error.to_string().contains("--suricata-eve")
+                || error.to_string().contains("--zeek-dir")
+        );
+    }
+
+    #[test]
+    fn validate_monitor_args_accepts_suricata_source() {
+        let nmap = NamedTempFile::new().expect("tempfile");
+        let suricata = NamedTempFile::new().expect("tempfile");
+        let mut args = minimal_valid_args(nmap.path());
+        args.suricata_eve = Some(suricata.path().to_path_buf());
+
+        validate_monitor_args(&args).expect("suricata_eve staci na pasivni telemetrii");
+    }
+
+    #[test]
+    fn has_passive_telemetry_is_false_without_any_source() {
+        let args = BehArgs::default();
+        assert!(!has_passive_telemetry(&args));
+    }
+
+    #[test]
+    fn has_passive_telemetry_is_true_with_zeek_dir_only() {
+        let mut args = BehArgs::default();
+        args.zeek_dir = Some(PathBuf::from("."));
+        assert!(has_passive_telemetry(&args));
+    }
+
+    /// `apply_production_profile` je jen volana skrz `prepare_pipeline_args`,
+    /// nikdy neni primo testovana - ověřuje VŠECH 5 vedlejsich ucinku najednou
+    /// (ne jen jeden nahodny), protoze golden-snapshot test `--production`
+    /// vubec nepouziva.
+    #[test]
+    fn prepare_pipeline_args_production_flag_applies_all_production_defaults() {
+        let nmap = NamedTempFile::new().expect("tempfile");
+        let suricata = NamedTempFile::new().expect("tempfile");
+        let mut args = minimal_valid_args(nmap.path());
+        args.production = true;
+        args.suricata_eve = Some(suricata.path().to_path_buf());
+        args.nmap_xml = None;
+        args.spustit_nmap = false;
+
+        let prepared = prepare_pipeline_args(args).expect("platna produkcni kombinace");
+
+        assert!(
+            prepared.spustit_nmap,
+            "bez --nmap-xml musi --production zapnout --spustit-nmap"
+        );
+        assert_eq!(
+            prepared.provider, "public",
+            "--production s provider=demo musi prepnout na public"
+        );
+        assert!(prepared.hloubkove_overeni);
+        assert!(prepared.pentest);
+        assert!(!prepared.disable_circl);
+    }
+
+    #[test]
+    fn prepare_pipeline_args_aggressive_pentest_implies_pentest() {
+        let nmap = NamedTempFile::new().expect("tempfile");
+        let mut args = minimal_valid_args(nmap.path());
+        args.aggressive_pentest = true;
+        assert!(!args.pentest, "test predpoklad: pentest zatim vypnuty");
+
+        let prepared = prepare_pipeline_args(args).expect("platna kombinace");
+
+        assert!(
+            prepared.pentest,
+            "--aggressive-pentest musi implikovat --pentest"
+        );
+    }
+
+    #[test]
+    fn auto_enable_vulners_sets_flag_for_intel_providers_only() {
+        for provider in ["nvd", "public", "auto"] {
+            let mut args = BehArgs {
+                provider: provider.to_string(),
+                ..Default::default()
+            };
+            auto_enable_vulners(&mut args);
+            assert!(
+                args.supplement_vulners,
+                "provider {provider} musi zapnout supplement_vulners"
+            );
+        }
+
+        let mut demo_args = BehArgs {
+            provider: "demo".to_string(),
+            ..Default::default()
+        };
+        auto_enable_vulners(&mut demo_args);
+        assert!(
+            !demo_args.supplement_vulners,
+            "provider demo nesmi zapnout supplement_vulners"
+        );
+    }
 }
