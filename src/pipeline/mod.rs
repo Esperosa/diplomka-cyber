@@ -33,6 +33,12 @@ use crate::{
     triage, validation, vuln, webscan,
 };
 
+/// `Default` je jen pro testy nize (`..Default::default()` konstrukce bez
+/// nutnosti vypsat vsech 55 poli) - NEPOUZIVAT v produkcnim kodu. `clap`'s
+/// `default_value` atributy fungujou nezavisle (jen pri `--help`/parsovani
+/// CLI), takze `BehArgs::default()` dava JINE hodnoty nez skutecne CLI
+/// defaulty (`ports=[]` misto `[21,22,23,80,443,8080]`, `provider=""` misto
+/// `"demo"` atd.) - overeno auditem (haiku, 30.10.2026).
 #[derive(Args, Debug, Clone, Default)]
 pub struct BehArgs {
     #[arg(long)]
@@ -1578,6 +1584,13 @@ mod tests {
         args.suricata_eve = Some(suricata.path().to_path_buf());
         args.nmap_xml = None;
         args.spustit_nmap = false;
+        // Audit nalez (haiku, 30.10.2026): `..Default::default()` v
+        // `minimal_valid_args` uz davalo `disable_circl=false`, takze puvodni
+        // `assert!(!prepared.disable_circl)` by prosel i kdyby
+        // `apply_production_profile`'s `args.disable_circl = false;` (radek
+        // vyse v tomhle souboru) zmizel - test nic neoveroval. Nastaveno na
+        // `true` predem, aby assert skutecne testoval vedlejsi ucinek.
+        args.disable_circl = true;
 
         let prepared = prepare_pipeline_args(args).expect("platna produkcni kombinace");
 
@@ -1592,6 +1605,10 @@ mod tests {
         assert!(prepared.hloubkove_overeni);
         assert!(prepared.pentest);
         assert!(!prepared.disable_circl);
+        assert!(
+            prepared.supplement_vulners,
+            "provider=public (po prepnuti) musi zapnout supplement_vulners pres auto_enable_vulners"
+        );
     }
 
     #[test]

@@ -173,7 +173,15 @@ fn mask_numbers_after_markers(text: &str) -> String {
                 .bytes()
                 .take_while(|byte| byte.is_ascii_digit() || *byte == b'.')
                 .count();
-            result.push_str("<N>");
+            // Audit nalez (haiku, 30.10.2026): bez teto podminky by "<N>" vznikl
+            // i kdyz za markerem ZADNE cislo neni (prazdna/chybejici hodnota) -
+            // takovou regresi by test tise prehledl. Nic se nemaskuje, pokud
+            // zadne cislo nenasledovalo - zbytek retezce zustava nedotceny a
+            // pripoji se bud pri dalsim najiti markeru (jako `before`), nebo
+            // na konci cyklu (`result.push_str(rest)`).
+            if number_len > 0 {
+                result.push_str("<N>");
+            }
             rest = &number_part[number_len..];
         }
         result.push_str(rest);
