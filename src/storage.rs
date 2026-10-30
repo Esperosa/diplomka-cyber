@@ -6,6 +6,7 @@ use std::{
 use chrono::Utc;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 use crate::{
     error::{BakulaError, Result},
@@ -81,17 +82,17 @@ impl Workspace {
         let run_dir = self.root.join("runs").join(&report.run.run_id);
         let raw_dir = run_dir.join("raw");
         fs::create_dir_all(&raw_dir)?;
-        fs::write(
-            run_dir.join("report.json"),
-            serde_json::to_vec_pretty(report).map_err(BakulaError::Json)?,
+        write_atomic(
+            &run_dir.join("report.json"),
+            &serde_json::to_vec_pretty(report).map_err(BakulaError::Json)?,
         )?;
-        fs::write(
-            run_dir.join("report.md"),
-            narrative::report_to_markdown(report),
+        write_atomic(
+            &run_dir.join("report.md"),
+            narrative::report_to_markdown(report).as_bytes(),
         )?;
-        fs::write(
-            run_dir.join("report.txt"),
-            narrative::report_to_text(report),
+        write_atomic(
+            &run_dir.join("report.txt"),
+            narrative::report_to_text(report).as_bytes(),
         )?;
         fs::copy(artifacts.nmap_path, raw_dir.join("nmap.xml"))?;
         if let Some(path) = artifacts.nmap_followup_path {
@@ -250,11 +251,10 @@ impl Workspace {
     }
 
     fn sync_index(&self, index: &RunIndex) -> Result<()> {
-        fs::write(
-            self.root.join("runs").join("index.json"),
-            serde_json::to_vec_pretty(index).map_err(BakulaError::Json)?,
-        )?;
-        Ok(())
+        write_atomic(
+            &self.root.join("runs").join("index.json"),
+            &serde_json::to_vec_pretty(index).map_err(BakulaError::Json)?,
+        )
     }
 
     fn write_manifest(&self, run_dir: &Path) -> Result<()> {
@@ -273,12 +273,32 @@ impl Workspace {
             generated_at: Utc::now(),
             files,
         };
-        fs::write(
-            run_dir.join("manifest.json"),
-            serde_json::to_vec_pretty(&manifest).map_err(BakulaError::Json)?,
+        write_atomic(
+            &run_dir.join("manifest.json"),
+            &serde_json::to_vec_pretty(&manifest).map_err(BakulaError::Json)?,
         )?;
         Ok(())
     }
+}
+
+/// Audit nalez (30.10.2026, produkcni gap analyza): `fs::write` otevre cilovy
+/// soubor, zkrati ho na 0 bajtu a pak zapise novy obsah - NENI atomicke. Kill
+/// (SIGTERM, OOM, pad procesu) uprostred zapisu `index.json` necha soubor
+/// zkraceny/poskozeny, po kterem KAZDY nasledujici `/api/runs*`, `/ready` i
+/// `/metrics` pozadavek spadne na JSON parse chybu - ne jen ten jeden
+/// konkretni zapis. Zapis do docasneho souboru ve stejnem adresari +
+/// atomicke `rename` (na stejnem svazku je `rename` atomicky na POSIX i na
+/// Windows/NTFS) zajisti, ze vysledek je vzdy bud cely stary, nebo cely novy
+/// obsah - nikdy nic mezi tim.
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("tmp");
+    let tmp_path = path.with_extension(format!("{extension}.tmp-{}", Uuid::new_v4().simple()));
+    fs::write(&tmp_path, bytes)?;
+    fs::rename(&tmp_path, path)?;
+    Ok(())
 }
 
 /// Audit nalez (30.10.2026, produkcni gap analyza): `run_id` z HTTP cesty
@@ -331,6 +351,37 @@ fn collect_manifest_files(root: &Path, current: &Path, files: &mut Vec<StoredFil
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Audit nalez: `fs::write` neni atomicke - crash uprostred zapisu
+    /// `index.json` necha soubor zkraceny, po kterem KAZDY dalsi
+    /// `/api/runs*` dotaz spadne. `write_atomic` musi aspon spravne
+    /// prepsat existujici obsah a neuklizet po sobe docasny soubor.
+    #[test]
+    fn write_atomic_overwrites_existing_content_completely() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let path = temp.path().join("index.json");
+
+        write_atomic(&path, b"{\"runs\":[1,2,3,4,5]}").expect("prvni zapis");
+        write_atomic(&path, b"{\"runs\":[]}").expect("druhy zapis");
+
+        let contents = fs::read_to_string(&path).expect("cteni");
+        assert_eq!(contents, "{\"runs\":[]}");
+    }
+
+    #[test]
+    fn write_atomic_leaves_no_temporary_file_behind() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let path = temp.path().join("index.json");
+
+        write_atomic(&path, b"{}").expect("zapis");
+
+        let entries = fs::read_dir(temp.path())
+            .expect("cteni adresare")
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(entries, vec!["index.json".to_string()]);
+    }
 
     #[test]
     fn is_valid_run_id_accepts_the_real_generated_format() {
