@@ -90,7 +90,33 @@ impl ScenarioSource for Iot23Source {
 /// potvrzene benigni. Na obou committed fixturach (44-1, Somfy-01) se tento default nikdy
 /// neuplatni - oba scenare maji label token u kazdeho radku - ale je to strukturalni ochrana
 /// proti stejne chybe na budoucich IoT-23 scenarich.
+/// Audit nalez (30.10.2026, rozsireni na 9 commitnutych scenaru): NE VSECHNY
+/// IoT-23 scenare maji smacknuty kombinovany format popsany vyse -
+/// `CTU-IoT-Malware-Capture-34-1` ma `tunnel_parents`/`label`/`det_label` jako
+/// 3 RADNE oddelene tab-pole (novejsi verze CTU labelovaciho skriptu). Bez
+/// tyhle kontroly by `row.get("tunnel_parents")` vratilo jen hodnotu TOHO
+/// pole samotneho (napr. "-"), `split_whitespace().next()` po prvnim tokenu
+/// by nenasel zadny dalsi token, a label by se TISE vyhodnotil jako "Unknown"
+/// (fail-safe z N9 opravy) - cely scenar by tise zmeril 0 known klicu, ne
+/// selhal viditelne. Rozliseni: pokud existuje presny klic "label" (ne jen
+/// prefix "tunnel_parents"), jde o novejsi oddeleny format.
 fn extract_label(row: &HashMap<String, String>) -> GroundTruthLabel {
+    if let Some(label_value) = row.get("label") {
+        let label = non_empty_or_unknown(label_value);
+        let detailed_label = row
+            .get("det_label")
+            .or_else(|| row.get("detailed-label"))
+            .map(String::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("-")
+            .to_string();
+        return GroundTruthLabel {
+            label,
+            detailed_label,
+        };
+    }
+
     let combined = row
         .iter()
         .find(|(key, _)| key.starts_with("tunnel_parents"))
@@ -104,6 +130,15 @@ fn extract_label(row: &HashMap<String, String>) -> GroundTruthLabel {
     GroundTruthLabel {
         label,
         detailed_label,
+    }
+}
+
+fn non_empty_or_unknown(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        "Unknown".to_string()
+    } else {
+        trimmed.to_string()
     }
 }
 
@@ -166,5 +201,58 @@ mod tests {
 
         assert_eq!(dataset.observations.len(), 130);
         assert!(dataset.labels.iter().all(|label| !label.is_malicious()));
+    }
+
+    /// Audit nalez (30.10.2026): tenhle scenar ma `tunnel_parents`/`label`/
+    /// `det_label` jako 3 RADNE oddelene tab-pole (novejsi verze CTU
+    /// labelovaciho skriptu), ne smacknuty kombinovany format jako 44-1/
+    /// Somfy-01 vyse. Pred opravou `extract_label` by cely scenar tise
+    /// zmeril 0 known klicu (vsechny radky "Unknown").
+    #[test]
+    fn malware_scenario_34_1_uses_separate_label_columns_not_combined_field() {
+        let dataset = Iot23Source
+            .load(&dataset_path(
+                "labs/datasets/iot23/CTU-IoT-Malware-Capture-34-1/conn.log.labeled",
+            ))
+            .expect("parse iot23 scenario 34-1");
+
+        let malicious = dataset
+            .labels
+            .iter()
+            .filter(|label| label.is_malicious())
+            .count();
+        let unknown = dataset
+            .labels
+            .iter()
+            .filter(|label| label.label.eq_ignore_ascii_case("unknown"))
+            .count();
+        assert!(
+            malicious > 0,
+            "scenar 34-1 musi mit alespon nejaky malicious flow (opravdu zjisteno primo grepem: 21222) - 0 znamena, ze se oddeleny label format nespravne vyhodnocuje jako Unknown"
+        );
+        assert_eq!(
+            unknown, 0,
+            "scenar 34-1 ma label token na kazdem radku - 'Unknown' tu znamena regresi parsovani, ne skutecne chybejici label"
+        );
+    }
+
+    #[test]
+    fn extract_label_handles_both_combined_and_separate_column_formats() {
+        let mut combined_row = HashMap::new();
+        combined_row.insert(
+            "tunnel_parents   label   detailed-label".to_string(),
+            "-   Malicious   C&C".to_string(),
+        );
+        let combined = extract_label(&combined_row);
+        assert_eq!(combined.label, "Malicious");
+        assert_eq!(combined.detailed_label, "C&C");
+
+        let mut separate_row = HashMap::new();
+        separate_row.insert("tunnel_parents".to_string(), "-".to_string());
+        separate_row.insert("label".to_string(), "Benign".to_string());
+        separate_row.insert("det_label".to_string(), "-".to_string());
+        let separate = extract_label(&separate_row);
+        assert_eq!(separate.label, "Benign");
+        assert_eq!(separate.detailed_label, "-");
     }
 }
