@@ -263,13 +263,13 @@
 </details>
 
 <details class="stage" open>
-  <summary><span class="badge badge-yellow">fáze 1 (H2/H5) — probíhá</span> <span class="stage-title">H5 korektnost + H2 fúze</span> <span class="stage-sub">bounded, dny až 2 týdny</span></summary>
+  <summary><span class="badge badge-green">fáze 1 (H2/H5) — hotovo</span> <span class="stage-title">H5 korektnost + H2 fúze</span> <span class="stage-sub">bounded, dny až 2 týdny</span></summary>
   <div class="stage-body">
     <ul class="items">
       <li><span class="badge badge-green mini">hotovo</span> H5: <code class="file">claimed_by</code> fencing opraven (split-brain bug), lease navázaný na config — <code class="file">src/platform.rs</code></li>
       <li><span class="badge badge-green mini">hotovo</span> H5: reálný souběžný test (4 vlákna, 20 jobů, 0 double-claimů) — potvrzuje `TransactionBehavior::Immediate` funguje</li>
-      <li><span class="badge badge-yellow mini">probíhá</span> H5: DLQ, connection pooling — <code class="file">src/broker.rs</code></li>
-      <li><span class="badge badge-yellow mini">probíhá</span> H5: test se 2 oddělenými OS procesy (vlákna už hotová, procesy jsou další krok)</li>
+      <li><span class="badge badge-green mini">hotovo</span> H5: DLQ (<code class="file">{stream_key}.dlq</code>, strop na opakované doručení) + omezení zbytečných opakovaných Redis spojení v rámci 1 operace — <code class="file">src/broker.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> H5: test se 2 reálnými, oddělenými OS procesy (<code class="file">std::process::Command</code>, ne vlákna) — 20/20 kol bez double-claimu — <code class="file">tests/broker_two_process.rs</code></li>
       <li><span class="badge badge-green mini">hotovo</span> H2: Community ID join-key, ověřeno proti reálnému Zeek 9.0.1 i Suricata 8.0.7 (bajtově identické) — <code class="file">src/passive/community_id.rs</code></li>
       <li><span class="badge badge-green mini">hotovo</span> H2: zapojeno do schématu — <code class="file">ConnectionObservation.src_port</code> + <code class="file">community_id()</code>, 0 regrese na reálných datech (CTU-13, H1 Zeek test)</li>
       <li><span class="badge badge-green mini">hotovo</span> H2: dependency-aware fúzní logika — stejný tok ze 2+ senzorů = MAX, ne SOUČET — <code class="file">src/fusion.rs</code></li>
@@ -337,7 +337,7 @@
   <tr>
     <td><strong>H5</strong><br><span style="color:var(--muted)">sharding škáluje propustnost</span></td>
     <td><span class="badge badge-yellow">zpět v rozsahu, probíhá</span></td>
-    <td>Broker primitivy solidní a testované. claimed_by fencing opraven (byl to reálný split-brain bug), souběžnost ověřena 4 reálnými vlákny. platform.rs je stále SQLite-only (nejde sdílet přes síť) — multi-host čeká na Postgres migraci.</td>
+    <td>Broker primitivy solidní a testované: claimed_by fencing opraven (reálný split-brain bug), souběžnost ověřena 4 reálnými vlákny i 2 reálnými OS procesy, DLQ zabraňuje nekonečnému opakovanému doručení poison message. platform.rs je stále SQLite-only (nejde sdílet přes síť) — multi-host propustnost čeká na Postgres migraci, teprve pak lze H5 hypotézu (škálování) skutečně měřit.</td>
   </tr>
 </table>
 

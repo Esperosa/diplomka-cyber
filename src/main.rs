@@ -438,6 +438,10 @@ struct BrokerPublishArgs {
     db: PathBuf,
     #[arg(long)]
     broker_uri: String,
+    /// Prepis vychozi "bakula.jobs" - umoznuje izolovane fronty (napr. testy se
+    /// 2 oddelenymi OS procesy proti stejnemu Redisu, aniz by se potkaly s jinou praci).
+    #[arg(long, default_value = "bakula.jobs")]
+    stream_key: String,
 }
 
 #[derive(Args, Debug)]
@@ -450,6 +454,9 @@ struct BrokerWorkerArgs {
     node_id: String,
     #[arg(long, default_value_t = 120)]
     lease_s: i64,
+    /// Viz `BrokerPublishArgs::stream_key`.
+    #[arg(long, default_value = "bakula.jobs")]
+    stream_key: String,
 }
 
 #[derive(Args, Debug)]
@@ -908,7 +915,8 @@ fn main() -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&snapshot)?);
         }
         Command::Broker(BrokerCommand::PublishDue(args)) => {
-            let config = broker::RedisBrokerConfig::for_uri(&args.broker_uri);
+            let mut config = broker::RedisBrokerConfig::for_uri(&args.broker_uri);
+            config.stream_key = args.stream_key.clone();
             let published = broker::publish_due_jobs(&config, &args.db)?;
             println!(
                 "{}",
@@ -918,7 +926,8 @@ fn main() -> anyhow::Result<()> {
             );
         }
         Command::Broker(BrokerCommand::WorkerRun(args)) => {
-            let config = broker::RedisBrokerConfig::for_uri(&args.broker_uri);
+            let mut config = broker::RedisBrokerConfig::for_uri(&args.broker_uri);
+            config.stream_key = args.stream_key.clone();
             // min_idle_ms navazany na --lease-s (drive hardcoded 30_000, args.lease_s
             // existoval, ale nebyl pro tohle vubec pouzit - Deliverable 24).
             let min_idle_ms = (args.lease_s.max(0) as usize).saturating_mul(1000);

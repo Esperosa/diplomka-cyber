@@ -27,3 +27,4 @@ labs/datasets/ctu13/
 # Diff artefakt z golden-snapshot testu (tests/golden_snapshot.rs) pri selhani -
 # jen pomucka pro lokalni diff, nepatri do gitu.
 tests/golden/*.actual.json
+dump.rdb

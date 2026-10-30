@@ -1,3 +1,25 @@
+//! H5 krok (produkcni-plan.md): dve veci, ktere `reclaim_stale`/`claim_one` drive
+//! nemely.
+//!
+//! **Opakovane otevirani spojeni v ramci JEDNE logicke operace.** `claim_one`
+//! drive otviralo az 4 samostatna TCP/Redis spojeni na jedno volani (vlastni
+//! `ensure_group`, `reclaim_stale`'s vlastni `ensure_group` + vlastni spojeni pro
+//! XAUTOCLAIM, pak jeste vlastni spojeni pro XREADGROUP) - zadne z nich se
+//! nikdy nesdilelo. Produkcni CLI invokace jsou dnes vzdy jednorazove (jeden
+//! `broker worker-run` = nejvyse 1 claim, pak proces skonci), takze "pool pres
+//! cely zivot procesu" by nemel realny prinos - pridani r2d2 by bylo neuzivana
+//! infrastruktura. Realna, merena neefektivita je uvnitr JEDNE operace: ted
+//! `claim_one` otevira presne 1 spojeni (`open_connection` + `_on` varianty funkci,
+//! ktere spojeni prijmou jako parametr misto aby si otviraly vlastni).
+//!
+//! **Zadny strop na opakovane doruceni (zadna DLQ).** Zprava, ktera se vzdy znovu
+//! objevi v PEL (napr. job, ktery pri zpracovani spolehlive spadne pred ACK), by se
+//! donekonecna reclaimovala pres XAUTOCLAIM - "poison message" by nikdy neopustila
+//! fronto a brala by prioritu pred novou praci (`claim_one_prefers_reclaiming_...`).
+//! `reclaim_stale` ted pocita pokusy per `stream_id` (Redis HASH), a po prekroceni
+//! `RedisBrokerConfig::max_delivery_attempts` zpravu presune do dedikovaneho DLQ
+//! streamu (`{stream_key}.dlq`, `dead_letter_messages`) namisto dalsiho doruceni.
+
 use chrono::Utc;
 use serde::Serialize;
 
@@ -11,6 +33,8 @@ pub struct RedisBrokerConfig {
     pub uri: String,
     pub stream_key: String,
     pub group: String,
+    /// Po kolikatem REKLAIMU (ne prvnim doruceni) se zprava presune do DLQ.
+    pub max_delivery_attempts: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -25,23 +49,27 @@ impl RedisBrokerConfig {
             uri: uri.to_string(),
             stream_key: "bakula.jobs".to_string(),
             group: "bakula-workers".to_string(),
+            max_delivery_attempts: 5,
         }
     }
 }
 
-pub fn ensure_group(config: &RedisBrokerConfig) -> Result<()> {
+fn open_connection(config: &RedisBrokerConfig) -> Result<redis::Connection> {
     let client = redis::Client::open(config.uri.as_str())
         .map_err(|error| BakulaError::Processing(format!("Redis client chyba: {error}")))?;
-    let mut conn = client
+    client
         .get_connection()
-        .map_err(|error| BakulaError::Processing(format!("Redis connection chyba: {error}")))?;
+        .map_err(|error| BakulaError::Processing(format!("Redis connection chyba: {error}")))
+}
+
+fn ensure_group_on(conn: &mut redis::Connection, config: &RedisBrokerConfig) -> Result<()> {
     let result: redis::RedisResult<String> = redis::cmd("XGROUP")
         .arg("CREATE")
         .arg(&config.stream_key)
         .arg(&config.group)
         .arg("0")
         .arg("MKSTREAM")
-        .query(&mut conn);
+        .query(conn);
     match result {
         Ok(_) => Ok(()),
         Err(error) if error.to_string().contains("BUSYGROUP") => Ok(()),
@@ -51,12 +79,13 @@ pub fn ensure_group(config: &RedisBrokerConfig) -> Result<()> {
     }
 }
 
+pub fn ensure_group(config: &RedisBrokerConfig) -> Result<()> {
+    let mut conn = open_connection(config)?;
+    ensure_group_on(&mut conn, config)
+}
+
 pub fn publish_job(config: &RedisBrokerConfig, job_id: i64) -> Result<String> {
-    let client = redis::Client::open(config.uri.as_str())
-        .map_err(|error| BakulaError::Processing(format!("Redis client chyba: {error}")))?;
-    let mut conn = client
-        .get_connection()
-        .map_err(|error| BakulaError::Processing(format!("Redis connection chyba: {error}")))?;
+    let mut conn = open_connection(config)?;
     let message_id: String = redis::cmd("XADD")
         .arg(&config.stream_key)
         .arg("*")
@@ -83,25 +112,22 @@ pub fn publish_due_jobs(config: &RedisBrokerConfig, db: &std::path::Path) -> Res
 /// Pred cekanim na NOVE zpravy nejdriv zkusi prevzit zaznam z pending entries listu
 /// (PEL), ktery je needotknuty dele nez `min_idle_ms` - konzument, ktery predtim
 /// zavolal XREADGROUP a spadl pred XACK, by jinak svou zpravu zablokoval navzdy
-/// (XREADGROUP s `>` cte jen nove zpravy, nikdy PEL).
+/// (XREADGROUP s `>` cte jen nove zpravy, nikdy PEL). Cele volani (vcetne reklaimu)
+/// bezi na JEDNOM otevrenem spojeni.
 pub fn claim_one(
     config: &RedisBrokerConfig,
     consumer: &str,
     block_ms: usize,
     min_idle_ms: usize,
 ) -> Result<Option<BrokerMessage>> {
-    ensure_group(config)?;
+    let mut conn = open_connection(config)?;
+    ensure_group_on(&mut conn, config)?;
 
-    let mut reclaimed = reclaim_stale(config, consumer, min_idle_ms, 1)?;
+    let mut reclaimed = reclaim_stale_on(&mut conn, config, consumer, min_idle_ms, 1)?;
     if let Some(message) = reclaimed.pop() {
         return Ok(Some(message));
     }
 
-    let client = redis::Client::open(config.uri.as_str())
-        .map_err(|error| BakulaError::Processing(format!("Redis client chyba: {error}")))?;
-    let mut conn = client
-        .get_connection()
-        .map_err(|error| BakulaError::Processing(format!("Redis connection chyba: {error}")))?;
     let response: redis::Value = redis::cmd("XREADGROUP")
         .arg("GROUP")
         .arg(&config.group)
@@ -132,12 +158,22 @@ pub fn reclaim_stale(
     min_idle_ms: usize,
     count: usize,
 ) -> Result<Vec<BrokerMessage>> {
-    ensure_group(config)?;
-    let client = redis::Client::open(config.uri.as_str())
-        .map_err(|error| BakulaError::Processing(format!("Redis client chyba: {error}")))?;
-    let mut conn = client
-        .get_connection()
-        .map_err(|error| BakulaError::Processing(format!("Redis connection chyba: {error}")))?;
+    let mut conn = open_connection(config)?;
+    ensure_group_on(&mut conn, config)?;
+    reclaim_stale_on(&mut conn, config, consumer, min_idle_ms, count)
+}
+
+/// Stejna logika jako verejne `reclaim_stale`, ale na uz-otevrenem spojeni (volano z
+/// `claim_one`, aby se nezduplikovalo spojeni). Kazdy reklaimovany zaznam se napocita
+/// do `reclaim-counts` hash; po prekroceni `max_delivery_attempts` se presune do DLQ
+/// namisto toho, aby se vratil jako dalsi doruceni volajicimu.
+fn reclaim_stale_on(
+    conn: &mut redis::Connection,
+    config: &RedisBrokerConfig,
+    consumer: &str,
+    min_idle_ms: usize,
+    count: usize,
+) -> Result<Vec<BrokerMessage>> {
     let response: redis::Value = redis::cmd("XAUTOCLAIM")
         .arg(&config.stream_key)
         .arg(&config.group)
@@ -146,18 +182,109 @@ pub fn reclaim_stale(
         .arg("0-0")
         .arg("COUNT")
         .arg(count)
-        .query(&mut conn)
+        .query(conn)
         .map_err(|error| BakulaError::Processing(format!("Redis XAUTOCLAIM chyba: {error}")))?;
 
-    parse_autoclaim_entries(response)
+    let claimed = parse_autoclaim_entries(response)?;
+    let mut deliverable = Vec::with_capacity(claimed.len());
+    for message in claimed {
+        let attempts = bump_reclaim_count(conn, config, &message.stream_id)?;
+        if attempts > config.max_delivery_attempts {
+            move_to_dead_letter(conn, config, &message, attempts)?;
+        } else {
+            deliverable.push(message);
+        }
+    }
+    Ok(deliverable)
+}
+
+fn reclaim_counts_key(config: &RedisBrokerConfig) -> String {
+    format!("{}.reclaim-counts", config.stream_key)
+}
+
+fn dead_letter_key(config: &RedisBrokerConfig) -> String {
+    format!("{}.dlq", config.stream_key)
+}
+
+fn bump_reclaim_count(
+    conn: &mut redis::Connection,
+    config: &RedisBrokerConfig,
+    stream_id: &str,
+) -> Result<u64> {
+    redis::cmd("HINCRBY")
+        .arg(reclaim_counts_key(config))
+        .arg(stream_id)
+        .arg(1)
+        .query(conn)
+        .map_err(|error| BakulaError::Processing(format!("Redis HINCRBY chyba: {error}")))
+}
+
+/// Presune zpravu, ktera prekrocila `max_delivery_attempts`, z hlavniho streamu do
+/// DLQ: zapsat do DLQ streamu, ACK na puvodnim streamu (odstrani z PEL, jinak by se
+/// XAUTOCLAIM pokusel prevzit ji znovu), a smazat jeji citac pokusu.
+fn move_to_dead_letter(
+    conn: &mut redis::Connection,
+    config: &RedisBrokerConfig,
+    message: &BrokerMessage,
+    attempts: u64,
+) -> Result<()> {
+    let _: String = redis::cmd("XADD")
+        .arg(dead_letter_key(config))
+        .arg("*")
+        .arg("job_id")
+        .arg(message.job_id)
+        .arg("original_stream_id")
+        .arg(&message.stream_id)
+        .arg("delivery_attempts")
+        .arg(attempts)
+        .arg("moved_at")
+        .arg(Utc::now().to_rfc3339())
+        .query(conn)
+        .map_err(|error| BakulaError::Processing(format!("Redis DLQ XADD chyba: {error}")))?;
+
+    let _: i64 = redis::cmd("XACK")
+        .arg(&config.stream_key)
+        .arg(&config.group)
+        .arg(&message.stream_id)
+        .query(conn)
+        .map_err(|error| {
+            BakulaError::Processing(format!("Redis XACK (presun do DLQ) chyba: {error}"))
+        })?;
+
+    let _: i64 = redis::cmd("HDEL")
+        .arg(reclaim_counts_key(config))
+        .arg(&message.stream_id)
+        .query(conn)
+        .map_err(|error| BakulaError::Processing(format!("Redis HDEL chyba: {error}")))?;
+
+    Ok(())
+}
+
+/// Vycte vsechny zpravy presunute do DLQ (napr. pro operatorsky nastroj/alert, ktery
+/// rozhodne, jestli se job ma rucne znovu zaradit nebo zahodit). Zadne automaticke
+/// znovu-zarazeni - DLQ je vedomy koncovy stav, ne dalsi fronta k samo-obsluze.
+pub fn dead_letter_messages(config: &RedisBrokerConfig) -> Result<Vec<BrokerMessage>> {
+    let mut conn = open_connection(config)?;
+    let response: redis::Value = redis::cmd("XRANGE")
+        .arg(dead_letter_key(config))
+        .arg("-")
+        .arg("+")
+        .query(&mut conn)
+        .map_err(|error| BakulaError::Processing(format!("Redis XRANGE (DLQ) chyba: {error}")))?;
+    let Some(entries) = response.as_sequence() else {
+        return Ok(Vec::new());
+    };
+    let mut messages = Vec::with_capacity(entries.len());
+    for entry in entries {
+        if let Some(message) = parse_entry(entry)? {
+            messages.push(message);
+        }
+    }
+    Ok(messages)
 }
 
 pub fn ack(config: &RedisBrokerConfig, stream_id: &str) -> Result<()> {
-    let client = redis::Client::open(config.uri.as_str())
-        .map_err(|error| BakulaError::Processing(format!("Redis client chyba: {error}")))?;
-    let mut conn = client
-        .get_connection()
-        .map_err(|error| BakulaError::Processing(format!("Redis connection chyba: {error}")))?;
+    let mut conn = open_connection(config)?;
     let _: i64 = redis::cmd("XACK")
         .arg(&config.stream_key)
         .arg(&config.group)
@@ -255,6 +382,7 @@ mod tests {
             uri,
             stream_key: format!("bakula.test.{}", uuid::Uuid::new_v4()),
             group: "bakula-test-workers".to_string(),
+            max_delivery_attempts: 5,
         }
     }
 
@@ -262,8 +390,11 @@ mod tests {
         if let Ok(client) = redis::Client::open(config.uri.as_str())
             && let Ok(mut conn) = client.get_connection()
         {
-            let _: redis::RedisResult<i64> =
-                redis::cmd("DEL").arg(&config.stream_key).query(&mut conn);
+            let _: redis::RedisResult<i64> = redis::cmd("DEL")
+                .arg(&config.stream_key)
+                .arg(dead_letter_key(config))
+                .arg(reclaim_counts_key(config))
+                .query(&mut conn);
         }
     }
 
@@ -355,6 +486,62 @@ mod tests {
         );
 
         ack(&config, &next.stream_id).expect("ack reclaimed");
+        cleanup(&config);
+    }
+
+    /// Regresni test na chybejici strop: bez DLQ by zprava, kterou konzument nikdy
+    /// nepotvrdi, kolovala mezi `reclaim_stale` volani NAVZDY (poison message, viz
+    /// modulova dokumentace). `max_delivery_attempts=2` znamena: prvni dorouceni
+    /// (XREADGROUP) se nepocita, 1. a 2. reclaim jeste projdou, 3. reclaim musi
+    /// zpravu presunout do DLQ a uz ji NESMI vratit volajicimu.
+    #[test]
+    fn messages_exceeding_max_delivery_attempts_move_to_dead_letter_queue() {
+        let mut config = test_config();
+        config.max_delivery_attempts = 2;
+        publish_job(&config, 99).expect("publish");
+
+        let first = claim_one(&config, "consumer-a", 100, 30_000)
+            .expect("claim ok")
+            .expect("prvni claim (puvodni doruceni) musi najit zpravu");
+        assert_eq!(first.job_id, 99);
+        // "consumer-a" nikdy nezavola ack() - simuluje opakovane padajiciho workera.
+
+        let reclaim_1 = reclaim_stale(&config, "consumer-b", 0, 10).expect("reclaim 1 ok");
+        assert_eq!(
+            reclaim_1.len(),
+            1,
+            "1. reclaim (attempts=1) jeste musi byt pod limitem (2) a vratit zpravu"
+        );
+        assert_eq!(reclaim_1[0].job_id, 99);
+
+        let reclaim_2 = reclaim_stale(&config, "consumer-b", 0, 10).expect("reclaim 2 ok");
+        assert_eq!(
+            reclaim_2.len(),
+            1,
+            "2. reclaim (attempts=2) je presne na limitu, jeste musi vratit zpravu"
+        );
+
+        let reclaim_3 = reclaim_stale(&config, "consumer-b", 0, 10).expect("reclaim 3 ok");
+        assert!(
+            reclaim_3.is_empty(),
+            "3. reclaim (attempts=3 > limit 2) NESMI vratit zpravu volajicimu - musi jit do DLQ"
+        );
+
+        let dead_letters = dead_letter_messages(&config).expect("dead_letter_messages ok");
+        assert_eq!(
+            dead_letters.len(),
+            1,
+            "zprava, co prekrocila max_delivery_attempts, musi skoncit presne jednou v DLQ"
+        );
+        assert_eq!(dead_letters[0].job_id, 99);
+
+        // Po presunu do DLQ uz neni v PEL puvodniho streamu - dalsi reclaim nenajde nic.
+        let reclaim_after_dlq = reclaim_stale(&config, "consumer-b", 0, 10).expect("reclaim ok");
+        assert!(
+            reclaim_after_dlq.is_empty(),
+            "po presunu do DLQ nesmi zustat zadny pending zaznam na puvodnim streamu"
+        );
+
         cleanup(&config);
     }
 }
