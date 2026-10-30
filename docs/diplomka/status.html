@@ -250,7 +250,7 @@
 </details>
 
 <details class="stage" open>
-  <summary><span class="badge badge-green">zpětné analýzy + tvrdší testy — hotovo</span> <span class="stage-title">Druhá vrstva kontroly nad hotovou prací</span> <span class="stage-sub">3 Haiku retrospektivní audity, 5 reálných nálezů opraveno</span></summary>
+  <summary><span class="badge badge-green">zpětné analýzy + tvrdší testy — hotovo</span> <span class="stage-title">Druhá vrstva kontroly nad hotovou prací</span> <span class="stage-sub">4 Haiku retrospektivní audity, 10 reálných nálezů opraveno</span></summary>
   <div class="stage-body">
     <ul class="items">
       <li><span class="badge badge-green mini">hotovo</span> 3 nezávislé Haiku audity (pipeline move, detector trait, oprava maskování + nové testy) — zapojení správné, výchozí chování nezměněné, žádná skrytá sémantická chyba</li>
@@ -258,6 +258,7 @@
       <li><span class="badge badge-green mini">hotovo</span> paritní testy pro <code class="file">WindowedDetector</code>/<code class="file">LinkedDetector</code>/<code class="file">MultiscaleDetector</code> na komplexní fixtuře (dřív jen ablace A) — první verze fixtury nevyvolala <code class="file">multi_target_pattern</code> vůbec, opraveno a zdokumentováno proč</li>
       <li><span class="badge badge-green mini">hotovo</span> 14 nových testů na chybové větve <code class="file">validate_pipeline_args</code>/<code class="file">validate_monitor_args</code>/<code class="file">prepare_pipeline_args</code>, které golden snapshot nikdy nezasáhne (<code class="file">--production</code>, <code class="file">--pentest</code>, neplatné cesty)</li>
       <li><span class="badge badge-green mini">hotovo</span> třetí audit našel 2 další věci: chybějící hodnota za markerem by se tiše zamaskovala jako platné číslo (opraveno), a jeden nový test měl tautologický assert — <b>ověřeno přímo</b> (dočasné odstranění vedlejšího účinku → test spadl → vráceno → test prošel)</li>
+      <li><span class="badge badge-green mini">hotovo</span> čtvrtý audit (na H2 fúzi + H5 broker dávku) našel 5 reálných věcí: fúze tiše zahazovala text/count ostatních senzorů ve skupině (opraveno — teď MAX count + spojený text), chyběl časový strop na slučování (přidáno, 15 min), <code class="file">ack()</code> nemazalo citač reklaimů (leak), presun do DLQ nebyl atomický — vše opraveno a ověřeno rozbít→spadne→vrátit→projde</li>
     </ul>
   </div>
 </details>
