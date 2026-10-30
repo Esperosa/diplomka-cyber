@@ -24,6 +24,11 @@ tools/projectdiscovery/**/nuclei.exe
 # ve wave 0) - viz docs/diplomka/dataset-registry.md pro presny stahovaci prikaz a hash.
 labs/datasets/ctu13/
 
+# IoT-23 rozsireni (30.10.2026): vetsina novych scenaru je dost mala na commit
+# (viz dataset-registry.md), ale Malware-3-1 (24 MB) uz ne - stejna disciplina
+# jako CTU-13 vyse.
+labs/datasets/iot23/CTU-IoT-Malware-Capture-3-1/
+
 # Diff artefakt z golden-snapshot testu (tests/golden_snapshot.rs) pri selhani -
 # jen pomucka pro lokalni diff, nepatri do gitu.
 tests/golden/*.actual.json

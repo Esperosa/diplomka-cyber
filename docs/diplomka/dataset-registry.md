@@ -26,6 +26,46 @@ Registr datových zdrojů pro `src/eval/` (replay a baseline měření korelačn
 
 **Proč committed, ne `.gitignore`:** jde o malé (desítky KB) labelované výřezy, ne o celý korpus — licence CC BY-NC-SA 4.0 pro výzkum to umožňuje a reprodukovatelnost testu na čistém klonu to vyžaduje (`src/eval/sources/iot23.rs` i `src/eval/dataset_replay.rs` mají `#[cfg(test)]` testy, které tyto soubory čtou). Pokud se v další vlně přidají větší scénáře/datasety, ty už patří mimo git (stahovací skript + hash v registru, ne commit).
 
+### Rozšíření 30.10.2026 — 7 dalších scénářů (committed) + 1 velký (gitignored)
+
+**Impuls**: stejný jako u CTU-13 výše — N=2 (jen 1 malware rodina) bylo uživatelem odmítnuto jako nedostatečné. IoT-23 má 20 individuálních scénářů na mirroru; doplněno 7 malých (pod 3 MB, committed) + zaznamenán 1 větší (24 MB, gitignored, zatím nezapojený do testu).
+
+**Reálný bug nalezený při rozšíření**: `CTU-IoT-Malware-Capture-34-1` má `tunnel_parents`/`label`/`det_label` jako **3 řádně oddělené tab-pole** (novější verze CTU labelovacího skriptu), ne smáčknutý kombinovaný formát jako 44-1/Somfy-01. Bez opravy `extract_label` (`src/eval/sources/iot23.rs`) by se každý řádek tiše vyhodnotil jako "Unknown" (fail-safe z dřívější N9 opravy) — celý scénář by tiše změřil 0 known klíčů, ne viditelně selhal. Opraveno: `extract_label` teď nejdřív zkusí přesný klíč `"label"` (nový formát), až pak fallback na kombinované pole (starý formát). Ověřeno rozbij→spadne→vrať→projde (2 nové testy, oba spadly se `0 malicious`/`"Unknown" != "Benign"` před oprava).
+
+| Scénář | Velikost | SHA-256 | Flows | Malicious | Rodina/technika |
+|---|---|---|---|---|---|
+| CTU-Honeypot-Capture-4-1 | 61 653 B | `aebe40ea0e03b120265a5c7bc140dd9b0d3fe2fce65559e84776b7dd5360e71e` | 452 | 0 | benigní honeypot |
+| CTU-Honeypot-Capture-5-1 | 182 147 B | `f36db06e7d6ba7364e932a5b003f75835e004b320d70019e8a2f0ba8685d9262` | 1374 | 0 | benigní honeypot |
+| CTU-IoT-Malware-Capture-8-1 | 1 431 000 B | `4877ca8f0f01902fbd18d28b7d06cb3d0be082355b7f2c8862c9deef1782eb8a` | 10403 | 8222 | C&C |
+| CTU-IoT-Malware-Capture-20-1 | 419 604 B | `ef48ad72f65efd13d517223e61e4d877ba53a082ddb8159324b18d3f310d0711` | 3209 | 16 | C&C-Torii |
+| CTU-IoT-Malware-Capture-21-1 | 428 943 B | `b63db259aead078f50fc150aa97ace4d1f69576e1245334962759d978ce437eb` | 3286 | 14 | C&C-Torii |
+| CTU-IoT-Malware-Capture-34-1 | 2 926 718 B | `d69e49b2aae8c1bd33286936531658202dec47d989f0439bad3f8be180467a6e` | 23145 | 21222 | C&C, DDoS, PartOfAHorizontalPortScan |
+| CTU-IoT-Malware-Capture-42-1 | 585 829 B | `269fa1b22d9a37e159cf41b81a213a0032d21306f5d39b4c20cb0d211b04e8aa` | 4426 | 6 | C&C-FileDownload, FileDownload |
+
+**Pozn. k přesnosti počtu flows:** počty výše = `grep -v "^#" conn.log.labeled | wc -l` (ověřeno bez prázdných řádků), tedy přesně to, co spočítá i produkční parser `src/passive/zeek.rs::parse_zeek_log` (přeskakuje jen řádky začínající `#` nebo prázdné). Dřívější odhad v této tabulce byl o 1 nižší na všech 7 scénářích (chyba v ručním odhadu, ne v datech) — opraveno na přesné počty.
+
+**Gitignored (zaznamenáno, zatím nezapojeno do testu — viz `.gitignore`):**
+
+| Scénář | Velikost | SHA-256 | Poznámka |
+|---|---|---|---|
+| CTU-IoT-Malware-Capture-3-1 | 24 383 537 B | `9851009bbca03e15089fa1a356dd4b5eee4a98161a51703626058a0b507f50d0` | 151 567 malicious / 156 103 flows (Attack, C&C, PartOfAHorizontalPortScan) — stejná velikostní kategorie jako CTU-13 výřezy, vědomě odloženo mimo tento krok |
+
+**Reprodukce stažení:**
+```
+base="https://mcfp.felk.cvut.cz/publicDatasets/IoT-23-Dataset/IndividualScenarios"
+curl -s "$base/CTU-Honeypot-Capture-4-1/bro/conn.log.labeled" -o labs/datasets/iot23/CTU-Honeypot-Capture-4-1/conn.log.labeled
+curl -s "$base/CTU-Honeypot-Capture-5-1/bro/conn.log.labeled" -o labs/datasets/iot23/CTU-Honeypot-Capture-5-1/conn.log.labeled
+curl -s "$base/CTU-IoT-Malware-Capture-8-1/bro/conn.log.labeled" -o labs/datasets/iot23/CTU-IoT-Malware-Capture-8-1/conn.log.labeled
+curl -s "$base/CTU-IoT-Malware-Capture-20-1/bro/conn.log.labeled" -o labs/datasets/iot23/CTU-IoT-Malware-Capture-20-1/conn.log.labeled
+curl -s "$base/CTU-IoT-Malware-Capture-21-1/bro/conn.log.labeled" -o labs/datasets/iot23/CTU-IoT-Malware-Capture-21-1/conn.log.labeled
+curl -s "$base/CTU-IoT-Malware-Capture-34-1/bro/conn.log.labeled" -o labs/datasets/iot23/CTU-IoT-Malware-Capture-34-1/conn.log.labeled
+curl -s "$base/CTU-IoT-Malware-Capture-42-1/bro/conn.log.labeled" -o labs/datasets/iot23/CTU-IoT-Malware-Capture-42-1/conn.log.labeled
+# gitignored, vetsi:
+curl -s "$base/CTU-IoT-Malware-Capture-3-1/bro/conn.log.labeled" -o labs/datasets/iot23/CTU-IoT-Malware-Capture-3-1/conn.log.labeled
+```
+
+**Souhrn po rozšíření: 9 scénářů committed (2 benigní + 44-1 + Somfy-01... pozn. Somfy-01 je taky benigní, takže 3 benigní + 6 malware), 4 rodiny/techniky** (C&C, C&C-Torii, DDoS, FileDownload, PartOfAHorizontalPortScan), **+ 1 scénář zaznamenaný mimo git**. Nová sdílená `IOT23_COMMITTED_SCENARIOS` konstanta v `src/eval/dataset_replay.rs`, nový `iot23_nine_scenarios_four_families_dataset_sufficiency_check` test — BEZ `#[ignore]`, běží normálně v CI (všechny soubory committed).
+
 ## Vlna 1 — CTU-13
 
 | Pole | Hodnota |

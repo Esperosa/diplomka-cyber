@@ -600,6 +600,150 @@ mod tests {
         assert!(info.license.contains("CC BY-NC-SA"));
     }
 
+    /// Vsech 9 IoT-23 scenaru, co jsou dost male na commit do gitu (viz
+    /// `dataset-registry.md`) - 2 puvodni (44-1, Somfy-01) + 7 novych
+    /// (30.10.2026, "dataset je moc maly" pozadavek), vcetne 2 cistě
+    /// benigních honeypot capturu (Honeypot-4-1, Honeypot-5-1 - 0 malicious,
+    /// stejne jako Somfy-01) pro false-positive-rate mereni. 10. scenar
+    /// (Malware-3-1, 24 MB) je gitignored jako CTU-13 vyrezy - zapsan v
+    /// registry, ale vedome nezapojeny do tohoto NE-ignored testu, aby
+    /// fresh clone/CI nepotreboval zadny manualni stahovaci krok.
+    const IOT23_COMMITTED_SCENARIOS: &[(&str, &str)] = &[
+        (
+            "44-1 (C&C, C&C-FileDownload, DDoS)",
+            "labs/datasets/iot23/CTU-IoT-Malware-Capture-44-1/conn.log.labeled",
+        ),
+        (
+            "Somfy-01 (benign-only honeypot)",
+            "labs/datasets/iot23/CTU-Honeypot-Capture-7-1-Somfy-01/conn.log.labeled",
+        ),
+        (
+            "Honeypot-4-1 (benign-only honeypot)",
+            "labs/datasets/iot23/CTU-Honeypot-Capture-4-1/conn.log.labeled",
+        ),
+        (
+            "Honeypot-5-1 (benign-only honeypot)",
+            "labs/datasets/iot23/CTU-Honeypot-Capture-5-1/conn.log.labeled",
+        ),
+        (
+            "Malware-8-1 (C&C)",
+            "labs/datasets/iot23/CTU-IoT-Malware-Capture-8-1/conn.log.labeled",
+        ),
+        (
+            "Malware-20-1 (C&C-Torii)",
+            "labs/datasets/iot23/CTU-IoT-Malware-Capture-20-1/conn.log.labeled",
+        ),
+        (
+            "Malware-21-1 (C&C-Torii)",
+            "labs/datasets/iot23/CTU-IoT-Malware-Capture-21-1/conn.log.labeled",
+        ),
+        (
+            "Malware-34-1 (C&C, DDoS, PartOfAHorizontalPortScan)",
+            "labs/datasets/iot23/CTU-IoT-Malware-Capture-34-1/conn.log.labeled",
+        ),
+        (
+            "Malware-42-1 (C&C-FileDownload, FileDownload)",
+            "labs/datasets/iot23/CTU-IoT-Malware-Capture-42-1/conn.log.labeled",
+        ),
+    ];
+
+    /// Rozsireni 30.10.2026 (stejny pozadavek jako u CTU-13): ze 2 na 9
+    /// IoT-23 scenaru, 4 ruzne malware rodiny/techniky (C&C, C&C-Torii,
+    /// DDoS, FileDownload) + 3 cistě benigní (false-positive mereni). NE
+    /// `#[ignore]` - vsech 9 souboru je commitnuto, bezi normalne v CI.
+    #[test]
+    fn iot23_nine_scenarios_four_families_dataset_sufficiency_check() {
+        let mut f1_scores: Vec<f64> = Vec::new();
+        let mut beats_trivial_baseline: Vec<bool> = Vec::new();
+        let mut false_positive_rates: Vec<(String, usize, usize)> = Vec::new();
+
+        for (label, relative_path) in IOT23_COMMITTED_SCENARIOS {
+            let dataset = Iot23Source
+                .load(&dataset_path(relative_path))
+                .unwrap_or_else(|error| panic!("parse {label}: {error}"));
+            let malicious_total = dataset
+                .labels
+                .iter()
+                .filter(|item| item.is_malicious())
+                .count();
+            let a = run_ablation(&dataset, 300, AblationVariant::A);
+
+            if malicious_total == 0 {
+                // Cistě benigní scenar - F1 nema smysl (0 pozitiv k nalezeni),
+                // zajima nas jen false positive rate.
+                println!(
+                    "{label}: cisty benigni scenar, known_keys={} FP={} (false positive rate={:.3})",
+                    a.confusion.true_positive
+                        + a.confusion.false_positive
+                        + a.confusion.false_negative
+                        + a.confusion.true_negative,
+                    a.confusion.false_positive,
+                    a.confusion.false_positive as f64
+                        / (a.confusion.false_positive + a.confusion.true_negative).max(1) as f64,
+                );
+                false_positive_rates.push((
+                    label.to_string(),
+                    a.confusion.false_positive,
+                    a.confusion.false_positive + a.confusion.true_negative,
+                ));
+                continue;
+            }
+
+            let (_, _, trivial_f1) = a.confusion.trivial_always_positive_baseline();
+            let f1 = a.confusion.f1();
+            println!(
+                "{label}: known_keys={} malicious={} TP={} FP={} FN={} TN={} precision={:.3} recall={:.3} f1={f1:.3} | trivialni_baseline_f1={trivial_f1:.3}",
+                a.confusion.true_positive
+                    + a.confusion.false_positive
+                    + a.confusion.false_negative
+                    + a.confusion.true_negative,
+                malicious_total,
+                a.confusion.true_positive,
+                a.confusion.false_positive,
+                a.confusion.false_negative,
+                a.confusion.true_negative,
+                a.confusion.precision(),
+                a.confusion.recall(),
+            );
+            f1_scores.push(f1);
+            beats_trivial_baseline.push(f1 > trivial_f1);
+        }
+
+        let n = f1_scores.len();
+        let mut sorted = f1_scores.clone();
+        sorted.sort_by(|left, right| left.partial_cmp(right).unwrap_or(Ordering::Equal));
+        let median = median_of_sorted(&sorted);
+        let min_f1 = f1_scores.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max_f1 = f1_scores.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        println!(
+            "IoT-23, {n} malware scenaru (+{} cistě benignich): F1 min={min_f1:.3} median={median:.3} max={max_f1:.3}, ablace A porazila trivialni baseline v {}/{n} scenarich",
+            false_positive_rates.len(),
+            beats_trivial_baseline
+                .iter()
+                .filter(|beats| **beats)
+                .count()
+        );
+        for (label, fp, total) in &false_positive_rates {
+            println!(
+                "{label}: false positive rate={:.4} ({fp}/{total})",
+                *fp as f64 / (*total).max(1) as f64
+            );
+        }
+
+        // Honestni, nefabrikovany pozadavek: vsechny malware scenare musi byt
+        // uspesne zmereny (ne crashnout), a kazdy musi mit alespon nejaky
+        // known (Malicious/Benign) provoz.
+        assert_eq!(
+            f1_scores.len() + false_positive_rates.len(),
+            IOT23_COMMITTED_SCENARIOS.len(),
+            "vsech {} scenaru musi byt uspesne zmereno",
+            IOT23_COMMITTED_SCENARIOS.len()
+        );
+        for f1 in &f1_scores {
+            assert!(f1.is_finite(), "IoT-23 F1 musi byt konecne cislo");
+        }
+    }
+
     /// Vlna 1, cross-dataset generalizace: `#[ignore]` protoze 30MB vyrez neni
     /// commitnuty do gitu (viz `.gitignore`, `docs/diplomka/dataset-registry.md` pro
     /// presny stahovaci prikaz a hash) - stejna konvence jako stavajici `#[ignore]`
