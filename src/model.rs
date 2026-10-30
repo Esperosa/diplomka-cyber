@@ -100,6 +100,11 @@ pub struct RunReport {
     pub findings: Vec<Finding>,
     #[serde(default, rename = "triageActions")]
     pub triage_actions: Vec<TriageAction>,
+    /// Produkcni plan (core wiring, 30.10.2026): stinove/aditivni vystup
+    /// `hypothesis::build_hypotheses_for_report` - stejne poradi jako
+    /// `findings`, zadny vliv na `decision.rs`/`triage.rs` skorovani.
+    #[serde(default)]
+    pub hypotheses: Vec<crate::hypothesis::SecurityHypothesis>,
     pub diff: Option<DiffReport>,
 }
 

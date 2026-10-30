@@ -290,6 +290,7 @@ mod tests {
             intel_matches: Vec::new(),
             findings,
             triage_actions: Vec::new(),
+            hypotheses: Vec::new(),
             diff: None,
         }
     }

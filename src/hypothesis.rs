@@ -16,8 +16,10 @@
 //! presne ten problem, ktery navrh zakazuje, o jednu vrstvu dal. Napojeni na
 //! `decision.rs::rank_finding` (nahrazeni ad-hoc scoringu) je navazujici krok, ne tento.
 
+use serde::{Deserialize, Serialize};
+
 use crate::identity::IdentityMatch;
-use crate::model::{Confidence, CorrelationInfo, Finding, InventoryRecord, Severity};
+use crate::model::{Confidence, CorrelationInfo, Finding, HostReport, InventoryRecord, Severity};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UncertaintyKind {
@@ -41,7 +43,7 @@ pub enum UncertaintyKind {
 /// NE `BTreeMap<UncertaintyKind, f64>` - explicitni `Option<f64>` pole vynucuji na
 /// volajicim rozhodnuti pro kazdy typ zvlast (`match`/`unwrap_or`), zatimco chybejici
 /// klic v mape by vypadal identicky jako "zamerne nepocitano" i jako "zapomenuto".
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TypedUncertainty {
     pub aleatoric: Option<f64>,
     pub epistemic: Option<f64>,
@@ -78,7 +80,7 @@ impl TypedUncertainty {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityHypothesis {
     pub affected_assets: Vec<String>,
     pub hypothesis_type: String,
@@ -151,6 +153,49 @@ pub fn build_hypothesis(
         potential_impact,
         model_version: "hypothesis-v0-heuristic".to_string(),
     }
+}
+
+/// Produkcni plan (core wiring, 30.10.2026): druhy skutecny produkcni vstupni
+/// bod pro tuhle vrstvu (po H2 fuzi a `identity.rs`) - stinove/aditivni, zadna
+/// zmena `decision.rs`/`triage.rs` skorovani, jen nove pole na `RunReport`.
+///
+/// `identity_by_host_key` je mapa, ne pozicni seznam - `report::build_report`
+/// `hosts` znovu seradi podle IP, takze index do puvodniho (nesetrizeneho)
+/// `identity::resolve_and_annotate` vystupu by po tomhle prerazeni ukazoval
+/// na SPATNY host (volajici musi mapu postavit PRED predanim `hosts` do
+/// `build_report`, dokud je poradi jiste shodne s `IdentityMatch` vysledky).
+/// `correlation` je vedome vzdy `None`: namapovat Finding zpet na konkretni
+/// `CorrelationInfo` uvnitr `service.events` by vyzadovalo novy index/
+/// referenci, co dnes neexistuje, a `build_hypothesis` uz ma pro chybejici
+/// korelaci honestni fallback (viz jeho `observation_uncertainty` vypocet) -
+/// lepsi NEDAT hodnotu, nez fabrikovat nahodnou shodu.
+pub fn build_hypotheses_for_report(
+    findings: &[Finding],
+    hosts: &[HostReport],
+    identity_by_host_key: &std::collections::HashMap<String, IdentityMatch>,
+) -> Vec<SecurityHypothesis> {
+    findings
+        .iter()
+        .map(|finding| {
+            let host = finding
+                .host_key
+                .as_ref()
+                .and_then(|host_key| hosts.iter().find(|host| &host.host_key == host_key));
+            let identity = finding
+                .host_key
+                .as_ref()
+                .and_then(|host_key| identity_by_host_key.get(host_key));
+            let inventory = host.and_then(|host| {
+                finding.service_key.as_ref().and_then(|service_key| {
+                    host.services
+                        .iter()
+                        .find(|service| &service.service_key == service_key)
+                        .map(|service| &service.inventory)
+                })
+            });
+            build_hypothesis(finding, None, identity, inventory)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -292,5 +337,73 @@ mod tests {
         assert!(known.contains(&UncertaintyKind::Observation));
         assert!(!known.contains(&UncertaintyKind::State));
         assert!(!known.contains(&UncertaintyKind::Aleatoric));
+    }
+
+    fn host_report(host_key: &str) -> HostReport {
+        HostReport {
+            host_id: format!("host:{host_key}"),
+            host_key: host_key.to_string(),
+            ip: host_key.to_string(),
+            hostname: None,
+            mac: None,
+            vendor: None,
+            asset_id: None,
+            identity_note: None,
+            services: Vec::new(),
+        }
+    }
+
+    fn finding_for_host(host_key: &str) -> Finding {
+        Finding {
+            host_key: Some(host_key.to_string()),
+            ..finding(Confidence::High, Severity::Low)
+        }
+    }
+
+    /// Audit-style regrese (30.10.2026, core wiring): `report::build_report`
+    /// znovu seradi `hosts` podle IP PO tom, co uz volajici postavi
+    /// `identity_by_host_key` z puvodniho (jineho) poradi. Pozicni indexovani
+    /// by tu priradilo nejistotu SPATNEMU hostu - tenhle test simuluje presne
+    /// tenhle re-sort a overuje, ze mapa-podle-klice ho prezije.
+    #[test]
+    fn build_hypotheses_for_report_matches_by_host_key_not_position() {
+        let host_a = host_report("10.0.0.9");
+        let host_b = host_report("10.0.0.1");
+
+        // Puvodni poradi (pred re-sortem): A, B.
+        let identity_by_host_key: std::collections::HashMap<String, IdentityMatch> = [
+            (
+                host_a.host_key.clone(),
+                IdentityMatch::New("asset:a".to_string()),
+            ),
+            (
+                host_b.host_key.clone(),
+                IdentityMatch::Ambiguous {
+                    candidate: "asset:b".to_string(),
+                    reason: "test".to_string(),
+                },
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        // Po re-sortu podle IP (jak to dela `build_report`): B pred A.
+        let sorted_hosts = vec![host_b.clone(), host_a.clone()];
+        let findings = vec![
+            finding_for_host(&host_a.host_key),
+            finding_for_host(&host_b.host_key),
+        ];
+
+        let hypotheses =
+            build_hypotheses_for_report(&findings, &sorted_hosts, &identity_by_host_key);
+
+        // findings[0] je pro host_a (New, nizsi nejistota nez Ambiguous),
+        // findings[1] je pro host_b (Ambiguous, nejvyssi nejistota) - presne
+        // obracene poradi nez `sorted_hosts`.
+        assert!(
+            hypotheses[0].uncertainty.identity.unwrap()
+                < hypotheses[1].uncertainty.identity.unwrap(),
+            "host_a (New) musi mit nizsi identity nejistotu nez host_b (Ambiguous), i po re-sortu hosts"
+        );
     }
 }

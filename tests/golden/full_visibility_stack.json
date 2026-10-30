@@ -940,6 +940,656 @@
       "vendor": null
     }
   ],
+  "hypotheses": [
+    {
+      "affected_assets": [
+        "192.168.56.30"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "connection_timeout_burst",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.5,
+      "probability": null,
+      "supporting_evidence": [
+        "service_key=192.168.56.30/host-only",
+        "service_name=host-only",
+        "product=Korelace pouze na uroven hosta | version=- | port_state=n/a",
+        "zeek | connection_timeout_burst | ip-only | Spojeni vykazuje timeout/retry tlak (ratio 0.67, timeout_like 2, celkem 3)."
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.8,
+        "state": 0.8
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.30"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "correlation_uncertainty",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "unexpected_traffic | ip-only | Pozorovan provoz na port 3306, ktery neni v aktivnim inventari jako otevrena sluzba.",
+        "connection_timeout_burst | ip-only | Spojeni vykazuje timeout/retry tlak (ratio 0.67, timeout_like 2, celkem 3).",
+        "packet_rate_spike | ip-only | Pozorovan prudky narust rychlosti paketu (max_pps 6833, max_bps 3333333, timeout_ratio 0.67).",
+        "service_overload_risk | ip-only | Kombinace vysokych rychlosti, retry a zatizeni ukazuje na riziko pretizeni sluzby (votes 2, max_pps 6833)."
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.8,
+        "state": 0.8
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.20"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "greenbone_finding",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.9,
+      "probability": null,
+      "supporting_evidence": [
+        "host_ip=192.168.56.20",
+        "port=22",
+        "oid=1.3.6.1.4.1.25623.1.0.108000"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.10"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "high_risk_cve_exposure",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.9,
+      "probability": null,
+      "supporting_evidence": [
+        "service_key=192.168.56.10/tcp/443",
+        "cpe=cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:* | method=nmap | confidence=High",
+        "CVE-2021-41773 | CVSS 3.1 7.5",
+        "CVE-2021-42013 | CVSS 3.1 9.8"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": 0.15
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.10"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "high_risk_cve_exposure",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.9,
+      "probability": null,
+      "supporting_evidence": [
+        "service_key=192.168.56.10/tcp/80",
+        "cpe=cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:* | method=nmap | confidence=High",
+        "CVE-2021-41773 | CVSS 3.1 7.5",
+        "CVE-2021-42013 | CVSS 3.1 9.8"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": 0.15
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.30"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "high_risk_cve_exposure",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.5,
+      "probability": null,
+      "supporting_evidence": [
+        "service_key=192.168.56.30/tcp/22",
+        "cpe=cpe:2.3:a:openbsd:openssh:8.9:*:*:*:*:*:*:* | method=nmap | confidence=High",
+        "CVE-2023-38408 | CVSS 3.1 8.8"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": 0.15
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.10"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "http_basic_without_tls",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.9,
+      "probability": null,
+      "supporting_evidence": [
+        "service_key=192.168.56.10/tcp/80",
+        "service_name=http",
+        "product=Apache httpd | version=2.4.49 | port_state=open",
+        "suricata+zeek | http_basic_without_tls | ip+port | [H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] suricata: HTTP Basic credentials over plaintext channel | zeek: HTTP pozorovani: /login"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": 0.15
+      }
+    },
+    {
+      "affected_assets": [],
+      "contradicting_evidence": [],
+      "hypothesis_type": "intel:mitre-att&ck-context",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "https://attack.mitre.org/techniques/T1040/",
+        "status=analytical-context"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": null,
+        "interpretation": null,
+        "observation": 0.45,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [],
+      "contradicting_evidence": [],
+      "hypothesis_type": "intel:mitre-att&ck-context",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "https://attack.mitre.org/techniques/T1049/",
+        "status=analytical-context"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": null,
+        "interpretation": null,
+        "observation": 0.45,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [],
+      "contradicting_evidence": [],
+      "hypothesis_type": "intel:osv.dev",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "https://alpaca-attack.com/",
+        "https://lists.debian.org/debian-lts-announce/2022/11/msg00031.html",
+        "https://bugzilla.redhat.com/show_bug.cgi?id=1975623",
+        "status=referenced"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": null,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [],
+      "contradicting_evidence": [],
+      "hypothesis_type": "intel:osv.dev",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-41773",
+        "http://www.openwall.com/lists/oss-security/2021/10/05/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/4",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/5",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/6",
+        "status=referenced"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": null,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [],
+      "contradicting_evidence": [],
+      "hypothesis_type": "intel:osv.dev",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-42013",
+        "http://jvn.jp/en/jp/JVN51106450/index.html",
+        "http://packetstormsecurity.com/files/165089/Apache-HTTP-Server-2.4.50-CVE-2021-42013-Exploitation.html",
+        "http://www.openwall.com/lists/oss-security/2021/10/07/6",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/1",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/2",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/3",
+        "http://www.openwall.com/lists/oss-security/2021/10/08/4",
+        "status=referenced"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": null,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [],
+      "contradicting_evidence": [],
+      "hypothesis_type": "intel:osv.dev",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "http://packetstormsecurity.com/files/173661/OpenSSH-Forwarded-SSH-Agent-Remote-Code-Execution.html",
+        "https://cert-portal.siemens.com/productcert/html/ssa-398330.html",
+        "https://news.ycombinator.com/item?id=36790196",
+        "https://support.apple.com/kb/HT213940",
+        "https://www.openssh.com/security.html",
+        "https://www.openssh.com/txt/release-9.3p2",
+        "https://www.qualys.com/2023/07/19/cve-2023-38408/rce-openssh-forwarded-ssh-agent.txt",
+        "https://www.vicarius.io/vsociety/posts/exploring-opensshs-agent-forwarding-rce-cve-2023-38408",
+        "status=referenced"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": null,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.1"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "napalm_config_issue",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.5,
+      "probability": null,
+      "supporting_evidence": [
+        "device=edge-rtr01",
+        "ip=192.168.56.1"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": null,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.30"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "external_flow_observed",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "src_ip=192.168.56.30",
+        "dst_ip=8.8.8.8",
+        "dst_port=53",
+        "protocol=udp",
+        "bytes=2048",
+        "packets=4",
+        "pps=0",
+        "bps=0",
+        "timeouts=0",
+        "retransmits=0",
+        "dropped_packets=0",
+        "category=-",
+        "url=-"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.45,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [],
+      "contradicting_evidence": [],
+      "hypothesis_type": "external_flow_observed",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "src_ip=192.168.56.40",
+        "dst_ip=1.1.1.1",
+        "dst_port=443",
+        "protocol=tcp",
+        "bytes=4096",
+        "packets=8",
+        "pps=0",
+        "bps=0",
+        "timeouts=0",
+        "retransmits=0",
+        "dropped_packets=0",
+        "category=-",
+        "url=-"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": null,
+        "interpretation": null,
+        "observation": 0.45,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.254"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "netmiko_config_issue",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.9,
+      "probability": null,
+      "supporting_evidence": [
+        "device=branch-fw01",
+        "ip=192.168.56.254"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": null,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.10"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "external_flow_observed",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "src_ip=192.168.56.10",
+        "dst_ip=93.184.216.34",
+        "dst_port=443",
+        "protocol=tcp",
+        "bytes=120034",
+        "packets=88",
+        "pps=0",
+        "bps=0",
+        "timeouts=0",
+        "retransmits=0",
+        "dropped_packets=0",
+        "category=-",
+        "url=https://example.com/update"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.45,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.20"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "external_flow_observed",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "src_ip=192.168.56.20",
+        "dst_ip=45.61.49.78",
+        "dst_port=80",
+        "protocol=tcp",
+        "bytes=8096",
+        "packets=16",
+        "pps=0",
+        "bps=0",
+        "timeouts=0",
+        "retransmits=0",
+        "dropped_packets=0",
+        "category=-",
+        "url=http://45.61.49.78/razor/r4z0r.mips"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.45,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.30"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "packet_rate_spike",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.5,
+      "probability": null,
+      "supporting_evidence": [
+        "service_key=192.168.56.30/host-only",
+        "service_name=host-only",
+        "product=Korelace pouze na uroven hosta | version=- | port_state=n/a",
+        "zeek | packet_rate_spike | ip-only | Pozorovan prudky narust rychlosti paketu (max_pps 6833, max_bps 3333333, timeout_ratio 0.67)."
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.8,
+        "state": 0.8
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.20"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "plaintext_management_protocol",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.5,
+      "probability": null,
+      "supporting_evidence": [
+        "service_key=192.168.56.20/tcp/21",
+        "service_name=ftp",
+        "product=vsftpd | version=3.0.3 | port_state=open"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": 0.15
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.20"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "plaintext_management_protocol",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.9,
+      "probability": null,
+      "supporting_evidence": [
+        "service_key=192.168.56.20/tcp/23",
+        "service_name=telnet",
+        "product=BusyBox telnetd | version=1.36.1 | port_state=open",
+        "suricata+zeek | plaintext_protocol | ip+port | [H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] suricata: TELNET plaintext management traffic | zeek: Telnet management session observed"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": 0.45
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.3"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "scrapli_config_issue",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "device=branch-sw01",
+        "ip=192.168.56.3"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": null,
+        "interpretation": null,
+        "observation": 0.15,
+        "state": null
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.30"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "service_overload_risk",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.9,
+      "probability": null,
+      "supporting_evidence": [
+        "service_key=192.168.56.30/host-only",
+        "service_name=host-only",
+        "product=Korelace pouze na uroven hosta | version=- | port_state=n/a",
+        "zeek | service_overload_risk | ip-only | Kombinace vysokych rychlosti, retry a zatizeni ukazuje na riziko pretizeni sluzby (votes 2, max_pps 6833)."
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.8,
+        "state": 0.8
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.30"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "unexpected_traffic",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.2,
+      "probability": null,
+      "supporting_evidence": [
+        "service_key=192.168.56.30/host-only",
+        "service_name=host-only",
+        "product=Korelace pouze na uroven hosta | version=- | port_state=n/a",
+        "zeek | unexpected_traffic | ip-only | Pozorovan provoz na port 3306, ktery neni v aktivnim inventari jako otevrena sluzba."
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.8,
+        "state": 0.8
+      }
+    },
+    {
+      "affected_assets": [
+        "192.168.56.20"
+      ],
+      "contradicting_evidence": [],
+      "hypothesis_type": "wazuh_alert",
+      "model_version": "hypothesis-v0-heuristic",
+      "potential_impact": 0.5,
+      "probability": null,
+      "supporting_evidence": [
+        "rule_id=5712",
+        "src_ip=-",
+        "dst_ip=192.168.56.20",
+        "agent=server-01"
+      ],
+      "uncertainty": {
+        "aleatoric": null,
+        "epistemic": null,
+        "identity": 0.5,
+        "interpretation": null,
+        "observation": 0.45,
+        "state": null
+      }
+    }
+  ],
   "intelMatches": [
     {
       "confidence": "medium",

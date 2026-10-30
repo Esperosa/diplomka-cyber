@@ -613,6 +613,7 @@ pub fn build_report(
         intel_matches: Vec::new(),
         findings: Vec::new(),
         triage_actions: Vec::new(),
+        hypotheses: Vec::new(),
         diff: None,
     }
 }

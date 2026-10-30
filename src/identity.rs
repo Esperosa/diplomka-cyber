@@ -138,7 +138,15 @@ impl IdentityResolver {
 /// na `index.json` - není to nová regrese, je to existující mezera v tom, jak
 /// tenhle workspace dnes řeší souběžný přístup víc procesů. Řešení (zámek
 /// nebo DB) je budoucí práce, ne blokátor pro tenhle aditivní krok.
-pub fn resolve_and_annotate(hosts: &mut [HostReport], registry_path: &Path) -> Result<()> {
+/// Vraci `IdentityMatch` pro kazdy host (stejne poradi jako `hosts`) - volajici
+/// (`pipeline::run_pipeline`) to pouziva pro `hypothesis::build_hypotheses_for_report`,
+/// aniz by musel zpetne odhadovat match-druh z uz zplostene `asset_id`/`identity_note`
+/// dvojice (coz by bylo presne to "fabrikovani chybejici informace", co modulova
+/// dokumentace `hypothesis.rs` vyslovne zakazuje).
+pub fn resolve_and_annotate(
+    hosts: &mut [HostReport],
+    registry_path: &Path,
+) -> Result<Vec<IdentityMatch>> {
     let mut resolver: IdentityResolver = if registry_path.exists() {
         let bytes = fs::read(registry_path)?;
         serde_json::from_slice(&bytes).map_err(crate::error::BakulaError::Json)?
@@ -146,6 +154,7 @@ pub fn resolve_and_annotate(hosts: &mut [HostReport], registry_path: &Path) -> R
         IdentityResolver::new()
     };
 
+    let mut matches = Vec::with_capacity(hosts.len());
     for host in hosts.iter_mut() {
         let identity_match = resolver.resolve(host);
         host.asset_id = Some(identity_match.asset_id().to_string());
@@ -153,10 +162,12 @@ pub fn resolve_and_annotate(hosts: &mut [HostReport], registry_path: &Path) -> R
             IdentityMatch::Ambiguous { reason, .. } => Some(reason.clone()),
             IdentityMatch::Same(_) | IdentityMatch::New(_) => None,
         };
+        matches.push(identity_match);
     }
 
     let bytes = serde_json::to_vec_pretty(&resolver).map_err(crate::error::BakulaError::Json)?;
-    storage::write_atomic(registry_path, &bytes)
+    storage::write_atomic(registry_path, &bytes)?;
+    Ok(matches)
 }
 
 #[cfg(test)]

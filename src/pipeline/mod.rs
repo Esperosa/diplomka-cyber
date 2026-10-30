@@ -26,8 +26,8 @@ use clap::Args;
 use ipnet::IpNet;
 
 use crate::{
-    automation, config, context, correlation, cpe, decision, diff, findings, identity, intel,
-    lanes,
+    automation, config, context, correlation, cpe, decision, diff, findings, hypothesis, identity,
+    intel, lanes,
     model::{MonitoringLane, NormalizedEvent, RunReport, Severity, TriageAction},
     nmap, passive, paths, pentest, report, simulation,
     storage::{RunArtifacts, Workspace},
@@ -892,8 +892,18 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     // `asset_id`/`identity_note` na každý host, beze změny `host_key`/
     // decision/triage logiky. Musí běžet AŽ TADY (ne dřív), protože hloubkové
     // ověření výš může `hosts` znovu sestavit z `normalize_inventory`.
-    identity::resolve_and_annotate(&mut hosts, &args.workspace.join("identity-registry.json"))
-        .map_err(|error| anyhow::Error::new(error).context("Identity resolver selhal"))?;
+    let identity_matches =
+        identity::resolve_and_annotate(&mut hosts, &args.workspace.join("identity-registry.json"))
+            .map_err(|error| anyhow::Error::new(error).context("Identity resolver selhal"))?;
+    // `hypothesis::build_hypotheses_for_report` potrebuje tuhle mapu POSTAVENOU
+    // TADY, dokud `hosts`'s poradi jiste odpovida `identity_matches` - `hosts`
+    // se nize predava (moved) do `report::build_report`, ktere ho znovu seradi
+    // podle IP (viz komentar u `build_hypotheses_for_report`).
+    let identity_by_host_key: std::collections::HashMap<String, identity::IdentityMatch> = hosts
+        .iter()
+        .map(|host| host.host_key.clone())
+        .zip(identity_matches)
+        .collect();
     let correlator_runtime_ms = correlator_started_at.elapsed().as_millis() as u64;
     mas_agent_metrics.push(MasAgentMetric {
         role: "correlator",
@@ -1320,6 +1330,11 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     report
         .findings
         .dedup_by(|left, right| left.finding_id == right.finding_id);
+    report.hypotheses = hypothesis::build_hypotheses_for_report(
+        &report.findings,
+        &report.hosts,
+        &identity_by_host_key,
+    );
     report.summary.findings_total = report.findings.len();
     report.summary.audit_findings_total = report
         .findings
