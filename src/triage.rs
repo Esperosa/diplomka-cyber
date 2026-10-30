@@ -77,13 +77,26 @@ pub fn build_triage_actions(report: &RunReport) -> Vec<TriageAction> {
         });
     }
 
+    // Audit nalez (30.10.2026, produkcni gap analyza, potvrzeno 3 nezavislymi
+    // agenty): tenhle filtr drive pokryval jen 3 ze 7 "traffic-like" typu, co
+    // `decision.rs::rank_finding` (radek 48-61) rozpoznava jako traffic signal.
+    // Nalezy typu unexpected_traffic/external_flow_observed/packet_loss_signal
+    // se tak objevily v decision lane jako problem, ale triage pro ne nikdy
+    // nevygeneroval zadnou akcni kartu - operator videl "je tu anomalie" bez
+    // "co s tim delat". Seznam ted odpovida decision.rs 1:1.
     let overload_findings = report
         .findings
         .iter()
         .filter(|item| {
-            item.finding_type == "service_overload_risk"
-                || item.finding_type == "packet_rate_spike"
-                || item.finding_type == "connection_timeout_burst"
+            matches!(
+                item.finding_type.as_str(),
+                "service_overload_risk"
+                    | "packet_rate_spike"
+                    | "connection_timeout_burst"
+                    | "unexpected_traffic"
+                    | "external_flow_observed"
+                    | "packet_loss_signal"
+            )
         })
         .collect::<Vec<_>>();
     let inductive_findings = report
@@ -238,4 +251,101 @@ pub fn build_triage_actions(report: &RunReport) -> Vec<TriageAction> {
     actions.sort_by(|left, right| right.priority.cmp(&left.priority));
     actions.dedup_by(|left, right| left.action_id == right.action_id);
     actions
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+
+    use super::*;
+    use crate::model::{Finding, PassiveWindow, RunMetadata, SourceMetadata};
+
+    fn minimal_report(findings: Vec<Finding>) -> RunReport {
+        let now = Utc::now();
+        RunReport {
+            schema_version: "test".to_string(),
+            run: RunMetadata {
+                run_id: "test".to_string(),
+                nazev: "test".to_string(),
+                started_at: now,
+                finished_at: now,
+                scope: Vec::new(),
+                ports: Vec::new(),
+                profile: "test".to_string(),
+                enrichment_mode: "test".to_string(),
+                provider: "test".to_string(),
+                passive_window: PassiveWindow {
+                    start: now,
+                    end: now,
+                    time_window_s: 0,
+                },
+                sources: SourceMetadata::default(),
+            },
+            summary: crate::model::Summary::default(),
+            hosts: Vec::new(),
+            unmapped_events: Vec::new(),
+            network_assets: Vec::new(),
+            topology_edges: Vec::new(),
+            monitoring_lanes: Vec::new(),
+            intel_matches: Vec::new(),
+            findings,
+            triage_actions: Vec::new(),
+            diff: None,
+        }
+    }
+
+    fn finding(finding_type: &str) -> Finding {
+        Finding {
+            finding_id: format!("finding:{finding_type}"),
+            finding_type: finding_type.to_string(),
+            title: "test".to_string(),
+            severity: Severity::High,
+            confidence: Confidence::High,
+            host_key: None,
+            service_key: None,
+            rationale: "test".to_string(),
+            evidence: Vec::new(),
+            recommendation: "test".to_string(),
+        }
+    }
+
+    /// Audit nalez (potvrzeno 3 nezavislymi agenty, 30.10.2026): tyhle 3 typy
+    /// se v `decision.rs::rank_finding` (radek 48-61) radi jako "traffic-like",
+    /// ale triage pro ne drive nikdy nevygeneroval zadnou akcni kartu - operator
+    /// videl nalez v decision lane, ale zadne "co s tim delat" doporuceni.
+    #[test]
+    fn traffic_overload_mitigation_fires_for_previously_missing_finding_types() {
+        for finding_type in [
+            "unexpected_traffic",
+            "external_flow_observed",
+            "packet_loss_signal",
+        ] {
+            let report = minimal_report(vec![finding(finding_type)]);
+            let actions = build_triage_actions(&report);
+            assert!(
+                actions
+                    .iter()
+                    .any(|action| action.action_id == "triage:traffic-overload-mitigation"),
+                "{finding_type} musi vyvolat triage:traffic-overload-mitigation"
+            );
+        }
+    }
+
+    #[test]
+    fn traffic_overload_mitigation_still_fires_for_the_original_three_types() {
+        for finding_type in [
+            "service_overload_risk",
+            "packet_rate_spike",
+            "connection_timeout_burst",
+        ] {
+            let report = minimal_report(vec![finding(finding_type)]);
+            let actions = build_triage_actions(&report);
+            assert!(
+                actions
+                    .iter()
+                    .any(|action| action.action_id == "triage:traffic-overload-mitigation"),
+                "{finding_type} musi dal vyvolat triage:traffic-overload-mitigation"
+            );
+        }
+    }
 }

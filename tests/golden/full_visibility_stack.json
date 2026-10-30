@@ -2488,8 +2488,11 @@
       "action_type": "aggressive-mitigation",
       "evidence": [
         "connection_timeout_burst:192.168.56.30/host-only",
-        "packet_rate_spike:192.168.56.30/host-only",
-        "service_overload_risk:192.168.56.30/host-only"
+        "external_flow_observed:",
+        "external_flow_observed:",
+        "external_flow_observed:",
+        "external_flow_observed:",
+        "packet_rate_spike:192.168.56.30/host-only"
       ],
       "priority": "high",
       "rationale": "Detekce ukazuje timeouty/rate spike nebo přímé riziko přetížení; bez okamžité mitigace hrozí degradace nebo nedostupnost služby.",
