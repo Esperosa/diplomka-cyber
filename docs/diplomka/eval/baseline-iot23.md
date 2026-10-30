@@ -46,3 +46,24 @@ Ablace A = pasivní pravidla bez aktivního inventáře hostů (sekce 9.1 návrh
 ## Co tento baseline NEdokazuje
 
 Shoduje se s omezeními v sekci 9.3 návrhu: nic o reálné propustnosti, chování na větší/jiné síti, dlouhodobém driftu, ani o aktivním ověřování (zde nebylo spuštěno žádné aktivní skenování — `hosts: &[]`). Vzorek 2 malých scénářů (367 flows celkem) je dostatečný pro ověření, že pipeline funguje a je reprodukovatelná, ne pro statisticky silné závěry o kvalitě detekce — to je úkol pro vlnu 1 s větším objemem a více zdroji.
+
+## Dodatek (30. 10. 2026) — rozšíření ze 2 na 9 scénářů, 4 rodiny/techniky
+
+Reakce na stejný požadavek, který vedl k rozšíření CTU-13 ze 3 na 13 scénářů (viz `ctu13-three-scenarios-dataset-sufficiency.md`): N=2 (1 malware scénář + 1 benigní) nestačí na statisticky průkazné tvrzení o kvalitě detekce. Doplněno 7 dalších malých committed scénářů (`dataset-registry.md`, sekce "Rozšíření 30.10.2026") — 5 malware (Malware-8-1/20-1/21-1/34-1/42-1, rodiny C&C/C&C-Torii/DDoS/FileDownload/PartOfAHorizontalPortScan) + 2 další benigní honeypoty (Honeypot-4-1/5-1). Reprodukce: `cargo test --lib eval::dataset_replay::tests::iot23_nine_scenarios_four_families_dataset_sufficiency_check -- --nocapture`.
+
+**Reálný bug nalezený při rozšíření**: `extract_label` (`src/eval/sources/iot23.rs`) neuměl IoT-23 scénáře s novějším formátem labelu (3 řádně oddělené tab-pole místo jednoho smáčknutého) — `CTU-IoT-Malware-Capture-34-1` by bez opravy tiše změřil 0 known klíčů. Opraveno, ověřeno rozbij→spadne→vrať→projde. Detaily v commit message `de82d69`.
+
+| Scénář | Rodina/technika | known_keys | TP/FP/FN/TN | Precision | Recall | F1 | Triviální baseline F1 |
+|---|---|---|---|---|---|---|---|
+| 44-1 | C&C, C&C-FileDownload, DDoS | 10 | 2/6/1/1 | 0.250 | 0.667 | **0.364** | 0.462 |
+| Malware-8-1 | C&C | 9 | 2/6/0/1 | 0.250 | 1.000 | **0.400** | 0.364 |
+| Malware-20-1 | C&C-Torii | 41 | 1/30/0/10 | 0.032 | 1.000 | **0.062** | 0.048 |
+| Malware-21-1 | C&C-Torii | 51 | 1/35/0/15 | 0.028 | 1.000 | **0.054** | 0.038 |
+| Malware-34-1 | C&C, DDoS, PartOfAHorizontalPortScan | 52 | 4/31/2/15 | 0.114 | 0.667 | **0.195** | 0.207 |
+| Malware-42-1 | C&C-FileDownload, FileDownload | 48 | 2/36/0/10 | 0.053 | 1.000 | **0.100** | 0.080 |
+
+**Agregát přes 6 malware scénářů**: F1 min=0.054, median=0.148, max=0.400. Ablace A poráží triviální baseline ("vše=malicious") jen na **4 ze 6** scénářů (44-1, Malware-8-1, Malware-20-1, Malware-21-1) — na Malware-34-1 a Malware-42-1 prohrává. To je slabší a honestnější tvrzení, než by dovolil N=2 (kde se ablace A na jediném malware scénáři jevila jako jasně nad baseline) — stejná třída poučení jako u CTU-13 rozšíření.
+
+**3 benigní honeypot scénáře** (Somfy-01, Honeypot-4-1, Honeypot-5-1): false positive rate 0.444–0.688 — konzistentně vysoká, potvrzuje napříč 3 nezávislými čistě benigními vzorky (ne jen 1), že současná objemová heuristika generuje citelný šum i na klidném provozu.
+
+**Co toto rozšíření stále nedokazuje**: N=6 malware scénářů umožňuje smysluplný medián/rozsah, ale ne formální statistický test významnosti (Wilcoxon potřebuje N≥6 pro jakoukoli síla — na hraně, ne komfortně nad ní). `CTU-IoT-Malware-Capture-3-1` (24 MB, rodiny Attack/C&C/PartOfAHorizontalPortScan) je zaznamenán v registru, ale vědomě gitignored a nezapojen do tohoto testu — další krok, ne provedený.
