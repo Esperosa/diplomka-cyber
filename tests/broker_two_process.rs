@@ -33,7 +33,15 @@ fn cleanup(config: &RedisBrokerConfig) {
     if let Ok(client) = redis::Client::open(config.uri.as_str())
         && let Ok(mut conn) = client.get_connection()
     {
-        let _: redis::RedisResult<i64> = redis::cmd("DEL").arg(&config.stream_key).query(&mut conn);
+        // Audit nalez (Haiku, 30.10.2026): drive mazalo jen hlavni stream, ne DLQ/
+        // reclaim-counts klice, co `src/broker.rs` take pouziva - zustavaly by jako
+        // neuklizene zbytky po kazdem behu testu (byt kvuli uuid stream_key bez
+        // dopadu na dalsi testy, jen zbytecny rust v testovacim Redisu).
+        let _: redis::RedisResult<i64> = redis::cmd("DEL")
+            .arg(&config.stream_key)
+            .arg(format!("{}.dlq", config.stream_key))
+            .arg(format!("{}.reclaim-counts", config.stream_key))
+            .query(&mut conn);
     }
 }
 

@@ -119,10 +119,18 @@ fn severity_from_score(score: f64) -> Severity {
     }
 }
 
+/// Community ID nema casovou slozku (jen 5-tuple) - bez tohoto stropu by znovu-
+/// pouziti efemerniho portu po dlouhe dobe (ruzne, nesouvisejici spojeni se
+/// STEJNYM 5-tuple) mohlo sloucit 2 eventy, ktere spolu fakticky nesouvisi. Audit
+/// nalez (Haiku, 30.10.2026). 900s (15 min) je vedomy, konzervativni odhad - realny
+/// dual-senzor capture (Deliverable 25) mel rozdil v radu sekund mezi senzory.
+const MAX_FUSION_TIME_GAP_S: i64 = 900;
+
 /// H2 krok 4: produkcni vstupni bod, viz modulova dokumentace. Eventy bez
 /// `community_id` (chybejici src_port/nepodporovany protokol - typicky ablace A nebo
-/// multi-cil `multi_target_pattern`) a eventy se stejnym jedinym senzorem (opakovane
-/// pozorovani JEDNIM senzorem, ne MEZI-senzorova zavislost) projdou beze zmeny.
+/// multi-cil `multi_target_pattern`), eventy se stejnym jedinym senzorem (opakovane
+/// pozorovani JEDNIM senzorem, ne MEZI-senzorova zavislost), a skupiny, jejichz
+/// rozptyl timestampu presahuje `MAX_FUSION_TIME_GAP_S`, projdou beze zmeny.
 ///
 /// Puvodni index si neseme podel celeho grupovani a pouzivame ho jako sekundarni
 /// sort klic - bez neho by poradi eventu se stejnym `timestamp` zaviselo na
@@ -148,9 +156,17 @@ pub(crate) fn fuse_same_flow_events(events: Vec<NormalizedEvent>) -> Vec<Normali
             .iter()
             .map(|(_, event)| event.source.clone())
             .collect();
-        if sensors.len() < 2 {
-            // Jeden a tyz senzor pozoroval tok vicekrat - opakovani, ne zavislost
-            // MEZI senzory. H2 claim se tyka jen cross-senzorove korroborace.
+        let within_time_gap = {
+            let timestamps: Vec<_> = group.iter().map(|(_, event)| event.timestamp).collect();
+            match (timestamps.iter().min(), timestamps.iter().max()) {
+                (Some(min), Some(max)) => (*max - *min).num_seconds() <= MAX_FUSION_TIME_GAP_S,
+                _ => true,
+            }
+        };
+        if sensors.len() < 2 || !within_time_gap {
+            // Jeden a tyz senzor pozoroval tok vicekrat (opakovani, ne zavislost MEZI
+            // senzory), nebo je rozptyl timestampu prilis velky na to, aby slo o
+            // stejnou udalost - v obou pripadech H2 claim neplati, nic se nesluci.
             fused.extend(group);
             continue;
         }
@@ -196,6 +212,24 @@ fn merge_cross_sensor_group(group: Vec<NormalizedEvent>) -> NormalizedEvent {
     sensors.sort();
     sensors.dedup();
 
+    // Audit nalez (Haiku, 30.10.2026): drive se zprava vzala jen z JEDNOHO (nejvyssi
+    // severity) vybraneho eventu - text ostatnich (napr. CVE/plaintext klicove slovo
+    // u jineho senzoru s nizsi severity) se tise zahodil, cimz mohl zmizet signal, na
+    // ktery `decision.rs::is_cve_signal`/`is_plaintext_signal` spoleha (ctou text
+    // evidence stringovym matchem, ne jen `finding_type`). Zprava ted obsahuje text
+    // VSECH prispivajicich eventu.
+    let mut combined_messages: Vec<String> = group
+        .iter()
+        .map(|event| format!("{}: {}", event.source, event.message))
+        .collect();
+    combined_messages.sort();
+    combined_messages.dedup();
+
+    // MAX, ne SOUCET - stejny princip jako u severity/score. Soucet `count` pres
+    // senzory by znovu zavedl presne to naivni "kolik nezavislych potvrzeni"
+    // pocitani, ktere cela tahle fuze ma odstranit.
+    let max_count = group.iter().map(|event| event.count).max().unwrap_or(0);
+
     let mut representative = group
         .into_iter()
         .find(|event| event.severity == representative_severity)
@@ -206,9 +240,10 @@ fn merge_cross_sensor_group(group: Vec<NormalizedEvent>) -> NormalizedEvent {
     let sensor_list = sensors.join("+");
     representative.message = format!(
         "[H2 fuze: potvrzeno senzory {sensor_list}, stejny tok] {}",
-        representative.message
+        combined_messages.join(" | ")
     );
     representative.source = sensor_list;
+    representative.count = max_count;
     representative
 }
 
@@ -525,6 +560,117 @@ mod tests {
             "realny, nezavisle overeny tok pozorovany 2 senzory musi dat 1 fuzovany event"
         );
         assert_eq!(fused[0].severity, Severity::High);
+    }
+
+    /// Regresni test na audit nalez (Haiku, 30.10.2026): merge drive vzal `message`
+    /// jen z reprezentativniho (nejvyssi severity) eventu - text ostatnich senzoru
+    /// (tady CVE klicove slovo u Low-severity Zeek eventu) se tise zahodil, cimz by
+    /// `decision.rs::is_cve_signal` (string-match na evidence) prestalo fungovat pro
+    /// tento nalez, i kdyz CVE signal skutecne existoval.
+    #[test]
+    fn merged_message_preserves_text_from_every_contributing_sensor_not_just_representative() {
+        let events = vec![
+            event(
+                "zeek",
+                Severity::Low,
+                "10.0.0.5",
+                4444,
+                "10.0.0.1",
+                80,
+                "CVE-2024-99999 signature observed",
+            ),
+            event(
+                "suricata",
+                Severity::High,
+                "10.0.0.5",
+                4444,
+                "10.0.0.1",
+                80,
+                "generic high-severity alert",
+            ),
+        ];
+        let fused = fuse_same_flow_events(events);
+        assert_eq!(fused.len(), 1);
+        assert!(
+            fused[0].message.contains("CVE-2024-99999"),
+            "text Zeek eventu (nizsi severity) nesmi zmizet z fuzovane zpravy: {}",
+            fused[0].message
+        );
+        assert!(
+            fused[0].message.contains("generic high-severity alert"),
+            "text reprezentativniho (nejvyssi severity) eventu musi take zustat: {}",
+            fused[0].message
+        );
+    }
+
+    /// Regresni test na audit nalez: `count` se drive bral jen z reprezentativniho
+    /// eventu, i kdyz jiny senzor ve skupine mel vyssi `count` - stejna MAX-ne-SOUCET
+    /// disciplina musi platit i pro `count`, ne jen pro severity.
+    #[test]
+    fn merged_count_is_max_across_group_not_just_representatives_own() {
+        let mut low_count_high_severity = event(
+            "suricata",
+            Severity::High,
+            "10.0.0.5",
+            4444,
+            "10.0.0.1",
+            80,
+            "alert",
+        );
+        low_count_high_severity.count = 1;
+        let mut high_count_low_severity = event(
+            "zeek",
+            Severity::Low,
+            "10.0.0.5",
+            4444,
+            "10.0.0.1",
+            80,
+            "observation",
+        );
+        high_count_low_severity.count = 7;
+
+        let fused = fuse_same_flow_events(vec![low_count_high_severity, high_count_low_severity]);
+        assert_eq!(fused.len(), 1);
+        assert_eq!(
+            fused[0].count, 7,
+            "count musi byt MAX pres celou skupinu (7), ne jen reprezentativniho eventu (1)"
+        );
+    }
+
+    /// Regresni test na audit nalez: community_id nema casovou slozku, takze bez
+    /// stropu by se znovu-pouziti efemerniho portu po dlouhe dobe (2 nesouvisejici
+    /// spojeni se STEJNYM 5-tuple, hodiny od sebe) tise sloucilo, jako by slo o
+    /// jeden fyzicky tok.
+    #[test]
+    fn events_with_same_flow_but_far_apart_in_time_do_not_merge() {
+        let anchor = chrono::DateTime::<chrono::Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let mut early = event(
+            "zeek",
+            Severity::Low,
+            "10.0.0.5",
+            4444,
+            "10.0.0.1",
+            80,
+            "prvni, davno promlcene spojeni",
+        );
+        early.timestamp = anchor;
+        let mut much_later = event(
+            "suricata",
+            Severity::High,
+            "10.0.0.5",
+            4444,
+            "10.0.0.1",
+            80,
+            "mnohem pozdejsi, nesouvisejici spojeni se stejnym efemernim portem",
+        );
+        much_later.timestamp = anchor + chrono::Duration::hours(3);
+
+        let fused = fuse_same_flow_events(vec![early, much_later]);
+        assert_eq!(
+            fused.len(),
+            2,
+            "stejne community_id, ale rozptyl timestampu 3h presahuje MAX_FUSION_TIME_GAP_S - nesmi se sloucit"
+        );
     }
 
     /// Regresni test na audit nalez behem H2 wiring: puvodni implementace grupovala

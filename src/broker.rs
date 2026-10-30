@@ -222,13 +222,20 @@ fn bump_reclaim_count(
 /// Presune zpravu, ktera prekrocila `max_delivery_attempts`, z hlavniho streamu do
 /// DLQ: zapsat do DLQ streamu, ACK na puvodnim streamu (odstrani z PEL, jinak by se
 /// XAUTOCLAIM pokusel prevzit ji znovu), a smazat jeji citac pokusu.
+/// Audit nalez (Haiku, 30.10.2026): drive 3 oddelene round-tripy (XADD, XACK, HDEL) -
+/// kdyby spojeni spadlo mezi XADD a XACK, zprava by skoncila v DLQ I SOUCASNE
+/// zustala v PEL puvodniho streamu (dalsi reclaim by ji zkusil znovu, pripadne vytvoril
+/// duplicitni DLQ zaznam). `redis::pipe().atomic()` (MULTI/EXEC) zajisti, ze vsechny
+/// 3 prikazy se provedou jako jedna neprerusitelna jednotka.
 fn move_to_dead_letter(
     conn: &mut redis::Connection,
     config: &RedisBrokerConfig,
     message: &BrokerMessage,
     attempts: u64,
 ) -> Result<()> {
-    let _: String = redis::cmd("XADD")
+    let _: () = redis::pipe()
+        .atomic()
+        .cmd("XADD")
         .arg(dead_letter_key(config))
         .arg("*")
         .arg("job_id")
@@ -239,23 +246,18 @@ fn move_to_dead_letter(
         .arg(attempts)
         .arg("moved_at")
         .arg(Utc::now().to_rfc3339())
-        .query(conn)
-        .map_err(|error| BakulaError::Processing(format!("Redis DLQ XADD chyba: {error}")))?;
-
-    let _: i64 = redis::cmd("XACK")
+        .ignore()
+        .cmd("XACK")
         .arg(&config.stream_key)
         .arg(&config.group)
         .arg(&message.stream_id)
-        .query(conn)
-        .map_err(|error| {
-            BakulaError::Processing(format!("Redis XACK (presun do DLQ) chyba: {error}"))
-        })?;
-
-    let _: i64 = redis::cmd("HDEL")
+        .ignore()
+        .cmd("HDEL")
         .arg(reclaim_counts_key(config))
         .arg(&message.stream_id)
+        .ignore()
         .query(conn)
-        .map_err(|error| BakulaError::Processing(format!("Redis HDEL chyba: {error}")))?;
+        .map_err(|error| BakulaError::Processing(format!("Redis presun do DLQ chyba: {error}")))?;
 
     Ok(())
 }
@@ -283,14 +285,25 @@ pub fn dead_letter_messages(config: &RedisBrokerConfig) -> Result<Vec<BrokerMess
     Ok(messages)
 }
 
+/// Audit nalez (Haiku, 30.10.2026): drive mazalo jen XACK, nikdy ne `reclaim-counts`
+/// HASH zaznam pro `stream_id` - kazda zprava, ktera byla alespon jednou reklaimovana
+/// a POTE uspesne potvrzena, by navzdy zustala jako "zapomenute" pole v HASH (neomezeny
+/// rust v Redisu v case). Ted se oba zaznamy mazaji spolecne v jedne (atomicke) pipeline.
 pub fn ack(config: &RedisBrokerConfig, stream_id: &str) -> Result<()> {
     let mut conn = open_connection(config)?;
-    let _: i64 = redis::cmd("XACK")
+    let _: () = redis::pipe()
+        .atomic()
+        .cmd("XACK")
         .arg(&config.stream_key)
         .arg(&config.group)
         .arg(stream_id)
+        .ignore()
+        .cmd("HDEL")
+        .arg(reclaim_counts_key(config))
+        .arg(stream_id)
+        .ignore()
         .query(&mut conn)
-        .map_err(|error| BakulaError::Processing(format!("Redis XACK chyba: {error}")))?;
+        .map_err(|error| BakulaError::Processing(format!("Redis XACK/HDEL chyba: {error}")))?;
     Ok(())
 }
 
@@ -540,6 +553,53 @@ mod tests {
         assert!(
             reclaim_after_dlq.is_empty(),
             "po presunu do DLQ nesmi zustat zadny pending zaznam na puvodnim streamu"
+        );
+
+        cleanup(&config);
+    }
+
+    /// Regresni test na audit nalez (Haiku, 30.10.2026): `ack()` drive mazalo jen
+    /// XACK, nikdy ne `reclaim-counts` HASH zaznam - zprava, ktera byla alespon 1x
+    /// reklaimovana a POTE uspesne potvrzena, by navzdy zustala jako zapomenute pole
+    /// v HASH (neomezeny rust v Redisu v case). Primo cte hash pres `redis` klienta
+    /// (ne verejne API), aby overil skutecny stav v Redisu, ne jen chovani brokeru.
+    #[test]
+    fn ack_also_clears_the_reclaim_attempt_counter() {
+        let config = test_config();
+        publish_job(&config, 55).expect("publish");
+
+        let first = claim_one(&config, "consumer-a", 100, 30_000)
+            .expect("claim ok")
+            .expect("prvni claim musi najit zpravu");
+        assert_eq!(first.job_id, 55);
+
+        // Reclaim jednou - vytvori zaznam v reclaim-counts HASH.
+        let reclaimed = reclaim_stale(&config, "consumer-b", 0, 10).expect("reclaim ok");
+        assert_eq!(reclaimed.len(), 1);
+
+        let client = redis::Client::open(config.uri.as_str()).expect("redis client");
+        let mut conn = client.get_connection().expect("redis connection");
+        let count_before: Option<String> = redis::cmd("HGET")
+            .arg(reclaim_counts_key(&config))
+            .arg(&reclaimed[0].stream_id)
+            .query(&mut conn)
+            .expect("hget pred ack");
+        assert_eq!(
+            count_before,
+            Some("1".to_string()),
+            "po 1 reklaimu musi existovat citac s hodnotou 1"
+        );
+
+        ack(&config, &reclaimed[0].stream_id).expect("ack");
+
+        let count_after: Option<String> = redis::cmd("HGET")
+            .arg(reclaim_counts_key(&config))
+            .arg(&reclaimed[0].stream_id)
+            .query(&mut conn)
+            .expect("hget po ack");
+        assert_eq!(
+            count_after, None,
+            "po ack() nesmi v reclaim-counts HASH zustat zadny zaznam pro potvrzenou zpravu"
         );
 
         cleanup(&config);

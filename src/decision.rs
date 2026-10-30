@@ -612,10 +612,14 @@ pub(crate) fn rank_finding(
         reasons.push("passive-evidence".to_string());
     }
     if is_multi_sensor_confirmed(finding) {
-        // H2 krok 4 (produkcni-plan.md): fusion.rs uz zabranilo naivnimu SOUCTU
-        // (stejny tok od 2 senzoru se neukladal jako 2 oddelene eventy), takze
-        // tenhle bonus NENI druhe pricteni te same evidence - je to ohraniceny
-        // odmen za genuinni cross-senzorovou korroboraci (jiny senzor, stejny tok).
+        // H2 krok 4 (produkcni-plan.md): presne tvrzeni, zpresneno po auditu
+        // (Haiku, 30.10.2026) - tenhle bonus TOHLE JEDNO skore ZVYSUJE (neni to
+        // "nulovy efekt"). Co bonus NENI: fusion.rs uz predtim zabranilo tomu, aby
+        // stejny tok od 2 senzoru existoval jako 2 ODDELENE eventy/findings - bez
+        // tohohle kroku by `rank_finding` bezelo 2x (jednou na kazdy) a jejich skore
+        // by se SECETLY mimo tuhle funkci (v agregatech `inference_graph_evidence`).
+        // Tenhle bonus pusobi jen na JEDNO, uz sloucene finding - odmena za genuinni
+        // cross-senzorovou korroboraci, ne reintrodukce puvodniho souctu.
         score += 0.06;
         reasons.push("multi-sensor-confirmed".to_string());
     }

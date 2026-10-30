@@ -107,7 +107,7 @@
         "service_key=192.168.56.10/tcp/80",
         "service_name=http",
         "product=Apache httpd | version=2.4.49 | port_state=open",
-        "suricata+zeek | http_basic_without_tls | ip+port | [H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] HTTP Basic credentials over plaintext channel"
+        "suricata+zeek | http_basic_without_tls | ip+port | [H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] suricata: HTTP Basic credentials over plaintext channel | zeek: HTTP pozorovani: /login"
       ],
       "finding_id": "finding:http_basic_without_tls:192.168.56.10:192.168.56.10/tcp/80",
       "finding_type": "http_basic_without_tls",
@@ -404,7 +404,7 @@
         "service_key=192.168.56.20/tcp/23",
         "service_name=telnet",
         "product=BusyBox telnetd | version=1.36.1 | port_state=open",
-        "suricata+zeek | plaintext_protocol | ip+port | [H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] TELNET plaintext management traffic"
+        "suricata+zeek | plaintext_protocol | ip+port | [H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] suricata: TELNET plaintext management traffic | zeek: Telnet management session observed"
       ],
       "finding_id": "finding:plaintext_management_protocol:192.168.56.20:192.168.56.20/tcp/23",
       "finding_type": "plaintext_management_protocol",
@@ -547,7 +547,7 @@
                 "dst_port": 80,
                 "event_id": "suricata:1002:<EPOCH>",
                 "event_type": "http_basic_without_tls",
-                "message": "[H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] HTTP Basic credentials over plaintext channel",
+                "message": "[H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] suricata: HTTP Basic credentials over plaintext channel | zeek: HTTP pozorovani: /login",
                 "proto": "tcp",
                 "raw_ref": "<TMP>/zakladni/suricata/eve.json",
                 "rule_id": "2100011",
@@ -720,7 +720,7 @@
                 "dst_port": 23,
                 "event_id": "suricata:1001:<EPOCH>",
                 "event_type": "plaintext_protocol",
-                "message": "[H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] TELNET plaintext management traffic",
+                "message": "[H2 fuze: potvrzeno senzory suricata+zeek, stejny tok] suricata: TELNET plaintext management traffic | zeek: Telnet management session observed",
                 "proto": "tcp",
                 "raw_ref": "<TMP>/zakladni/suricata/eve.json",
                 "rule_id": "2100010",
