@@ -2690,7 +2690,7 @@ async function restartAutomation() {
   try {
     const response = await fetch(automationRestartUrl(), {
       method: "POST",
-      headers: buildAuthHeaders()
+      headers: { ...buildAuthHeaders(), "X-Bakula-Csrf": "1" }
     });
     if (!response.ok) throw new Error(`Restart autopilota selhal (${response.status}).`);
     state.liveMode = true;
@@ -2717,7 +2717,7 @@ async function resetAutomation() {
   try {
     const response = await fetch("/api/automation/reset", {
       method: "POST",
-      headers: buildAuthHeaders()
+      headers: { ...buildAuthHeaders(), "X-Bakula-Csrf": "1" }
     });
     if (!response.ok) throw new Error(`Reset autopilota selhal (${response.status}).`);
     state.error = null;

@@ -357,6 +357,7 @@ async fn post_automation_restart(
     Query(options): Query<AutomationRestartOptions>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
+    ensure_csrf_guard_header(&headers)?;
     authorize_for(&headers, &state, &["jobs.write"])?;
     let mut guard = state.automation_process.lock().await;
     if let Some(process) = guard.as_mut() {
@@ -430,6 +431,7 @@ async fn post_automation_reset(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
+    ensure_csrf_guard_header(&headers)?;
     authorize_for(&headers, &state, &["jobs.write"])?;
     let mut guard = state.automation_process.lock().await;
     if let Some(process) = guard.as_mut() {
@@ -487,6 +489,28 @@ async fn get_platform_ha(State(state): State<AppState>, headers: HeaderMap) -> i
     ))?;
     let status = platform::ha_status(db, None).map_err(to_http_error)?;
     Ok::<_, (StatusCode, String)>(Json(status))
+}
+
+/// Audit nalez (30.10.2026, produkcni gap analyza): `require_api_token=false`
+/// (vychozi hodnota) dela z KAZDEHO pozadavku anonymniho admina (`authorize_for`
+/// nize) - vcetne `/automation/restart`, ktery spousti aktivni sken proti
+/// nakonfigurovanemu scope. Bez tehle kontroly by jakakoliv webova stranka
+/// otevrena v prohlizeci operatora mohla poslat "simple" cross-site POST
+/// (obycejny `<form>`, zadny JS/CORS potreba) a sken tise spustit (blind CSRF -
+/// odpoved sice cross-origin precist nejde, ale pozadavek se stejne provede).
+/// Vlastni hlavicka tohle blokuje: `<form>` ji nastavit neumi a cross-site
+/// `fetch` s vlastni hlavickou vyvola CORS preflight, ktery bez
+/// `Access-Control-Allow-Origin` (server zadny CORS vrstvu nema) selze driv,
+/// nez se skutecny POST vubec posle.
+fn ensure_csrf_guard_header(headers: &HeaderMap) -> std::result::Result<(), (StatusCode, String)> {
+    if headers.contains_key("x-bakula-csrf") {
+        return Ok(());
+    }
+    Err((
+        StatusCode::FORBIDDEN,
+        "Chybi hlavicka X-Bakula-Csrf - pozadavek vypada jako cross-site a byl odmitnut."
+            .to_string(),
+    ))
 }
 
 fn authorize_for(
@@ -906,6 +930,53 @@ mod tests {
             platform_db: Arc::new(None),
             automation_process: Arc::new(Mutex::new(None)),
         }
+    }
+
+    #[test]
+    fn ensure_csrf_guard_header_rejects_requests_without_custom_header() {
+        let headers = HeaderMap::new();
+        let error = ensure_csrf_guard_header(&headers).expect_err("bez hlavicky musi selhat");
+        assert_eq!(error.0, StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn ensure_csrf_guard_header_accepts_requests_with_custom_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-bakula-csrf", HeaderValue::from_static("1"));
+        assert!(ensure_csrf_guard_header(&headers).is_ok());
+    }
+
+    /// Audit nalez (30.10.2026, produkcni gap analyza): `require_api_token=false`
+    /// (vychozi) dela z kazdeho pozadavku anonymniho admina - bez CSRF hlidky by
+    /// obycejny cross-site `<form method=POST>` tise spustil aktivni sken proti
+    /// nakonfigurovanemu scope. Test overuje, ze se odmitnuti stane PRED jakymkoliv
+    /// pristupem k workspace (ne ze by nahodou selhalo na "zadny beh ve workspace").
+    #[tokio::test]
+    async fn post_automation_restart_rejects_request_without_csrf_header() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+
+        let response = post_automation_restart(
+            State(state),
+            Query(AutomationRestartOptions::default()),
+            HeaderMap::new(),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn post_automation_reset_rejects_request_without_csrf_header() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+
+        let response = post_automation_reset(State(state), HeaderMap::new())
+            .await
+            .into_response();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
     /// Audit nalez (30.10.2026, produkcni gap analyza): `run_id` z URL cesty
