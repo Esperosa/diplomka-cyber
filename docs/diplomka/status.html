@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>30. 10. 2026, 10:48</strong> ·
-  commit <code>86b41da</code> ·
+  Poslední aktualizace: <strong>30. 10. 2026, 21:40</strong> ·
+  commit <code>25b7c4e</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -280,6 +280,25 @@
   </div>
 </details>
 
+<details class="stage" open>
+  <summary><span class="badge badge-green">7 oprav, hotovo</span> <span class="stage-title">Produkční dokonalost — gap audit (3 agenti: komplexní/Opus, pragmatik, skeptik)</span> <span class="stage-sub">30.10.2026 — "ne proof-of-concept, plně funkční produkční program"</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> <b>Suricata parser bral každý event_type jako alert</b> (flow/http/dns/tls/stats) — masivní falešné nálezy na reálném eve.json; opraveno filtrem na <code class="file">event_type=="alert"</code> + odolnost proti poškozenému řádku/timestampu (dřív shodilo celý <code class="file">monitor --continuous</code> běh) — <code class="file">src/passive/suricata.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> <b>Zeek v JSON formátu tiše vracel 0 událostí</b> (chybí '#fields' TSV hlavička) — nástroj tvrdil "vše čisté", protože nic neviděl; teď selže nahlas a hlasitě, + odolnost proti poškozenému řádku — <code class="file">src/passive/zeek.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> <b>path traversal přes <code class="file">run_id</code></b> v <code class="file">/runs/{run_id}</code>/<code class="file">/runs/{run_id}/export/{format}</code> — nezávisle našli 2 agenti; opraveno <code class="file">storage::is_valid_run_id</code> na obou místech — <code class="file">src/storage.rs</code>, <code class="file">src/server.rs</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> <b>CSRF na <code class="file">/automation/restart</code>/<code class="file">reset</code></b> — s výchozím <code class="file">require_api_token=false</code> mohl obyčejný cross-site <code>&lt;form&gt;</code> tise spustit agresivní sken; opraveno vlastní hlavičkou <code class="file">X-Bakula-Csrf</code> (vyžaduje CORS preflight, co server nemá čím splnit)</li>
+      <li><span class="badge badge-green mini">hotovo</span> <b><code class="file">triage.rs</code> vs. <code class="file">decision.rs</code> nekonzistence</b> — potvrzeno všemi 3 agenty: 3 ze 7 "traffic-like" typů nálezů nikdy nevygenerovaly triage akci; sjednoceno + golden snapshot aktualizován</li>
+      <li><span class="badge badge-green mini">hotovo</span> <b>neatomický <code class="file">fs::write</code></b> — crash uprostřed zápisu <code class="file">index.json</code> by shodil KAŽDÝ další <code class="file">/api/runs*</code> dotaz; opraveno <code class="file">write_atomic</code> (tmp soubor + rename)</li>
+      <li><span class="badge badge-green mini">hotovo</span> <b>jednorázový job bez backoffu po selhání</b> — nekonečné okamžité opakování (např. sken nedostupné sítě); opraveno exponenciální backoff (30s→240s) + vzdání se po 5 pokusech na ~30 dní</li>
+      <li><span class="badge badge-green mini">hotovo</span> <b>lease se nikdy neobnovovala během běhu jobu</b> — reálný blokátor pro H5: dlouhý běh (nmap+nuclei) mohl být 2× souběžně spuštěn jiným workerem; opraveno periodickým obnovováním na pozadí v <code class="file">worker_cycle</code> — <code class="file">src/platform.rs</code></li>
+      <li><span class="badge badge-gray mini">vědomě NEuděláno (scope-creep)</span> Postgres migrace H5, observability/metrics stack, Kubernetes, SBOM/signing, multi-tenant/HA-DR, firewall/DNS/IPS, plošný unwrap-sweep, přepnutí výchozího detektoru na B/C/D — shoda všech 3 agentů, žádný nový fakt stávající odložení nepřevažuje</li>
+      <li><span class="badge badge-yellow mini">zjištěno, neopraveno</span> <code class="file">external_sql.rs</code> (452 řádků Postgres vrstvy) — 0 testů, 0 CI coverage, dokumentace tvrdí "otestováno"; <code class="file">hypothesis.rs</code>/<code class="file">verification_planner.rs</code>/<code class="file">identity.rs</code> nemají žádný produkční vstupní bod (ne měřené odmítnutí jako B/C/D, prostě žádná cesta) — oba čekají na vlastní, samostatný krok</li>
+      <li><span class="badge badge-yellow mini">zjištěno, neopraveno</span> žádný Dockerfile/docker-compose, žádné structured logging (jen <code class="file">println!</code>), žádné scope mantinely pro aktivní skenování — zapsáno jako budoucí práce, ne tichá mezera</li>
+    </ul>
+  </div>
+</details>
+
 <details class="stage">
   <summary><span class="badge badge-gray">fáze 2 — další krok</span> <span class="stage-title">Skutečný multi-host H5 + re-validace H2</span> <span class="stage-sub">větší investice</span></summary>
   <div class="stage-body">
@@ -338,7 +357,7 @@
   <tr>
     <td><strong>H5</strong><br><span style="color:var(--muted)">sharding škáluje propustnost</span></td>
     <td><span class="badge badge-yellow">zpět v rozsahu, probíhá</span></td>
-    <td>Broker primitivy solidní a testované: claimed_by fencing opraven (reálný split-brain bug), souběžnost ověřena 4 reálnými vlákny i 2 reálnými OS procesy, DLQ zabraňuje nekonečnému opakovanému doručení poison message. platform.rs je stále SQLite-only (nejde sdílet přes síť) — multi-host propustnost čeká na Postgres migraci, teprve pak lze H5 hypotézu (škálování) skutečně měřit.</td>
+    <td>Broker primitivy solidní a testované: claimed_by fencing opraven (reálný split-brain bug), souběžnost ověřena 4 reálnými vlákny i 2 reálnými OS procesy, DLQ zabraňuje nekonečnému opakovanému doručení poison message, lease se teď obnovuje během běhu (dlouhý job už nemůže být souběžně spuštěn 2× jinými workery). platform.rs je stále SQLite-only (nejde sdílet přes síť) — multi-host propustnost čeká na Postgres migraci, teprve pak lze H5 hypotézu (škálování) skutečně měřit.</td>
   </tr>
 </table>
 

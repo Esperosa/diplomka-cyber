@@ -144,3 +144,41 @@ Standardní cyklus (poslat PO pushnutí, ne jen před commitem) na tuhle session
 Nálezy **nevedoucí k opravě** (zdůvodněno, ne ignorováno): `claim_one` refaktor potvrzen korektní (stejný efekt jako původní dvojí `ensure_group`); hardcoded `proto="tcp"` v `passive::zeek.rs`'s notice/http parsing (http.log je vždy TCP, notice.log pro telnet/ftp prakticky vždy taky — nízké riziko, jen MISSED merge, ne FALSE merge); `correlation_v2.rs`'s `representative_src_port` je "first-flow-only" zjednodušení, ale latentní (produkce běží `LegacyAnomalyDetector`, ne windowed detektory); 2-proces test "nemusí být vždy skutečně simultánní" (process spawn timing) — potvrzeno vlastním break-testem (odlišné consumer groups), že test zachytí přesně tu třídu bugu, co má (Redis XREADGROUP atomicita je vlastnost Redisu samotného, ne timing-dependent), i když tesnejsi synchronizace (bariéra před publish) by byla rigoróznější.
 
 Všech 5 oprav ověřeno metodou "rozbij → spadne → vrať → projde" (ne jen "projde po opravě"): nový test pro každou (`merged_message_preserves_text_...`, `merged_count_is_max_...`, `events_with_same_flow_but_far_apart_in_time_do_not_merge`, `ack_also_clears_the_reclaim_attempt_counter`). Golden snapshot aktualizován (fuzovaná zpráva teď nese text obou senzorů) — diff ručně přečten před akceptací. `cargo test --lib` s živým Redisem 135/136 (stejná jediná Docker-network chyba), fuzz test znovu ověřen na 1 000 000 scénářích po opravě (5,60s, 0 porušení).
+
+## Produkční dokonalost — gap audit (30.10.2026)
+
+**Impuls**: uživatel explicitně odmítl rámec "diplomka/proof-of-concept" i pro zbytek programu — "řešíme jen program do produkční dokonalosti... aby to už nebyl jako bakalářka proof of concept, ale aby to byl už full funkční perfektní produkční program... vidím že core taky není ještě hotový." Podle vlastní metodiky repa (CLAUDE.md: netriviální rozhodnutí "co musí být perfektní" vyžaduje 3-agentní kolo, min. 1 na Opusu) proběhlo nové kolo — komplexní (Opus), pragmatik, skeptik — nezávisle na sobě, každý přímo prohledal kód (ne jen přečetl tento dokument).
+
+**Shoda všech 3 agentů**: H2 fúze (`fusion.rs`) je skutečně v produkční cestě (hotovo, Deliverable viz výše). Ablace B/C/D zůstávají vědomě shadow-only, protože jsou podle vlastních naměřených čísel HORŠÍ jako default (B: F1 0,306→0,124) — to je uzavřené, měřené rozhodnutí, ne mezera. ALE `hypothesis.rs`/`verification_planner.rs`/`identity.rs` nemají v produkci ŽÁDNÝ vstupní bod (ne měřené odmítnutí — prostě žádná cesta z `main.rs`/`pipeline/mod.rs`) — to skeptik sám steelmanoval jako legitimní "core není hotový" problém, ne výzkumnou nuanci. Zbytek odloženého rozsahu (Postgres migrace H5, observability/metrics stack, Kubernetes, SBOM/signing, multi-tenant/HA-DR, firewall/DNS/IPS, plošný unwrap-sweep) potvrzen jako scope-creep-defer — žádný nový fakt nepřevažuje předchozí odložení.
+
+**Komplexní (Opus) agent skutečně SPUSTIL binárku** na testovacích datech (ne jen přečetl kód) a odhalil nejzávažnější, předem netušenou třídu nálezů — korektnost pasivního ingestu na reálných datech ze senzorů, ne nezapojené diplomové moduly:
+
+1. **`src/passive/suricata.rs`**: parser nefiltroval `event_type` — každý záznam (flow/http/dns/tls/stats) se stal alertem. Ověřeno během: 1 skutečný alert + 4 obyčejné záznamy daly `events_total=5`, HTTP flow na portu 80 vyrobil `insecure_auth_possible`. Běžná konfigurace Suricaty loguje všechny tyto typy → masivní falešné nálezy na reálné síti.
+2. Tamtéž: jeden vadný/useknutý řádek (`serde_json::from_str(line)?`) shodil celý parse — v `monitor --continuous` by to ukončilo celý daemon na jednom poškozeném řádku živého logu.
+3. **`src/passive/zeek.rs`**: Zeek v JSON formátu (`JSON::use_json`) nemá `#fields` TSV hlavičku — parser tiše vrátil 0 událostí, beze chyby i varování. Nástroj by tvrdil "vše čisté", protože nic neviděl.
+4. **`src/server.rs`**: `require_api_token=false` (výchozí) dělá z každého požadavku anonymního admina; `/automation/restart` (spouští agresivní sken) nemá žádnou CSRF ochranu — obyčejný cross-site `<form method=POST>` v prohlížeči operátora by ho tiše spustil (blind CSRF, žádný JS/CORS potřeba).
+5. **`src/server.rs`/`src/storage.rs`**: `run_id` z URL cesty šel bez validace přímo do `Path::join` — path traversal na libovolný `report.*` soubor; nezávisle potvrdil i pragmatik.
+6. **`src/storage.rs`**: `fs::write` není atomické — crash uprostřed zápisu `index.json` by zanechal zkrácený/poškozený soubor, po kterém KAŽDÝ další `/api/runs*`/`/ready`/`/metrics` dotaz spadne, ne jen ten jeden zápis.
+7. **`src/platform.rs`**: neúspěšný jednorázový job dostal `next_run_at = now` — `worker_loop`'s tight poll loop by ho opakoval donekonečna bez zpomalení (např. opakovaný sken nedostupné sítě).
+8. Tamtéž: `claim_until` se nastavuje jen jednou při claimu, nikdy se neobnovuje — dlouhý běh (nmap+nuclei přes /24) delší než lease by jiný worker převzal podruhé, ZATIM CO první worker ještě běží. Skutečný blokátor pro jakékoliv H5 tvrzení o konkurenci, ne jen result-writing race (`claimed_by` fence chrání JEN kdo zapíše výsledek, ne samotné dvojité spuštění).
+
+**Pragmatik a skeptik nezávisle našli stejnou třídu problému jinde**: `src/external_sql.rs` (452 řádků Postgres CRUD vrstvy pro users/tokens/jobs/nodes/ha_policy) má 0 testů, 0 CI coverage (žádná Postgres service v `.github/workflows/ci.yml`), a `docs/ENTERPRISE_BACKENDS.md` tvrdí, že je to "otestovaný krok" — nepravdivé tvrzení. Server/broker ji nikde nevolají. Doporučení (neprovedeno, mimo rozsah tohoto kola): buď minimální test + CI service, nebo opravit dokument.
+
+### Opraveno (7 commitů, všechny ověřeny rozbij→spadne→vrať→projde)
+
+1. `78487e6` — Suricata `event_type=="alert"` filtr + odolnost proti poškozenému řádku/timestampu; Zeek nahlasí chybu při chybějící `#fields` hlavičce (ne tiché 0) + odolnost proti poškozenému řádku. 5 nových testů.
+2. `aa20cb6` — `storage::is_valid_run_id` (alfanumerické/-/_ only, matchuje skutečný `build_run_id()` formát) na obou místech (`load_report`, `get_run_export`); 2 `.expect()` na hlavičkách nahrazeny bezpečným fallbackem. 6 nových testů.
+3. `d9f9989` — `ensure_csrf_guard_header` (vlastní `X-Bakula-Csrf` hlavička) na `/automation/restart` i `/reset`; UI aktualizováno. 4 nové testy.
+4. `9809b57` — `triage.rs`'s `overload_findings` filtr doplněn o 3 chybějící typy, matchuje `decision.rs` 1:1. 2 nové testy, golden snapshot aktualizován.
+5. `c9e681f` — `storage::write_atomic` (tmp soubor + `fs::rename`) na `index.json`/`report.json`/`report.md`/`report.txt`/`manifest.json`. 2 nové testy.
+6. `7ebe2e1` — `failure_backoff_seconds` (exponenciální 30s→240s, vzdání se po `MAX_AUTOMATIC_RETRY_ATTEMPTS=5` na ~30 dní, stejný práh jako broker.rs DLQ). 3 nové testy.
+7. `25b7c4e` — `platform::renew_lease` + periodické obnovování na pozadí v `worker_cycle` (každou třetinu lease), fencované stejně jako ostatní mutace. 2 nové testy, včetně integračního testu se skutečně souběžným druhým workerem.
+
+Všechny 7 oprav: `cargo test --lib` zelené (159/160, stejná 1 pre-existing Docker-network chyba jako celou session), `cargo fmt`/`clippy --all-targets` beze nových warningů (78 na obou stranách), žádná diakritická korupce, golden snapshot aktualizován jen tam, kde šlo o měřenou, úmyslnou změnu chování (triage fix) — jinde beze změny.
+
+### Vědomě NEprovedeno v tomto kole (zdůvodněno, ne ignorováno)
+
+- **Postgres migrace H5, observability/metrics stack, Kubernetes, SBOM/signing, multi-tenant/HA-DR, firewall/DNS/IPS, plošný unwrap-sweep, přepnutí výchozího detektoru na B/C/D** — shoda všech 3 agentů, žádný nový fakt nepřevažuje předchozí 3 kola odůvodněných odložení.
+- **`external_sql.rs` test/CI coverage nebo oprava `ENTERPRISE_BACKENDS.md`** — zjištěno, nezapojeno do tohoto kola (jiná třída práce, ne bezpečnostní/korektnostní bug blokující běžný provoz).
+- **`hypothesis.rs`/`verification_planner.rs`/`identity.rs` produkční vstupní bod** — legitimní "core není hotový" nález (skeptikovo steelmanování), ale vlastní, měřený krok (navazuje na stejnou disciplínu jako H2: stínové/aditivní pole na `RunReport`, žádná změna výchozího rozhodování) — ne bezrizikový bug fix, patří do samostatné fáze.
+- **Dockerfile/docker-compose, structured logging** — zjištěno, zapsáno jako budoucí práce, ne provedeno (netriviální rozsah, vlastní krok).
