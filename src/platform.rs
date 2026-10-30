@@ -1079,6 +1079,30 @@ pub fn mark_job_succeeded(
     Ok(affected > 0)
 }
 
+/// Pocet po sobe jdoucich selhani jednorazoveho jobu, po kterem se automaticke
+/// opakovani vzda a cely dalsi retry odlozi o `GIVE_UP_DELAY_S` - stejna
+/// disciplina jako `broker.rs`'s DLQ (`max_delivery_attempts`, tam take 5).
+const MAX_AUTOMATIC_RETRY_ATTEMPTS: i64 = 5;
+const BASE_BACKOFF_S: i64 = 30;
+const MAX_BACKOFF_S: i64 = 3600;
+const GIVE_UP_DELAY_S: i64 = 30 * 24 * 3600;
+
+/// Audit nalez (30.10.2026, produkcni gap analyza): jednorazovy job bez
+/// naplanovaneho intervalu dostal po selhani `next_run_at = now` - zadny
+/// backoff, zadny strop. `worker_loop` ho hned v dalsim cyklu (par sekund,
+/// `idle_sleep`) znovu prevzal a znovu spustil - napr. aktivni sken proti
+/// nedostupne siti se opakoval donekonecna, bez zpomaleni. Exponencialni
+/// backoff (30s/60s/120s/240s) a po `MAX_AUTOMATIC_RETRY_ATTEMPTS` selhanich
+/// odlozeni o ~30 dni (operator musi rucne znovu naplanovat) - zadny novy
+/// stav/fronta potreba, `status='failed'` uz je dnesni terminalni stav.
+fn failure_backoff_seconds(attempts: i64) -> i64 {
+    if attempts >= MAX_AUTOMATIC_RETRY_ATTEMPTS {
+        return GIVE_UP_DELAY_S;
+    }
+    let exponent = (attempts.max(1) - 1).clamp(0, 10);
+    (BASE_BACKOFF_S.saturating_mul(1i64 << exponent)).min(MAX_BACKOFF_S)
+}
+
 /// Stejny `claimed_by` fence jako `mark_job_succeeded` - viz tamni komentar.
 pub fn mark_job_failed(
     path: &Path,
@@ -1095,7 +1119,19 @@ pub fn mark_job_failed(
             format_dt(now + chrono::Duration::seconds(interval.max(30))),
         )
     } else {
-        ("failed", format_dt(now))
+        let attempts: i64 = conn
+            .query_row(
+                "SELECT attempts FROM jobs WHERE id = ?1",
+                params![job_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(to_processing_error)?
+            .unwrap_or(0);
+        (
+            "failed",
+            format_dt(now + chrono::Duration::seconds(failure_backoff_seconds(attempts))),
+        )
     };
     let affected = conn
         .execute(
@@ -1680,5 +1716,100 @@ mod tests {
                 "job {job_id} nebyl nikdy prevzat zadnym vlaknem"
             );
         }
+    }
+
+    #[test]
+    fn failure_backoff_seconds_grows_exponentially_then_gives_up() {
+        assert_eq!(failure_backoff_seconds(1), 30);
+        assert_eq!(failure_backoff_seconds(2), 60);
+        assert_eq!(failure_backoff_seconds(3), 120);
+        assert_eq!(failure_backoff_seconds(4), 240);
+        assert_eq!(failure_backoff_seconds(5), GIVE_UP_DELAY_S);
+        assert_eq!(failure_backoff_seconds(1000), GIVE_UP_DELAY_S);
+        assert_eq!(failure_backoff_seconds(0), 30);
+    }
+
+    /// Audit nalez (30.10.2026, produkcni gap analyza): jednorazovy job bez
+    /// backoffu po selhani dostal `next_run_at = now` - `worker_loop` ho hned v
+    /// pristim cyklu znovu prevzal a znovu spustil, bez zpomaleni a bez stropu.
+    #[test]
+    fn mark_job_failed_delays_retry_of_a_one_shot_job_instead_of_retrying_immediately() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db_path = temp.path().join("platform.sqlite");
+        init_database(&db_path).expect("init db");
+
+        let job_id =
+            enqueue_job(&db_path, "test-job", &minimal_spec(), None, None).expect("enqueue");
+        let claim = claim_due_job(&db_path, "node-a", 60, true)
+            .expect("claim ok")
+            .expect("prvni claim musi najit job");
+        assert_eq!(claim.id, job_id);
+
+        let before_fail = Utc::now();
+        mark_job_failed(&db_path, job_id, "node-a", "simulovane selhani", None)
+            .expect("mark_job_failed")
+            .then_some(())
+            .expect("mark_job_failed musi uspet (claimed_by fence sedi)");
+
+        let conn = open_connection(&db_path).expect("open connection");
+        let next_run_at: String = conn
+            .query_row(
+                "SELECT next_run_at FROM jobs WHERE id = ?1",
+                params![job_id],
+                |row| row.get(0),
+            )
+            .expect("precteni next_run_at");
+        let next_run_at = parse_dt(&next_run_at).expect("parse next_run_at");
+
+        assert!(
+            next_run_at >= before_fail + chrono::Duration::seconds(29),
+            "prvni selhani jednorazoveho jobu musi mit aspon ~30s backoff, ne okamzity retry (next_run_at={next_run_at}, before_fail={before_fail})"
+        );
+    }
+
+    /// Po `MAX_AUTOMATIC_RETRY_ATTEMPTS` selhanich musi dalsi automaticky
+    /// pokus zustat odlozeny o dny, ne o desitky sekund - jinak by se job bez
+    /// konce dal znovu a znovu zkouset proti neopravitelne pricine selhani.
+    #[test]
+    fn mark_job_failed_gives_up_automatic_retry_after_max_attempts() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db_path = temp.path().join("platform.sqlite");
+        init_database(&db_path).expect("init db");
+
+        let job_id =
+            enqueue_job(&db_path, "test-job", &minimal_spec(), None, None).expect("enqueue");
+        let conn = open_connection(&db_path).expect("open connection");
+        conn.execute(
+            "UPDATE jobs SET attempts = ?1 WHERE id = ?2",
+            params![MAX_AUTOMATIC_RETRY_ATTEMPTS, job_id],
+        )
+        .expect("force attempts");
+        drop(conn);
+
+        let claim = claim_due_job(&db_path, "node-a", 60, true)
+            .expect("claim ok")
+            .expect("claim musi najit job");
+        assert_eq!(claim.id, job_id);
+
+        let before_fail = Utc::now();
+        mark_job_failed(&db_path, job_id, "node-a", "trvale selhani", None)
+            .expect("mark_job_failed")
+            .then_some(())
+            .expect("mark_job_failed musi uspet");
+
+        let conn = open_connection(&db_path).expect("open connection");
+        let next_run_at: String = conn
+            .query_row(
+                "SELECT next_run_at FROM jobs WHERE id = ?1",
+                params![job_id],
+                |row| row.get(0),
+            )
+            .expect("precteni next_run_at");
+        let next_run_at = parse_dt(&next_run_at).expect("parse next_run_at");
+
+        assert!(
+            next_run_at >= before_fail + chrono::Duration::days(1),
+            "po dosazeni max attempts se musi dalsi pokus odlozit o dny, ne o desitky sekund (next_run_at={next_run_at})"
+        );
     }
 }
