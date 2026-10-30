@@ -203,4 +203,52 @@ mod tests {
         let predictions = vec![(0.0, true), (1.0, false)];
         assert_eq!(brier_score(&predictions), 1.0);
     }
+
+    /// Audit nalez (30.10.2026, rozsireni CTU-13 na N=13, stejna trida chyby jako
+    /// `pr_auc`'s oprava): `sort_by` je stabilni, takze vazane skore (tri body se
+    /// stejnym `score`) si zachovaji poradi ze VSTUPNIHO `points` - a volajici
+    /// (`ctu13_source_centric_points` pres `score_source_hosts`) predavaji body v
+    /// poradi `HashMap` iterace, ktere Rust NEGARANTUJE stabilni mezi behy procesu.
+    /// Tenhle test primo overuje, ze 2 permutace STEJNEHO multisetu bodu se
+    /// shodnym skore davaji stejne kalibrovane predikce - PAVA pri vazbach nesmi
+    /// zavisel na poradi.
+    #[test]
+    fn fit_is_independent_of_input_order_within_tied_scores() {
+        let order_a = vec![
+            ScoredPoint {
+                score: 1.0,
+                is_malicious: true,
+            },
+            ScoredPoint {
+                score: 2.0,
+                is_malicious: false,
+            },
+            ScoredPoint {
+                score: 2.0,
+                is_malicious: true,
+            },
+            ScoredPoint {
+                score: 2.0,
+                is_malicious: false,
+            },
+            ScoredPoint {
+                score: 3.0,
+                is_malicious: true,
+            },
+        ];
+        let mut order_b = order_a.clone();
+        order_b.swap(1, 3);
+
+        let calibrator_a = IsotonicCalibrator::fit(&order_a);
+        let calibrator_b = IsotonicCalibrator::fit(&order_b);
+
+        for probe in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5] {
+            let pa = calibrator_a.predict(probe);
+            let pb = calibrator_b.predict(probe);
+            assert!(
+                (pa - pb).abs() < 1e-12,
+                "permutace bodu se stejnym skore nesmi zmenit kalibraci (probe={probe}): {pa} vs {pb}"
+            );
+        }
+    }
 }
