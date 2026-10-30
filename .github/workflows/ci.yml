@@ -60,3 +60,28 @@ jobs:
 
       - name: Build UI
         run: npm run build:ui
+
+  docker:
+    name: Docker build smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: bakula-program:ci-smoke
+
+      - name: Container starts and serves /api/health
+        run: |
+          docker run -d --name bakula-smoke -p 8080:8080 bakula-program:ci-smoke \
+            server spust --workspace /data/workspace --host 0.0.0.0 --port 8080
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8080/api/health; then exit 0; fi
+            sleep 1
+          done
+          echo "server never answered /api/health" >&2
+          docker logs bakula-smoke >&2
+          exit 1

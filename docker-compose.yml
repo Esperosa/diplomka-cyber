@@ -1,0 +1,57 @@
+# Produkcni gap audit (30.10.2026): minimalni, bounded nasazeni pro 1
+# detekcni uzel - server + Redis pro broker (H5). NEOVERENO skutecnym
+# `docker compose up` (viz komentar v Dockerfile) - pred prvnim realnym
+# nasazenim overit a zapsat do produkcni-plan.md.
+#
+# `--require-api-token` je tu zapnuty vedome (ne CLI/server.rs vychozi
+# `false`) - audit nalez z teto session byl prave "anonymous-admin je
+# vychozi, i /automation/restart s nim spusti aktivni sken". Produkcni
+# nasazeni by nemelo tohle riziko znovu tise zdedit. BAKULA_API_TOKEN je
+# POVINNY (zadna vychozi hodnota) - `docker compose up` bez neho spadne na
+# config.rs's vlastni fail-closed kontrole, ne tise pobezi bez autentizace.
+# Pro rychle lokalni vyzkouseni bez tokenu: `docker compose run --rm bakula
+# server spust --workspace /data/workspace --host 0.0.0.0`.
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  bakula:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - bakula-workspace:/data/workspace
+    environment:
+      - BAKULA_API_TOKEN=${BAKULA_API_TOKEN:?nastav BAKULA_API_TOKEN (napr. v .env) pred 'docker compose up'}
+    command:
+      [
+        "server",
+        "spust",
+        "--workspace",
+        "/data/workspace",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--require-api-token",
+        "--api-token-env",
+        "BAKULA_API_TOKEN"
+      ]
+
+volumes:
+  bakula-workspace:
+  redis-data:

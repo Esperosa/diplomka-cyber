@@ -28,3 +28,7 @@ labs/datasets/ctu13/
 # jen pomucka pro lokalni diff, nepatri do gitu.
 tests/golden/*.actual.json
 dump.rdb
+
+# Docker nasazeni (README "Nasazeni") - .env nese skutecny BAKULA_API_TOKEN,
+# nikdy nepatri do gitu. .env.example (sablona bez hodnoty) zustava trackovana.
+.env

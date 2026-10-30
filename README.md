@@ -4,7 +4,7 @@ Veřejná softwarová příloha mé bakalářské práce na FIM UHK. Prototyp v 
 
 **Role:** návrh a implementace prototypu, webového rozhraní, testů a ověření vydaného balíčku.  
 **Stack:** Rust, Axum, TypeScript/CSS, Nmap, Suricata, Zeek, CPE/CVE/CVSS.  
-**Stav:** akademický prototyp a ověřený release; nejde o nasazený produkční SOC nástroj.
+**Stav:** vzešlo z bakalářské práce, nyní rozvíjené v navazující diplomové práci směrem k produkční kvalitě (bezpečnostní opravy, Docker nasazení, cross-run identita napříč běhy – viz [produkční plán](docs/diplomka/produkcni-plan.md)); žádné reálné nasazení ještě neproběhlo a některé vrstvy (distribuovaný multi-host provoz, aktivní verification planner) zůstávají otevřené.
 
 ## Co projekt řeší
 
@@ -38,6 +38,41 @@ cargo run -- server spust --workspace .\workspace
 ```
 
 Webové UI se poté otevře na `http://127.0.0.1:8080`.
+
+### Nasazení (Docker)
+
+```bash
+cp .env.example .env   # vyplň BAKULA_API_TOKEN (viz níže)
+docker compose up --build
+```
+
+To postaví image z [`Dockerfile`](Dockerfile), spustí Redis (broker pro
+distribuované worker procesy, H5) a server s `--require-api-token`
+zapnutým ve výchozím stavu kompozice – bez platného `BAKULA_API_TOKEN` se
+`docker compose up` spolehlivě zastaví (fail-closed), namísto tichého běhu
+bez autentizace. Workspace (`runs/`, `platform.sqlite`,
+`identity-registry.json`) přežívá restarty v named volume `bakula-workspace`.
+
+Pro rychlé vyzkoušení bez tokenu (jen lokálně, ne přes nedůvěryhodnou síť):
+
+```bash
+docker compose run --rm -p 8080:8080 bakula server spust --workspace /data/workspace --host 0.0.0.0
+```
+
+**Neověřeno skutečným `docker build`/`docker run`** – vývojové prostředí této
+práce má rozbité Docker Desktop (daemon se nespustí). Před prvním reálným nasazením ověřit a
+zapsat výsledek do `docs/diplomka/produkcni-plan.md`. `docker compose config`
+syntax ověřil.
+
+Aktivní skenování (`--spustit-nmap`) potřebuje `nmap` (v image je přes apt);
+volitelné web kontroly (`--web-fingerprint`/`--web-checks`) potřebují
+`httpx`/`nuclei` z [ProjectDiscovery](https://github.com/projectdiscovery) –
+nejsou v image zabalené (vlastní release/checksum cyklus), mountni je do
+kontejneru nebo nastav `--httpx-bin`/`--nuclei-bin`. Reálný CVE kontext
+potřebuje `--provider nvd` nebo `vulners` + odpovídající API klíč v
+proměnné prostředí (`NVD_API_KEY`, `VULNERS_API_KEY`, `ABUSEIPDB_API_KEY`
+pro intel enrichment) – bez nich (`--provider demo`) report ukazuje
+smyšlený CVE kontext, ne reálný.
 
 **Pojmenování:** projekt vznikal pod pracovním názvem *Bakula*. Ten zůstává v technických identifikátorech – crate a binárka `bakula-program`, konfigurace `bakula.toml`, ID šablon `bakula-*` a název ZIP balíčku ve vydání – aby odpovídaly ověřenému release `v0.1.0-thesis` a odkazům v práci. Jde o tentýž projekt.
 
