@@ -1221,13 +1221,28 @@ where
         // Obnovovat v tretinach leasy - i kdyz jedno obnoveni vypadne (docasny
         // DB lock), zbyva jeste rezerva pred vyprsenim puvodniho `claim_until`.
         let renew_interval = Duration::from_secs((job_lease_seconds / 3).max(1) as u64);
+        // Regrese po nasazeni (e2e test, 30.10.2026): `thread::sleep(renew_interval)`
+        // v jednom kuse znamenalo, ze `renewal_thread.join()` nize cekal az
+        // `renew_interval` (desitky sekund na vychozi 120s lease) i u jobu, ktery
+        // dobehl za zlomek sekundy - `worker_cycle` se tim zpomalil o desitky
+        // sekund navic, coz posunulo i casovani leader-election v
+        // `platform_rbac_scheduler_cluster_and_server_work_end_to_end` (node-a's
+        // leader lease stihla vyprset nez test stihl zavolat node-b). Kratke
+        // polling kroky nechaji `stop_renewal` zareagovat v radu ~100ms, ne
+        // az po celem intervalu.
+        let poll_step = Duration::from_millis(100);
         thread::spawn(move || {
+            let mut elapsed = Duration::ZERO;
             while !stop_renewal.load(Ordering::Relaxed) {
-                thread::sleep(renew_interval);
+                thread::sleep(poll_step);
+                elapsed += poll_step;
                 if stop_renewal.load(Ordering::Relaxed) {
                     break;
                 }
-                let _ = renew_lease(&path, job_id, &node_id, job_lease_seconds);
+                if elapsed >= renew_interval {
+                    let _ = renew_lease(&path, job_id, &node_id, job_lease_seconds);
+                    elapsed = Duration::ZERO;
+                }
             }
         })
     };
@@ -1982,6 +1997,46 @@ mod tests {
             !stolen,
             "bez obnovovani leasy (puvodni lease_seconds={lease_seconds}) by jiny worker job behem {}ms dlouhe exekuce ukradl",
             3500
+        );
+    }
+
+    /// Regrese po nasazeni (e2e test, 30.10.2026): prvni verze obnovovaciho
+    /// vlakna delala `thread::sleep(renew_interval)` v jednom kuse, takze
+    /// `renewal_thread.join()` v `worker_cycle` cekal az `renew_interval`
+    /// (desitky sekund na vychozi 120s lease) i u jobu, ktery dobehl za
+    /// zlomek sekundy - zpomalilo to KAZDE `worker_cycle` volani, ne jen ty
+    /// dlouhe. Ověřeno primo zmerenim: rychly executor nesmi `worker_cycle`
+    /// zpomalit o vic nez malou rezervu nad polling krok.
+    #[test]
+    fn worker_cycle_does_not_block_on_lease_renewal_when_executor_finishes_quickly() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db_path = temp.path().join("platform.sqlite");
+        init_database(&db_path).expect("init db");
+        enqueue_job(&db_path, "test-job", &minimal_spec(), None, None).expect("enqueue");
+
+        let started_at = std::time::Instant::now();
+        let outcome = worker_cycle(&db_path, "node-a", "Node A", &[], 60, 120, |_spec| {
+            // Nenulove, ale kratke zpozdeni - da obnovovacimu vlaknu dost
+            // casu, aby se stihlo spustit a zacit svuj sleep PRED tim, nez
+            // hlavni vlakno dokonci executor a nastavi `stop_renewal`. Bez
+            // tohoto zpozdeni je race tak uzky, ze test stary bug nezachyti
+            // (obnovovaci vlakno casto ani nestihne zacit).
+            thread::sleep(Duration::from_millis(50));
+            Ok("run-ok".to_string())
+        });
+        let elapsed = started_at.elapsed();
+
+        assert!(
+            matches!(outcome, Ok(Some(ref run_id)) if run_id == "run-ok"),
+            "worker_cycle musi uspet: {outcome:?}"
+        );
+        // Prah 10s (ne 1s) kvuli SQLite kontenci pri souběžném běhu celé
+        // testovací sady - stará chyba (jednorazový sleep na celý
+        // renew_interval) by zpomalila o desitky sekund (40s na lease=120),
+        // takže i s rezervou na kontenci zůstává jasně odlišitelné.
+        assert!(
+            elapsed < Duration::from_secs(10),
+            "rychly executor nesmi worker_cycle zpomalit na cekani na obnoveni leasy (trvalo {elapsed:?}, lease_seconds=120 by znacilo bug pri starem jednorazovem sleep)"
         );
     }
 }

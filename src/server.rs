@@ -357,8 +357,8 @@ async fn post_automation_restart(
     Query(options): Query<AutomationRestartOptions>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    ensure_csrf_guard_header(&headers)?;
-    authorize_for(&headers, &state, &["jobs.write"])?;
+    let auth = authorize_for(&headers, &state, &["jobs.write"])?;
+    ensure_csrf_guard_header(&auth, &headers)?;
     let mut guard = state.automation_process.lock().await;
     if let Some(process) = guard.as_mut() {
         match process.child.try_wait() {
@@ -431,8 +431,8 @@ async fn post_automation_reset(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    ensure_csrf_guard_header(&headers)?;
-    authorize_for(&headers, &state, &["jobs.write"])?;
+    let auth = authorize_for(&headers, &state, &["jobs.write"])?;
+    ensure_csrf_guard_header(&auth, &headers)?;
     let mut guard = state.automation_process.lock().await;
     if let Some(process) = guard.as_mut() {
         let _ = process.child.kill();
@@ -502,8 +502,20 @@ async fn get_platform_ha(State(state): State<AppState>, headers: HeaderMap) -> i
 /// `fetch` s vlastni hlavickou vyvola CORS preflight, ktery bez
 /// `Access-Control-Allow-Origin` (server zadny CORS vrstvu nema) selze driv,
 /// nez se skutecny POST vubec posle.
-fn ensure_csrf_guard_header(headers: &HeaderMap) -> std::result::Result<(), (StatusCode, String)> {
-    if headers.contains_key("x-bakula-csrf") {
+///
+/// Oprava po nasazeni (e2e regrese, 30.10.2026): kontrola puvodne bezela PRED
+/// `authorize_for` a platila univerzalne - rozbila `server_respektuje_api_token`,
+/// ktery pravem ocekava 401 (ne 403) na pozadavek bez tokenu, a 200 (bez CSRF
+/// hlavicky) na pozadavek SE spravnym bearer tokenem. Spravny rozsah: CSRF je
+/// hrozba jen pro `anonymous-admin` (auth_required=false, zadny secret se
+/// neprokazuje) - bearer token/x-api-key jde jen přes vlastní hlavičku, kterou
+/// cross-site `<form>` ani `fetch` bez CORS nemůže automaticky připojit, takže
+/// token-autentizovany pozadavek uz je sam o sobe CSRF-imunni.
+fn ensure_csrf_guard_header(
+    auth: &AuthContext,
+    headers: &HeaderMap,
+) -> std::result::Result<(), (StatusCode, String)> {
+    if auth.subject != "anonymous-admin" || headers.contains_key("x-bakula-csrf") {
         return Ok(());
     }
     Err((
@@ -933,17 +945,30 @@ mod tests {
     }
 
     #[test]
-    fn ensure_csrf_guard_header_rejects_requests_without_custom_header() {
+    fn ensure_csrf_guard_header_rejects_anonymous_requests_without_custom_header() {
         let headers = HeaderMap::new();
-        let error = ensure_csrf_guard_header(&headers).expect_err("bez hlavicky musi selhat");
+        let anonymous = admin_context("anonymous-admin");
+        let error = ensure_csrf_guard_header(&anonymous, &headers)
+            .expect_err("anonymni pozadavek bez hlavicky musi selhat");
         assert_eq!(error.0, StatusCode::FORBIDDEN);
     }
 
     #[test]
-    fn ensure_csrf_guard_header_accepts_requests_with_custom_header() {
+    fn ensure_csrf_guard_header_accepts_anonymous_requests_with_custom_header() {
         let mut headers = HeaderMap::new();
         headers.insert("x-bakula-csrf", HeaderValue::from_static("1"));
-        assert!(ensure_csrf_guard_header(&headers).is_ok());
+        let anonymous = admin_context("anonymous-admin");
+        assert!(ensure_csrf_guard_header(&anonymous, &headers).is_ok());
+    }
+
+    /// Regrese po nasazeni (30.10.2026): token-autentizovany pozadavek nesmi
+    /// vyzadovat CSRF hlavicku - bearer token sam o sobe uz je CSRF-imunni,
+    /// a `server_respektuje_api_token` (tests/e2e.rs) pravem ocekava 200 bez ni.
+    #[test]
+    fn ensure_csrf_guard_header_accepts_token_authenticated_requests_without_custom_header() {
+        let headers = HeaderMap::new();
+        let token_authenticated = admin_context("static-admin");
+        assert!(ensure_csrf_guard_header(&token_authenticated, &headers).is_ok());
     }
 
     /// Audit nalez (30.10.2026, produkcni gap analyza): `require_api_token=false`
