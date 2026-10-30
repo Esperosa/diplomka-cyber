@@ -1,6 +1,10 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     thread,
     time::Duration,
 };
@@ -1158,6 +1162,38 @@ pub fn mark_job_failed(
     Ok(affected > 0)
 }
 
+/// Audit nalez (30.10.2026, produkcni gap analyza): `claim_until` se nastavi
+/// jen jednou, pri `claim_due_job`/`claim_job_by_id` - pokud skutecna prace
+/// (napr. `nmap -sV` na /24 + nuclei) trva dele nez `lease_seconds`, jiny
+/// worker uvidi vyprselou lease a job znovu prevezme a znovu spusti, ZATIM
+/// CO puvodni worker jeste bezi - dve souvisle aktivni sondy proti stejne
+/// siti najednou. `claimed_by` fence v `mark_job_succeeded`/`mark_job_failed`
+/// chrani jen VYSLEDEK (ktery worker ho zapise), ne samotne dvojite spusteni.
+/// `worker_cycle` ted behem exekuce periodicky prodluzuje lease na pozadi -
+/// stejny fenced vzor jako ostatni mutace (`WHERE id = ? AND claimed_by = ?
+/// AND status = 'running'`), takze cizi/uz prevzaty job se tise neprodlouzi.
+pub fn renew_lease(path: &Path, job_id: i64, claimed_by: &str, lease_seconds: i64) -> Result<bool> {
+    let conn = open_connection(path)?;
+    let now = Utc::now();
+    let affected = conn
+        .execute(
+            "
+        UPDATE jobs
+        SET claim_until = ?1,
+            updated_at = ?2
+        WHERE id = ?3 AND claimed_by = ?4 AND status = 'running'
+        ",
+            params![
+                format_dt(now + chrono::Duration::seconds(lease_seconds)),
+                format_dt(now),
+                job_id,
+                claimed_by
+            ],
+        )
+        .map_err(to_processing_error)?;
+    Ok(affected > 0)
+}
+
 pub fn worker_cycle<F>(
     path: &Path,
     node_id: &str,
@@ -1175,7 +1211,31 @@ where
     let Some(job) = claim_due_job(path, node_id, job_lease_seconds, is_leader)? else {
         return Ok(None);
     };
-    match executor(job.spec) {
+
+    let stop_renewal = Arc::new(AtomicBool::new(false));
+    let renewal_thread = {
+        let path = path.to_path_buf();
+        let node_id = node_id.to_string();
+        let job_id = job.id;
+        let stop_renewal = Arc::clone(&stop_renewal);
+        // Obnovovat v tretinach leasy - i kdyz jedno obnoveni vypadne (docasny
+        // DB lock), zbyva jeste rezerva pred vyprsenim puvodniho `claim_until`.
+        let renew_interval = Duration::from_secs((job_lease_seconds / 3).max(1) as u64);
+        thread::spawn(move || {
+            while !stop_renewal.load(Ordering::Relaxed) {
+                thread::sleep(renew_interval);
+                if stop_renewal.load(Ordering::Relaxed) {
+                    break;
+                }
+                let _ = renew_lease(&path, job_id, &node_id, job_lease_seconds);
+            }
+        })
+    };
+    let executor_result = executor(job.spec);
+    stop_renewal.store(true, Ordering::Relaxed);
+    let _ = renewal_thread.join();
+
+    match executor_result {
         Ok(run_id) => {
             let fenced =
                 mark_job_succeeded(path, job.id, node_id, &run_id, job.schedule_interval_s)?;
@@ -1810,6 +1870,118 @@ mod tests {
         assert!(
             next_run_at >= before_fail + chrono::Duration::days(1),
             "po dosazeni max attempts se musi dalsi pokus odlozit o dny, ne o desitky sekund (next_run_at={next_run_at})"
+        );
+    }
+
+    #[test]
+    fn renew_lease_extends_claim_until_and_is_fenced_against_wrong_owner() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db_path = temp.path().join("platform.sqlite");
+        init_database(&db_path).expect("init db");
+
+        let job_id =
+            enqueue_job(&db_path, "test-job", &minimal_spec(), None, None).expect("enqueue");
+        claim_due_job(&db_path, "node-a", 60, true)
+            .expect("claim ok")
+            .expect("claim musi najit job");
+
+        assert!(
+            !renew_lease(&db_path, job_id, "node-b", 300).expect("renew_lease (wrong owner)"),
+            "renew_lease musi byt fencovane na spravneho claimed_by"
+        );
+
+        let before_renew = Utc::now();
+        assert!(
+            renew_lease(&db_path, job_id, "node-a", 300).expect("renew_lease (owner)"),
+            "renew_lease spravnym vlastnikem musi uspet"
+        );
+
+        let conn = open_connection(&db_path).expect("open connection");
+        let claim_until: String = conn
+            .query_row(
+                "SELECT claim_until FROM jobs WHERE id = ?1",
+                params![job_id],
+                |row| row.get(0),
+            )
+            .expect("precteni claim_until");
+        let claim_until = parse_dt(&claim_until).expect("parse claim_until");
+        assert!(
+            claim_until >= before_renew + chrono::Duration::seconds(299),
+            "renew_lease musi posunout claim_until dopredu o novou lease_seconds (claim_until={claim_until}, before_renew={before_renew})"
+        );
+    }
+
+    /// Audit nalez (30.10.2026, produkcni gap analyza): bez periodickeho
+    /// obnovovani by `claim_until` vyprselo v polovine dlouhe exekuce a jiny
+    /// worker by job prevzal podruhe, ZATIM CO prvni worker jeste bezi - dve
+    /// souvisle aktivni sondy proti stejne siti najednou. Test spusti
+    /// `worker_cycle` s executorem delsim nez `lease_seconds` a soucasne se
+    /// z druheho "workera" opakovane snazi job ukradnout `claim_due_job`.
+    #[test]
+    fn worker_cycle_renews_lease_during_long_executor_preventing_concurrent_double_claim() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db_path = temp.path().join("platform.sqlite");
+        init_database(&db_path).expect("init db");
+        let job_id =
+            enqueue_job(&db_path, "test-job", &minimal_spec(), None, None).expect("enqueue");
+
+        let lease_seconds = 2;
+        let worker_db_path = db_path.clone();
+        let worker = thread::spawn(move || {
+            worker_cycle(
+                &worker_db_path,
+                "node-a",
+                "Node A",
+                &[],
+                60,
+                lease_seconds,
+                |_spec| {
+                    thread::sleep(Duration::from_millis(3500));
+                    Ok("run-ok".to_string())
+                },
+            )
+        });
+
+        // Cekej, az worker vlakno job skutecne prevezme (status='running'),
+        // misto pevneho sleep odhadu - heartbeat+leader-lease+claim maji
+        // vlastni promennou DB latenci, kterou nahodny sleep nemusi pokryt.
+        for _ in 0..100 {
+            let conn = open_connection(&db_path).expect("open connection");
+            let status: String = conn
+                .query_row(
+                    "SELECT status FROM jobs WHERE id = ?1",
+                    params![job_id],
+                    |row| row.get(0),
+                )
+                .expect("precteni status");
+            drop(conn);
+            if status == "running" {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+
+        let mut stolen = false;
+        for _ in 0..14 {
+            if claim_due_job(&db_path, "node-b", 60, true)
+                .expect("claim_due_job (node-b)")
+                .is_some()
+            {
+                stolen = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(250));
+        }
+
+        let outcome = worker.join().expect("worker vlakno nesmi panikarit");
+        assert!(
+            matches!(outcome, Ok(Some(ref run_id)) if run_id == "run-ok"),
+            "worker_cycle musi uspet s ocekavanym run_id: {outcome:?}"
+        );
+        assert!(
+            !stolen,
+            "bez obnovovani leasy (puvodni lease_seconds={lease_seconds}) by jiny worker job behem {}ms dlouhe exekuce ukradl",
+            3500
         );
     }
 }
