@@ -93,8 +93,8 @@
 
 <h1>Bakula — stav diplomky a produkčního programu</h1>
 <div class="meta">
-  Poslední aktualizace: <strong>29. 10. 2026, 21:39</strong> ·
-  commit <code>c5f807a</code> ·
+  Poslední aktualizace: <strong>30. 10. 2026, 10:40</strong> ·
+  commit <code>37563db</code> ·
   <a href="souhrn-vysledku-a-hypotez.md">plný souhrn</a> ·
   <a href="produkcni-plan.md">produkční plán</a> ·
   <a href="dalsi-postup-master-plan.md">master plán (diplomka)</a>
@@ -245,6 +245,18 @@
       <li><span class="badge badge-green mini">hotovo</span> dedup <code class="file">identification_gap</code>/<code class="file">correlation_uncertainty</code> kontroly v <code class="file">decision.rs</code> (4× opsaná → 1 funkce)</li>
       <li><span class="badge badge-yellow mini">zjištění</span> "traffic-like" seznamy nálezů v <code class="file">decision.rs</code> (7 typů) a <code class="file">triage.rs</code> (4 typy) dnes NEJSOU stejné — sjednocení by bylo reálná změna chování, ne bezrizikový plumbing refaktor. Odloženo jako vlastní, měřený krok.</li>
       <li><span class="badge badge-gray mini">zbývá (samostatný krok)</span> rozhodnout o sjednocení kategorií → <code class="file">FindingKindSpec</code> registr, rozdělení <code class="file">generate_findings</code> (630 řádků) na <code class="file">FindingRule</code></li>
+    </ul>
+  </div>
+</details>
+
+<details class="stage" open>
+  <summary><span class="badge badge-green">zpětné analýzy + tvrdší testy — hotovo</span> <span class="stage-title">Druhá vrstva kontroly nad hotovou prací</span> <span class="stage-sub">2 Haiku retrospektivní audity, 3 reálné nálezy opraveny</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> 2 nezávislé Haiku audity (pipeline move, detector trait) — zapojení správné, výchozí chování nezměněné, žádná skrytá sémantická chyba</li>
+      <li><span class="badge badge-green mini">hotovo</span> <b>maskování opraveno potřetí nezávisle nalezené</b>: <code class="file">VOLATILE_TIMING_TEXT</code> schovávalo celý řetězec včetně deterministického obsahu — teď maskuje jen číslo za markerem (<code class="file">mask_numbers_after_markers</code>)</li>
+      <li><span class="badge badge-green mini">hotovo</span> paritní testy pro <code class="file">WindowedDetector</code>/<code class="file">LinkedDetector</code>/<code class="file">MultiscaleDetector</code> na komplexní fixtuře (dřív jen ablace A) — první verze fixtury nevyvolala <code class="file">multi_target_pattern</code> vůbec, opraveno a zdokumentováno proč</li>
+      <li><span class="badge badge-green mini">hotovo</span> 14 nových testů na chybové větve <code class="file">validate_pipeline_args</code>/<code class="file">validate_monitor_args</code>/<code class="file">prepare_pipeline_args</code>, které golden snapshot nikdy nezasáhne (<code class="file">--production</code>, <code class="file">--pentest</code>, neplatné cesty)</li>
     </ul>
   </div>
 </details>
