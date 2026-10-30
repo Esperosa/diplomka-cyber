@@ -64,4 +64,10 @@ ablace A porazila trivialni baseline v 1/13 scenarich
 
 **Hlavní zjištění přežilo, ale zesláblo**: ablace A prohrává s triviálním baseline na **12 ze 13** scénářů (dřív 3/3, teď 12/13) — jediná výjimka (Botnet-45) je hraniční (F1=0.047 vs. triviální 0.047, rozdíl na 4. desetinném místě). **Rozšíření na 7× víc dat generalizační tvrzení NEVYVRÁTILO, naopak posílilo** — ale F1 napříč scénáři je teď výrazně méně konzistentní (0.001–0.405, dřív 0.273–0.306 na jen 3 vzorcích) — menší vzorek skryl reálnou variabilitu mezi scénáři/rodinami. Medián F1=0.164 je honestnější shrnutí síly ablace A než dřívější úzký rozsah.
 
-**Nový pozorovaný vzorec**: scénáře s velmi malým počtem known klíčů (Botnet-48: 110, Botnet-50: 195, Botnet-52: 50) mají vysokou variabilitu F1 (0.106–0.238) i triviálního baseline (0.088–0.276) — malý vzorek uvnitř scénáře přidává svou vlastní nejistotu nad rámec mezi-scénářové variability. Bootstrap CI (Deliverable 20) by tohle u každého scénáře jednotlivě kvantifikoval; mezi-scénářová formální statistika (Wilcoxon, teď s n=13≥6 proveditelná) zůstává budoucí práce.
+**Nový pozorovaný vzorec**: scénáře s velmi malým počtem known klíčů (Botnet-48: 110, Botnet-50: 195, Botnet-52: 50) mají vysokou variabilitu F1 (0.106–0.238) i triviálního baseline (0.088–0.276) — malý vzorek uvnitř scénáře přidává svou vlastní nejistotu nad rámec mezi-scénářové variability. Bootstrap CI (Deliverable 20) by tohle u každého scénáře jednotlivě kvantifikoval.
+
+## Dodatek (31. 10. 2026): formální statistická signifikance (Wilcoxon, n=13)
+
+Mezi-scénářová formální statistika zmíněná výše jako "budoucí práce" je dodělaná. `src/eval/stats.rs::wilcoxon_signed_rank_test` — párový Wilcoxonův znaménkový pořadový test, exaktní p-hodnota (vyčet všech 2^n kombinací znamének, ne normální aproximace — proveditelné pro n≤20). Aplikováno na `f1(ablace A) - f1(triviální baseline)` přes všech 13 scénářů: **n_effective=12 (1 nulový rozdíl vyřazen — Botnet-45), W=1.0, p=0.000977**.
+
+To je silně statisticky významné (p≪0,05) — potvrzuje formálně, ne jen na pohled z mediánu, že ablace A spolehlivě prohrává s triviálním baseline, ne že se to shoduje náhodou na velkém vzorku. Reprodukce: `cargo test --lib ctu13_thirteen_scenarios_seven_families_dataset_sufficiency_check -- --ignored --nocapture`.

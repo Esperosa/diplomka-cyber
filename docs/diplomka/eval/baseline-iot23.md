@@ -66,4 +66,10 @@ Reakce na stejný požadavek, který vedl k rozšíření CTU-13 ze 3 na 13 scé
 
 **3 benigní honeypot scénáře** (Somfy-01, Honeypot-4-1, Honeypot-5-1): false positive rate 0.444–0.688 — konzistentně vysoká, potvrzuje napříč 3 nezávislými čistě benigními vzorky (ne jen 1), že současná objemová heuristika generuje citelný šum i na klidném provozu.
 
-**Co toto rozšíření stále nedokazuje**: N=6 malware scénářů umožňuje smysluplný medián/rozsah, ale ne formální statistický test významnosti (Wilcoxon potřebuje N≥6 pro jakoukoli síla — na hraně, ne komfortně nad ní). `CTU-IoT-Malware-Capture-3-1` (24 MB, rodiny Attack/C&C/PartOfAHorizontalPortScan) je zaznamenán v registru, ale vědomě gitignored a nezapojen do tohoto testu — další krok, ne provedený.
+**Co toto rozšíření stále nedokazuje**: N=6 malware scénářů umožňuje smysluplný medián/rozsah, ale je přesně na hraně, kde formální statistický test (Wilcoxon, n≥6) má jakoukoliv sílu. `CTU-IoT-Malware-Capture-3-1` (24 MB, rodiny Attack/C&C/PartOfAHorizontalPortScan) je zaznamenán v registru, ale vědomě gitignored a nezapojen do tohoto testu — další krok, ne provedený.
+
+## Dodatek (31.10.2026): formální test na N=6 — NEprůkazné, zapsáno honestně
+
+`src/eval/stats.rs::wilcoxon_signed_rank_test` aplikován na `f1(ablace A) - f1(triviální baseline)` přes 6 malware scénářů: **n_effective=6, W=7.0, p=0.5625**.
+
+**Rozdíl NENÍ statisticky významný.** Na rozdíl od CTU-13 (N=13, p=0.001 — viz `ctu13-three-scenarios-dataset-sufficiency.md`), kde je ztráta ablace A proti triviálnímu baseline jasně průkazná, u IoT-23 na N=6 raw počet "4 ze 6 scénářů prohrává" nedosahuje statistické síly na to, aby šlo tvrdit obecný závěr — se stejnými daty by i opačný výsledek (3/6, 2/6) mohl snadno nastat jen náhodou na tak malém vzorku. To je přesně ten typ zjištění, které menší dataset (N=2 z Deliverable 1) nemohl vůbec odhalit — tam formální test nebyl ani proveditelný. Honestní závěr: IoT-23 F1 vs. triviální baseline zůstává **neprůkazné** při současné velikosti vzorku, ne "potvrzené v menší míře než CTU-13". Reprodukce: `cargo test --lib eval::dataset_replay::tests::iot23_nine_scenarios_four_families_dataset_sufficiency_check -- --nocapture`.
