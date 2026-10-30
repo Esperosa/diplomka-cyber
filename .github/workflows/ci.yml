@@ -85,3 +85,24 @@ jobs:
           echo "server never answered /api/health" >&2
           docker logs bakula-smoke >&2
           exit 1
+
+  supply-chain:
+    # Produkcni gap audit (30.10.2026): levne, bez kontroverze mezi 3 agenty,
+    # ale nikdy neprovedeno. Neni lokalne k dispozici cargo-audit/cargo-deny
+    # (ani jedno neni nainstalovane na tomhle stroji) - rustsec/audit-check
+    # bezi primo v CI, bez potreby lokalni instalace.
+    #
+    # `continue-on-error: true`: zadny predchozi beh tenhle nastroj nikdy
+    # nespustil, takze nevim, jestli dnesni Cargo.lock uz nejaky znamy
+    # advisory neobsahuje. Informativni, dokud nekdo vysledek prvniho behu
+    # neprohlidne a vedome nezmeni na blokujici (viz produkcni-plan.md).
+    name: Supply chain audit (informative)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: cargo audit
+        uses: rustsec/audit-check@v2
+        continue-on-error: true
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
