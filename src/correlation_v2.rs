@@ -548,4 +548,229 @@ mod tests {
                 .all(|event| event.event_type != "multi_target_pattern")
         );
     }
+
+    // --- Velkoobjemovy property-based fuzz test (stejny vzor jako
+    // `fusion::tests::fuse_same_flow_events_holds_invariants_across_many_random_scenarios`,
+    // na zadost uzivatele testovat stovky tisic az miliony nahodnych scenaru paralelne).
+    // Nekontroluje presne prahy (ty uz pokryvaji rucne psane testy vyse) - kontroluje
+    // STRUKTURALNI invarianty, ktere musi platit bez ohledu na konkretni konstanty:
+    // (1) `unexpected_traffic` smi existovat JEN pro klice s >=3 neznamymi pozorovanimi
+    //     ve stejnem okne (nezavisle pocitano ze syrovych connections, ne z detektoru),
+    //     (2) `multi_target_pattern.count` musi presne odpovidat poctu distinktnich
+    //     dst_ip mezi ostatnimi eventy stejneho src_ip ve vystupu, (3) determinismus,
+    //     (4) zadny panic na nahodnem vstupu (NaN/overflow hranice).
+
+    use rand::{Rng, SeedableRng, rngs::StdRng};
+
+    const FUZZ_TARGETS: &[(&str, &str, u16, bool)] = &[
+        ("10.9.0.1", "tcp", 80, true),
+        ("10.9.0.1", "tcp", 443, true),
+        ("10.9.0.2", "tcp", 4444, false),
+        ("10.9.0.3", "tcp", 31337, false),
+        ("10.9.0.4", "udp", 53, false),
+    ];
+    const FUZZ_SOURCES: &[&str] = &["10.1.0.1", "10.1.0.2", "10.1.0.3"];
+    const FUZZ_TIME_WINDOW_S: i64 = 300;
+    const FUZZ_ANCHOR: i64 = 1_700_000_000;
+
+    fn fuzz_connection(rng: &mut StdRng) -> ConnectionObservation {
+        let (dst_ip, proto, port, _known) = FUZZ_TARGETS[rng.random_range(0..FUZZ_TARGETS.len())];
+        let src_ip = FUZZ_SOURCES[rng.random_range(0..FUZZ_SOURCES.len())];
+        let ts = FUZZ_ANCHOR + rng.random_range(0..1_800_i64);
+        let state = if rng.random_bool(0.3) { "S0" } else { "SF" };
+        ConnectionObservation {
+            timestamp: Utc.timestamp_opt(ts, 0).unwrap(),
+            src_ip: Some(src_ip.to_string()),
+            src_port: Some(rng.random_range(1024..65535)),
+            dst_ip: dst_ip.to_string(),
+            proto: proto.to_string(),
+            dst_port: Some(port),
+            duration_s: Some(rng.random_range(0.0..5.0)),
+            orig_bytes: Some(rng.random_range(0..5000)),
+            resp_bytes: Some(rng.random_range(0..5000)),
+            total_bytes: Some(rng.random_range(0..10000)),
+            orig_pkts: Some(rng.random_range(0..200)),
+            resp_pkts: Some(rng.random_range(0..200)),
+            total_pkts: Some(rng.random_range(0..400)),
+            conn_state: Some(state.to_string()),
+            history: None,
+            missed_bytes: Some(rng.random_range(0..3000)),
+        }
+    }
+
+    fn known_services_for_fuzz() -> HashSet<ServiceKey> {
+        FUZZ_TARGETS
+            .iter()
+            .filter(|(_, _, _, known)| *known)
+            .map(|(dst_ip, proto, port, _)| (dst_ip.to_string(), proto.to_string(), *port))
+            .collect()
+    }
+
+    fn check_windowed_scenario(rng: &mut StdRng, scenario_seed: u64) -> Option<String> {
+        let connection_count = rng.random_range(0..=20usize);
+        let connections: Vec<ConnectionObservation> = (0..connection_count)
+            .map(|_| fuzz_connection(rng))
+            .collect();
+        let known = known_services_for_fuzz();
+
+        // Nezavisly pocet "neznamych" pozorovani per (dst_ip,proto,port,window) -
+        // POCITANY ZE SYROVYCH CONNECTIONS, ne z vystupu detektoru.
+        let anchor = match connections
+            .iter()
+            .map(|connection| connection.timestamp)
+            .min()
+        {
+            Some(value) => value,
+            None => Utc.timestamp_opt(FUZZ_ANCHOR, 0).unwrap(),
+        };
+        let mut unexpected_counts: HashMap<WindowedKey, u32> = HashMap::new();
+        for connection in &connections {
+            let Some(port) = connection.dst_port else {
+                continue;
+            };
+            let service_key = (connection.dst_ip.clone(), connection.proto.clone(), port);
+            if !known.contains(&service_key) {
+                let window_start =
+                    window_start_for(connection.timestamp, anchor, FUZZ_TIME_WINDOW_S);
+                let windowed_key: WindowedKey = (
+                    connection.dst_ip.clone(),
+                    connection.proto.clone(),
+                    port,
+                    window_start,
+                );
+                *unexpected_counts.entry(windowed_key).or_insert(0) += 1;
+            }
+        }
+
+        let events_once =
+            detect_windowed_anomalies_linked(connections.clone(), &known, FUZZ_TIME_WINDOW_S);
+        let events_twice =
+            detect_windowed_anomalies_linked(connections, &known, FUZZ_TIME_WINDOW_S);
+
+        let key_of = |events: &[NormalizedEvent]| -> Vec<(String, String, u32)> {
+            events
+                .iter()
+                .map(|event| {
+                    (
+                        event.event_id.clone(),
+                        event.event_type.clone(),
+                        event.count,
+                    )
+                })
+                .collect()
+        };
+        if key_of(&events_once) != key_of(&events_twice) {
+            return Some(format!(
+                "scenar {scenario_seed}: detect_windowed_anomalies_linked neni deterministicka na stejnem vstupu"
+            ));
+        }
+
+        for event in &events_once {
+            if event.event_type == "unexpected_traffic" {
+                // event_id ma tvar "windowed:unexpected:{dst_ip}:{proto}:{port}:{window_start}".
+                let window_start = event
+                    .event_id
+                    .rsplit(':')
+                    .next()
+                    .and_then(|value| value.parse::<i64>().ok())
+                    .unwrap_or_default();
+                let windowed_key: WindowedKey = (
+                    event.dst_ip.clone(),
+                    event.proto.clone(),
+                    event.dst_port.unwrap_or(0),
+                    window_start,
+                );
+                let independent_count = unexpected_counts.get(&windowed_key).copied().unwrap_or(0);
+                if independent_count < 3 {
+                    return Some(format!(
+                        "scenar {scenario_seed}: unexpected_traffic existuje pro klic {windowed_key:?} s jen {independent_count} nezavisle pocitanymi neznamymi pozorovanimi (< 3)"
+                    ));
+                }
+            }
+
+            if event.event_type == "multi_target_pattern" {
+                if event.count < 2 {
+                    return Some(format!(
+                        "scenar {scenario_seed}: multi_target_pattern.count {} < 2",
+                        event.count
+                    ));
+                }
+                let Some(src_ip) = &event.src_ip else {
+                    return Some(format!(
+                        "scenar {scenario_seed}: multi_target_pattern bez src_ip"
+                    ));
+                };
+                let distinct_targets_in_output: HashSet<(String, String, u16)> = events_once
+                    .iter()
+                    .filter(|other| {
+                        other.event_type != "multi_target_pattern"
+                            && other.src_ip.as_ref() == Some(src_ip)
+                    })
+                    .filter_map(|other| {
+                        other
+                            .dst_port
+                            .map(|port| (other.dst_ip.clone(), other.proto.clone(), port))
+                    })
+                    .collect();
+                if (distinct_targets_in_output.len() as u32) < event.count {
+                    return Some(format!(
+                        "scenar {scenario_seed}: multi_target_pattern.count {} presahuje pocet distinktnich cilu {} pozorovanych pro src_ip {src_ip} ve vystupu",
+                        event.count,
+                        distinct_targets_in_output.len()
+                    ));
+                }
+            }
+        }
+
+        None
+    }
+
+    fn run_windowed_fuzz_worker(base_seed: u64, scenario_count: usize) -> Option<String> {
+        let mut rng = StdRng::seed_from_u64(base_seed);
+        for scenario_index in 0..scenario_count {
+            if let Some(violation) =
+                check_windowed_scenario(&mut rng, base_seed.wrapping_add(scenario_index as u64))
+            {
+                return Some(violation);
+            }
+        }
+        None
+    }
+
+    /// Stejny env-var ovladany pocet jako u `fusion.rs` fuzz testu - vychozi hodnota
+    /// bezi v radu sekund, `BAKULA_FUZZ_SCENARIOS=1000000` pro zamerny stres-beh.
+    #[test]
+    fn detect_windowed_anomalies_linked_holds_structural_invariants_across_many_random_scenarios() {
+        let total_scenarios: usize = std::env::var("BAKULA_FUZZ_SCENARIOS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(200_000);
+        let worker_count = std::thread::available_parallelism()
+            .map(std::num::NonZeroUsize::get)
+            .unwrap_or(4);
+        let base_seed: u64 = 0x9E37_u64;
+
+        let started = std::time::Instant::now();
+        let violation = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..worker_count)
+                .map(|worker_index| {
+                    let scenarios_for_worker = total_scenarios / worker_count
+                        + usize::from(worker_index < total_scenarios % worker_count);
+                    let worker_seed = base_seed.wrapping_add((worker_index as u64) * 2_147_483_647);
+                    scope.spawn(move || run_windowed_fuzz_worker(worker_seed, scenarios_for_worker))
+                })
+                .collect();
+            handles
+                .into_iter()
+                .find_map(|handle| handle.join().expect("fuzz worker nesmi panikarit"))
+        });
+        let elapsed = started.elapsed();
+        println!(
+            "detect_windowed_anomalies_linked fuzz: {total_scenarios} scenaru na {worker_count} OS vlaknech za {elapsed:.2?}"
+        );
+
+        if let Some(message) = violation {
+            panic!("{message}");
+        }
+    }
 }

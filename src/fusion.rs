@@ -215,6 +215,7 @@ fn merge_cross_sensor_group(group: Vec<NormalizedEvent>) -> NormalizedEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::{Rng, SeedableRng, rngs::StdRng};
 
     fn item(community_id: Option<&str>, sensor: &str, score: f64) -> EvidenceItem {
         EvidenceItem {
@@ -567,6 +568,239 @@ mod tests {
                 actual_order, expected_order,
                 "poradi eventu se stejnym timestampem musi byt deterministicke, ne zavisle na HashMap iteraci"
             );
+        }
+    }
+
+    // --- Velkoobjemovy property-based fuzz test (na zadost uzivatele: "pripravit
+    // testovaci scenare a necha to paralelne testovat aspon par set tisic ruznych
+    // scenaru"). Bezi PRIMO nad cistou funkci (zadne Docker/IO), proto je realne
+    // provest stovky tisic az miliony scenaru v radu sekund - spoustet celý CLI
+    // pipeline tolikrat by trvalo dny az tydny a nebylo by to "testovani scenaru",
+    // jen zbytecne pomale opakovani stejneho byte-for-byte vstupu.
+
+    const FUZZ_FLOWS: &[(&str, u16, &str, u16, &str)] = &[
+        ("10.0.1.1", 40001, "10.0.9.1", 80, "tcp"),
+        ("10.0.1.2", 40002, "10.0.9.1", 443, "tcp"),
+        ("10.0.1.3", 40003, "10.0.9.2", 53, "udp"),
+        ("10.0.1.4", 40004, "10.0.9.2", 22, "tcp"),
+        ("10.0.1.5", 40005, "10.0.9.3", 21, "tcp"),
+        ("10.0.1.6", 40006, "10.0.9.3", 23, "tcp"),
+    ];
+    const FUZZ_SENSORS: &[&str] = &["zeek", "suricata", "firewall"];
+
+    fn fuzz_timestamp() -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::<chrono::Utc>::from_timestamp(1_700_000_000, 0)
+            .expect("pevny epoch timestamp")
+    }
+
+    /// Vraci (event, Some(flow_slot)) pro event se znamym, NEZAVISLE sledovanym
+    /// fyzickym tokem (index do `FUZZ_FLOWS`), nebo (event, None) pro event bez
+    /// src_port (community_id musi byt `None`, stejne jako u ablace A).
+    fn random_fuzz_event(
+        rng: &mut StdRng,
+        scenario_seed: u64,
+        event_index: usize,
+    ) -> (NormalizedEvent, Option<usize>) {
+        let sensor = FUZZ_SENSORS[rng.random_range(0..FUZZ_SENSORS.len())];
+        let severity = match rng.random_range(0..3) {
+            0 => Severity::Low,
+            1 => Severity::Medium,
+            _ => Severity::High,
+        };
+        let event_id = format!("fuzz:{scenario_seed}:{event_index}");
+        let base = NormalizedEvent {
+            event_id: event_id.clone(),
+            timestamp: fuzz_timestamp(),
+            src_ip: None,
+            src_port: None,
+            dst_ip: String::new(),
+            proto: "tcp".to_string(),
+            dst_port: None,
+            event_type: "fuzz_event".to_string(),
+            severity,
+            source: sensor.to_string(),
+            rule_id: None,
+            message: format!("fuzz scenario={scenario_seed} idx={event_index}"),
+            raw_ref: None,
+            count: 1,
+        };
+        if rng.random_bool(0.85) {
+            let slot = rng.random_range(0..FUZZ_FLOWS.len());
+            let (src_ip, src_port, dst_ip, dst_port, proto) = FUZZ_FLOWS[slot];
+            (
+                NormalizedEvent {
+                    src_ip: Some(src_ip.to_string()),
+                    src_port: Some(src_port),
+                    dst_ip: dst_ip.to_string(),
+                    proto: proto.to_string(),
+                    dst_port: Some(dst_port),
+                    ..base
+                },
+                Some(slot),
+            )
+        } else {
+            (base, None)
+        }
+    }
+
+    /// Jeden nahodny scenar + overeni invariantu, ktere musi `fuse_same_flow_events`
+    /// splnit na JAKEMKOLIV vstupu, ne jen na rucne psanych prikladech vyse.
+    /// `expected_output_count`/`max_severity_by_slot` jsou pocitany NEZAVISLE na
+    /// `normalized_event_community_id` (jen z vlastni znalosti, ktery event patri
+    /// do ktereho `FUZZ_FLOWS` slotu) - jinak by test jen overoval produkcni kod
+    /// proti sobe samemu.
+    fn check_fusion_scenario(rng: &mut StdRng, scenario_seed: u64) -> Option<String> {
+        let event_count = rng.random_range(1..=8usize);
+        let mut events = Vec::with_capacity(event_count);
+        let mut flow_slots = Vec::with_capacity(event_count);
+        for event_index in 0..event_count {
+            let (event, slot) = random_fuzz_event(rng, scenario_seed, event_index);
+            events.push(event);
+            flow_slots.push(slot);
+        }
+        let input_snapshot: Vec<(String, Severity)> = events
+            .iter()
+            .map(|event| (event.event_id.clone(), event.severity))
+            .collect();
+
+        let mut sensors_by_slot: HashMap<usize, BTreeSet<String>> = HashMap::new();
+        let mut max_severity_by_slot: HashMap<usize, Severity> = HashMap::new();
+        let mut event_ids_by_slot: HashMap<usize, Vec<String>> = HashMap::new();
+        let mut no_flow_count = 0usize;
+        for (index, slot) in flow_slots.iter().enumerate() {
+            match slot {
+                Some(slot) => {
+                    sensors_by_slot
+                        .entry(*slot)
+                        .or_default()
+                        .insert(events[index].source.clone());
+                    event_ids_by_slot
+                        .entry(*slot)
+                        .or_default()
+                        .push(input_snapshot[index].0.clone());
+                    let entry = max_severity_by_slot
+                        .entry(*slot)
+                        .or_insert(input_snapshot[index].1);
+                    if input_snapshot[index].1 > *entry {
+                        *entry = input_snapshot[index].1;
+                    }
+                }
+                None => no_flow_count += 1,
+            }
+        }
+        let mergeable_slots: Vec<usize> = sensors_by_slot
+            .iter()
+            .filter(|(_, sensors)| sensors.len() >= 2)
+            .map(|(slot, _)| *slot)
+            .collect();
+        let passthrough_from_slots: usize = flow_slots
+            .iter()
+            .filter(|slot| slot.is_some_and(|slot| sensors_by_slot[&slot].len() < 2))
+            .count();
+        let expected_output_count = mergeable_slots.len() + passthrough_from_slots + no_flow_count;
+
+        let input_len = events.len();
+        let fused_once = fuse_same_flow_events(events.clone());
+        let fused_twice = fuse_same_flow_events(events);
+
+        if fused_once.len() > input_len {
+            return Some(format!(
+                "scenar {scenario_seed}: fuze ZVYSILA pocet eventu ({input_len} -> {})",
+                fused_once.len()
+            ));
+        }
+        if fused_once.len() != expected_output_count {
+            return Some(format!(
+                "scenar {scenario_seed}: nezavisle pocitany ocekavany pocet ({expected_output_count}) \
+                 nesouhlasi se skutecnym vystupem ({}) - flow_slots={flow_slots:?}",
+                fused_once.len()
+            ));
+        }
+
+        let key_of = |events: &[NormalizedEvent]| -> Vec<(String, String, Severity)> {
+            events
+                .iter()
+                .map(|event| (event.event_id.clone(), event.source.clone(), event.severity))
+                .collect()
+        };
+        if key_of(&fused_once) != key_of(&fused_twice) {
+            return Some(format!(
+                "scenar {scenario_seed}: fuze neni deterministicka na stejnem vstupu spustenem 2x"
+            ));
+        }
+
+        for slot in mergeable_slots {
+            let candidate_ids = &event_ids_by_slot[&slot];
+            let matches: Vec<&NormalizedEvent> = fused_once
+                .iter()
+                .filter(|event| candidate_ids.contains(&event.event_id))
+                .collect();
+            if matches.len() != 1 {
+                return Some(format!(
+                    "scenar {scenario_seed}: slot {slot} (>=2 senzory) musi dat PRESNE 1 vystupni event, ma {}",
+                    matches.len()
+                ));
+            }
+            let expected_severity = max_severity_by_slot[&slot];
+            if matches[0].severity != expected_severity {
+                return Some(format!(
+                    "scenar {scenario_seed}: slot {slot} - fuzovana severity {:?} != nezavisle pocitane MAX {:?}",
+                    matches[0].severity, expected_severity
+                ));
+            }
+        }
+
+        None
+    }
+
+    fn run_fuzz_worker(base_seed: u64, scenario_count: usize) -> Option<String> {
+        let mut rng = StdRng::seed_from_u64(base_seed);
+        for scenario_index in 0..scenario_count {
+            if let Some(violation) =
+                check_fusion_scenario(&mut rng, base_seed.wrapping_add(scenario_index as u64))
+            {
+                return Some(violation);
+            }
+        }
+        None
+    }
+
+    /// Vychozi pocet scenaru je zvoleny tak, aby test bezel v radu sekund pri
+    /// kazdem `cargo test`. Pro tezsi, zamerny stres-beh (uzivatel chtel "idealne
+    /// pres milion") nastav `BAKULA_FUZZ_SCENARIOS=1000000 cargo test --lib
+    /// fusion::tests::fuse_same_flow_events_holds_invariants_across_many_random_scenarios`.
+    #[test]
+    fn fuse_same_flow_events_holds_invariants_across_many_random_scenarios() {
+        let total_scenarios: usize = std::env::var("BAKULA_FUZZ_SCENARIOS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(200_000);
+        let worker_count = std::thread::available_parallelism()
+            .map(std::num::NonZeroUsize::get)
+            .unwrap_or(4);
+        let base_seed: u64 = 0x5A17_u64;
+
+        let started = std::time::Instant::now();
+        let violation = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..worker_count)
+                .map(|worker_index| {
+                    let scenarios_for_worker = total_scenarios / worker_count
+                        + usize::from(worker_index < total_scenarios % worker_count);
+                    let worker_seed = base_seed.wrapping_add((worker_index as u64) * 1_000_000_007);
+                    scope.spawn(move || run_fuzz_worker(worker_seed, scenarios_for_worker))
+                })
+                .collect();
+            handles
+                .into_iter()
+                .find_map(|handle| handle.join().expect("fuzz worker nesmi panikarit"))
+        });
+        let elapsed = started.elapsed();
+        println!(
+            "fuse_same_flow_events fuzz: {total_scenarios} scenaru na {worker_count} OS vlaknech za {elapsed:.2?}"
+        );
+
+        if let Some(message) = violation {
+            panic!("{message}");
         }
     }
 }
