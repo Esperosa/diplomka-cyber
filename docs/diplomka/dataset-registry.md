@@ -50,6 +50,8 @@ Registr datových zdrojů pro `src/eval/` (replay a baseline měření korelačn
 |---|---|---|---|
 | CTU-IoT-Malware-Capture-3-1 | 24 383 537 B | `9851009bbca03e15089fa1a356dd4b5eee4a98161a51703626058a0b507f50d0` | 151 567 malicious / 156 103 flows (Attack, C&C, PartOfAHorizontalPortScan) — stejná velikostní kategorie jako CTU-13 výřezy, vědomě odloženo mimo tento krok |
 
+**Vědomě vynechaný scénář (zjištěno/zdokumentováno 31.10.2026):** `CTU-IoT-Malware-Capture-43-1` (Mirai) vrací 404 na standardní cestě `bro/conn.log.labeled`, protože tenhle konkrétní scénář má `conn.log.labeled` ve VLASTNÍM adresáři `labeled/`, ne v `bro/` jako všechny ostatní dosud použité scénáře (`bro/` obsahuje jen `conn.log`/`dns.log`/`http.log`/... bez labelu). Ověřeno přímo (`curl` directory listing). Samotný soubor `labeled/conn.log.labeled` má navíc **9,36 GB** (`Content-Length` ověřen přímo HTTP HEAD požadavkem) — o 2 řády víc než ostatní committed IoT-23 scénáře, vyžadovalo by stejnou offset-based výřezovou techniku jako u CTU-13 velkých souborů. Vědomě nezapojeno do téhle vlny rozšíření (klesající návratnost — N=9/4 rodiny už poskytuje statisticky testovatelný vzorek, viz `baseline-iot23.md` dodatek s Wilcoxon testem) — zaznamenáno jako known gap, ne jako ztracený/zapomenutý scénář.
+
 **Reprodukce stažení:**
 ```
 base="https://mcfp.felk.cvut.cz/publicDatasets/IoT-23-Dataset/IndividualScenarios"
