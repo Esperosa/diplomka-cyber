@@ -209,6 +209,14 @@ async fn get_run_export(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     authorize_for(&headers, &state, &["runs.read"])?;
+    // Audit nalez (30.10.2026, produkcni gap analyza): `run_id` z URL cesty
+    // sel primo do `Path::join` bez validace - path traversal na libovolny
+    // `report.*` soubor kdekoliv na disku (napr. `..%2f..%2fetc%2fpasswd`
+    // po percent-decode). `build_run_id()` generuje jen alfanumericke/'-'/'_'
+    // znaky, takze tohle nic legitimniho neodmitne.
+    if !crate::storage::is_valid_run_id(&run_id) {
+        return Err((StatusCode::BAD_REQUEST, "Neplatny run_id.".to_string()));
+    }
     let (filename, content_type) = match format.as_str() {
         "json" => ("report.json", "application/json; charset=utf-8"),
         "md" => ("report.md", "text/markdown; charset=utf-8"),
@@ -234,12 +242,22 @@ async fn get_run_export(
     let mut response = bytes.into_response();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_str(content_type).expect("static content type header is valid"),
+        HeaderValue::from_str(content_type).map_err(|error| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Chyba serveru: {error}"),
+            )
+        })?,
     );
     response.headers_mut().insert(
         header::CONTENT_DISPOSITION,
         HeaderValue::from_str(&format!("attachment; filename=\"{}-{}\"", run_id, filename))
-            .expect("generated content disposition header is valid"),
+            .map_err(|error| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Chyba serveru: {error}"),
+                )
+            })?,
     );
     Ok::<_, (StatusCode, String)>(response)
 }
@@ -873,4 +891,57 @@ fn base_run_name(value: &str) -> String {
         .rsplit_once(" / cyklus ")
         .map(|(base, _)| base.to_string())
         .unwrap_or_else(|| value.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_state(workspace_root: PathBuf) -> AppState {
+        AppState {
+            workspace_root: Arc::new(workspace_root),
+            started_at: Utc::now(),
+            auth_required: false,
+            api_token: Arc::new(None),
+            platform_db: Arc::new(None),
+            automation_process: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Audit nalez (30.10.2026, produkcni gap analyza): `run_id` z URL cesty
+    /// sel primo do `Path::join` bez validace - path traversal na libovolny
+    /// `report.*` soubor kdekoliv na disku, dosazitelne i bez tokenu v
+    /// defaultni konfiguraci (`auth_required=false`). Tenhle test vola
+    /// handler primo, ne pres skutecny TCP server.
+    #[tokio::test]
+    async fn get_run_export_rejects_path_traversal_run_id() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+
+        let response = get_run_export(
+            Path(("../../../../etc/passwd".to_string(), "json".to_string())),
+            State(state),
+            HeaderMap::new(),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn get_run_export_rejects_unknown_format_before_touching_run_id() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+
+        let response = get_run_export(
+            Path(("run-20261030201943-1-abc123".to_string(), "exe".to_string())),
+            State(state),
+            HeaderMap::new(),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
 }

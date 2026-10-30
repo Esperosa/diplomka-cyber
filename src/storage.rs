@@ -187,6 +187,11 @@ impl Workspace {
     }
 
     pub fn load_report(&self, run_id: &str) -> Result<RunReport> {
+        if !is_valid_run_id(run_id) {
+            return Err(BakulaError::Processing(format!(
+                "Neplatny run_id: {run_id}"
+            )));
+        }
         let path = self.root.join("runs").join(run_id).join("report.json");
         let data = fs::read(path)?;
         serde_json::from_slice(&data).map_err(BakulaError::Json)
@@ -276,6 +281,20 @@ impl Workspace {
     }
 }
 
+/// Audit nalez (30.10.2026, produkcni gap analyza): `run_id` z HTTP cesty
+/// (`server.rs`'s `/runs/{run_id}*`) sel primo do `Path::join` bez jakekoliv
+/// validace - segment jako `..%2f..%2fetc%2fpasswd` se po percent-decode stane
+/// path traversalem na libovolny soubor pod `report.json`/`report.md`/`report.txt`
+/// jmenem. `build_run_id()` (report.rs) generuje jen `run-<timestamp>-<counter>-<hex32>`,
+/// takze omezeni na alfanumericke znaky + '-'/'_' nic legitimniho neodmitne.
+pub(crate) fn is_valid_run_id(run_id: &str) -> bool {
+    !run_id.is_empty()
+        && run_id.len() <= 128
+        && run_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
 fn collect_manifest_files(root: &Path, current: &Path, files: &mut Vec<StoredFile>) -> Result<()> {
     for entry in fs::read_dir(current)? {
         let entry = entry?;
@@ -307,4 +326,56 @@ fn collect_manifest_files(root: &Path, current: &Path, files: &mut Vec<StoredFil
         });
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_valid_run_id_accepts_the_real_generated_format() {
+        assert!(is_valid_run_id(
+            "run-20261030201943-1-c86afbba782f4e2ebdb1808ea4d3e7f2"
+        ));
+        assert!(is_valid_run_id("simple_id-123"));
+    }
+
+    /// Audit nalez: `run_id` z URL sel bez validace primo do `Path::join`.
+    /// Tohle jsou presne ty payloady, co by po percent-decode v axum routeru
+    /// zpusobily cteni souboru MIMO `runs/<run_id>/`.
+    #[test]
+    fn is_valid_run_id_rejects_path_traversal_payloads() {
+        assert!(!is_valid_run_id("../secret"));
+        assert!(!is_valid_run_id("../../etc/passwd"));
+        assert!(!is_valid_run_id("a/../../b"));
+        assert!(!is_valid_run_id("a/b"));
+        assert!(!is_valid_run_id("a\\b"));
+        assert!(!is_valid_run_id("."));
+        assert!(!is_valid_run_id(""));
+        assert!(!is_valid_run_id("/etc/passwd"));
+        assert!(!is_valid_run_id("C:\\Windows\\System32"));
+    }
+
+    #[test]
+    fn is_valid_run_id_rejects_overlong_values() {
+        let too_long = "a".repeat(129);
+        assert!(!is_valid_run_id(&too_long));
+        let exactly_max = "a".repeat(128);
+        assert!(is_valid_run_id(&exactly_max));
+    }
+
+    /// Ověřuje, že `load_report` traversal payload odmítne DŘÍV, než se vůbec
+    /// pokusí o filesystémové čtení - ne jen že nakonec selže na "soubor
+    /// neexistuje" (což by se mohlo lišit podle toho, co skutečně na té
+    /// odvozené cestě leží).
+    #[test]
+    fn load_report_rejects_path_traversal_run_id_before_touching_filesystem() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let workspace = Workspace::open(temp.path()).expect("workspace");
+
+        let error = workspace
+            .load_report("../../../../etc/passwd")
+            .expect_err("traversal run_id musi selhat");
+        assert!(error.to_string().contains("Neplatny run_id"));
+    }
 }
