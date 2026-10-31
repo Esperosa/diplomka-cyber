@@ -31,7 +31,7 @@ use crate::{
     model::{MonitoringLane, NormalizedEvent, RunReport, Severity, TriageAction},
     nmap, passive, paths, pentest, report, scope_policy, simulation,
     storage::{RunArtifacts, Workspace},
-    triage, validation, verification_planner, vuln, webscan,
+    triage, validation, verification_exec, verification_planner, vuln, webscan,
 };
 
 /// `Default` je jen pro testy nize (`..Default::default()` konstrukce bez
@@ -78,6 +78,14 @@ pub struct BehArgs {
     pub web_fingerprint: bool,
     #[arg(long, default_value_t = false)]
     pub web_checks: bool,
+    /// Vykona kontroly vybrane `verification_planner` (jen passive/read-only,
+    /// po scope/rozpoctu/rate-limit mantinelech); kontroly vyzadujici schvaleni
+    /// se nikdy nespusti automaticky. Vychozi: vypnuto (jen plan, shadow mode).
+    #[arg(long, default_value_t = false)]
+    pub execute_verification: bool,
+    /// Strop poctu automaticky vykonanych kontrol za beh.
+    #[arg(long, default_value_t = 10)]
+    pub verification_max_checks: usize,
     #[arg(long, default_value_t = false)]
     pub pentest: bool,
     #[arg(long, default_value_t = false)]
@@ -1353,6 +1361,19 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
             verification_planner::plan_for_hypothesis(hypothesis, &verification_scope)
         })
         .collect();
+    if args.execute_verification {
+        let budget = verification_exec::ExecutionBudget {
+            max_checks_per_run: args.verification_max_checks,
+            ..verification_exec::ExecutionBudget::default()
+        };
+        report.verification_results = verification_exec::execute_plans(
+            &report.verification_plans,
+            &report.hosts,
+            &verification_scope,
+            &budget,
+            &verification_exec::LocalRunner,
+        );
+    }
     report.summary.findings_total = report.findings.len();
     report.summary.audit_findings_total = report
         .findings

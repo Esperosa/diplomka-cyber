@@ -112,6 +112,10 @@ pub struct RunReport {
     /// mantinely). `decision.rs`/`triage.rs` skorovani beze zmeny.
     #[serde(default)]
     pub verification_plans: Vec<crate::verification_planner::HypothesisVerificationPlan>,
+    /// Vysledky skutecne vykonanych (opt-in `--execute-verification`) kontrol -
+    /// prazdne, dokud exekuce neni zapnuta. Viz `verification_exec`.
+    #[serde(default)]
+    pub verification_results: Vec<crate::verification_exec::VerificationResult>,
     pub diff: Option<DiffReport>,
 }
 
