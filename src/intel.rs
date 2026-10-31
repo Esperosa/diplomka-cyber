@@ -557,29 +557,11 @@ fn collect_attack_context(report: &RunReport) -> Vec<IntelMatch> {
         ));
     }
 
-    let has_traffic_anomaly = report.findings.iter().any(|finding| {
-        matches!(
-            finding.finding_type.as_str(),
-            "unexpected_traffic"
-                | "external_flow_observed"
-                | "connection_timeout_burst"
-                | "packet_rate_spike"
-                | "packet_loss_signal"
-                | "service_overload_risk"
-                | "inductive_volume_anomaly"
-        )
-    }) || report_event_types(report).any(|event_type| {
-        matches!(
-            event_type,
-            "unexpected_traffic"
-                | "external_flow_observed"
-                | "connection_timeout_burst"
-                | "packet_rate_spike"
-                | "packet_loss_signal"
-                | "service_overload_risk"
-                | "inductive_volume_anomaly"
-        )
-    });
+    let has_traffic_anomaly = report
+        .findings
+        .iter()
+        .any(|finding| crate::finding_kinds::is_traffic_like(&finding.finding_type))
+        || report_event_types(report).any(crate::finding_kinds::is_traffic_like);
     if has_traffic_anomaly {
         matches.push(attack_context_match(
             "T1049",

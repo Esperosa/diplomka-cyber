@@ -27,7 +27,7 @@ use ipnet::IpNet;
 
 use crate::{
     automation, config, context, correlation, cpe, decision, diff, findings, hypothesis, identity,
-    intel, lanes,
+    ingest, intel, lanes,
     model::{MonitoringLane, NormalizedEvent, RunReport, Severity, TriageAction},
     nmap, passive, paths, pentest, report, scope_policy, simulation,
     storage::{RunArtifacts, Workspace},
@@ -83,6 +83,11 @@ pub struct BehArgs {
     /// se nikdy nespusti automaticky. Vychozi: vypnuto (jen plan, shadow mode).
     #[arg(long, default_value_t = false)]
     pub execute_verification: bool,
+    /// Cte jen NOVE radky Suricata/Zeek logu od posledniho uspesneho behu
+    /// (offsety v `ingest-cursors.json`, at-least-once). Zapina se automaticky
+    /// pro `monitor --continuous`.
+    #[arg(long, default_value_t = false)]
+    pub incremental_ingest: bool,
     /// Strop poctu automaticky vykonanych kontrol za beh.
     #[arg(long, default_value_t = 10)]
     pub verification_max_checks: usize,
@@ -753,10 +758,38 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
         scrapli_snapshot: args.scrapli_snapshot.clone(),
     };
     let passive_window = report::determine_passive_window(start, end);
-    let passive_sources = passive::PassiveSources {
-        suricata_eve: args.suricata_eve.clone(),
-        zeek_dir: args.zeek_dir.clone(),
+    let mut pending_ingest = ingest::PendingIngest::default();
+    let passive_sources = if args.incremental_ingest {
+        passive::PassiveSources {
+            suricata_eve: match &args.suricata_eve {
+                Some(path) => Some(ingest::delta_eve(
+                    &args.workspace,
+                    path,
+                    &mut pending_ingest,
+                )?),
+                None => None,
+            },
+            zeek_dir: match &args.zeek_dir {
+                Some(path) => Some(ingest::delta_zeek_dir(
+                    &args.workspace,
+                    path,
+                    &mut pending_ingest,
+                )?),
+                None => None,
+            },
+        }
+    } else {
+        passive::PassiveSources {
+            suricata_eve: args.suricata_eve.clone(),
+            zeek_dir: args.zeek_dir.clone(),
+        }
     };
+    if pending_ingest.rotations > 0 {
+        tracing::warn!(
+            rotations = pending_ingest.rotations,
+            "detekovana rotace/vymena pasivnich logu; cteno od zacatku noveho souboru"
+        );
+    }
     let context_hint_ms = estimate_context_latency_hint(&args);
     let live_observer_hint_ms = estimate_live_observer_latency_hint(&args);
     let correlator_prep_hint_ms = estimate_correlator_latency_hint(
@@ -1501,6 +1534,8 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
         },
     )?;
     workspace.enforce_retention(app_config.retention.max_runs, app_config.retention.keep_raw)?;
+    // Kurzory se posouvaji AZ po uspesnem ulozeni behu (at-least-once).
+    pending_ingest.commit(&args.workspace)?;
     Ok(report)
 }
 

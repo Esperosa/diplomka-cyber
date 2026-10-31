@@ -48,18 +48,7 @@ pub fn build_decision_bundle(report: &RunReport) -> DecisionBundle {
     let traffic_like = report
         .findings
         .iter()
-        .filter(|finding| {
-            matches!(
-                finding.finding_type.as_str(),
-                "unexpected_traffic"
-                    | "external_flow_observed"
-                    | "connection_timeout_burst"
-                    | "packet_rate_spike"
-                    | "packet_loss_signal"
-                    | "service_overload_risk"
-                    | "inductive_volume_anomaly"
-            )
-        })
+        .filter(|finding| crate::finding_kinds::is_traffic_like(&finding.finding_type))
         .collect::<Vec<_>>();
     let has_public_intel = has_public_intel_context(report);
     let ranked = ranked_decisions(report);
@@ -728,16 +717,7 @@ fn is_plaintext_signal(finding: &Finding) -> bool {
 }
 
 fn is_traffic_signal(finding: &Finding) -> bool {
-    matches!(
-        finding.finding_type.as_str(),
-        "unexpected_traffic"
-            | "external_flow_observed"
-            | "connection_timeout_burst"
-            | "packet_rate_spike"
-            | "packet_loss_signal"
-            | "service_overload_risk"
-            | "inductive_volume_anomaly"
-    )
+    crate::finding_kinds::is_traffic_like(&finding.finding_type)
 }
 
 /// `identification_gap`/`correlation_uncertainty` check - dřív 4x doslovně

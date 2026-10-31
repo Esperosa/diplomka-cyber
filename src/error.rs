@@ -8,8 +8,6 @@ pub enum BakulaError {
     Io(#[from] io::Error),
     #[error("JSON chyba: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("XML chyba: {0}")]
-    Xml(#[from] quick_xml::Error),
     #[error("HTTP chyba: {0}")]
     Http(#[from] reqwest::Error),
     #[error("Chyba konfigurace: {0}")]

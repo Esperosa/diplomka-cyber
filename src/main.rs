@@ -302,6 +302,9 @@ struct PlatformTokenIssueArgs {
     username: String,
     #[arg(long)]
     name: String,
+    /// Zivotnost tokenu ve dnech; `0` = nikdy nevyprsi (vedomy opt-out).
+    #[arg(long, default_value_t = platform::DEFAULT_TOKEN_TTL_DAYS)]
+    ttl_days: i64,
 }
 
 #[derive(Subcommand, Debug)]
@@ -450,6 +453,7 @@ struct DemoArgs {
 }
 
 fn main() -> anyhow::Result<()> {
+    bakula_program::logging::init();
     let cli = Cli::parse();
     match cli.command {
         Command::Simulace(SimulaceCommand::Generuj(args)) => {
@@ -604,7 +608,12 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Platform(PlatformCommand::Token(PlatformTokenCommand::Issue(args))) => {
             platform::init_database(&args.db)?;
-            let token = platform::issue_token(&args.db, &args.username, &args.name)?;
+            let token = platform::issue_token_with_ttl(
+                &args.db,
+                &args.username,
+                &args.name,
+                Some(args.ttl_days),
+            )?;
             println!("{}", serde_json::to_string_pretty(&token)?);
         }
         Command::Platform(PlatformCommand::Job(PlatformJobCommand::EnqueueScenario(args))) => {
@@ -850,6 +859,7 @@ fn main() -> anyhow::Result<()> {
                 web_fingerprint: false,
                 web_checks: false,
                 execute_verification: false,
+                incremental_ingest: false,
                 verification_max_checks: 10,
                 pentest: false,
                 aggressive_pentest: false,
@@ -910,6 +920,7 @@ fn main() -> anyhow::Result<()> {
                 web_fingerprint: false,
                 web_checks: false,
                 execute_verification: false,
+                incremental_ingest: false,
                 verification_max_checks: 10,
                 pentest: false,
                 aggressive_pentest: false,
@@ -1031,6 +1042,9 @@ fn run_monitor(args: MonitorArgs) -> anyhow::Result<Vec<RunReport>> {
         } else {
             previous_run_id.clone()
         };
+        if args.continuous {
+            run_args.incremental_ingest = true;
+        }
         promote_monitor_args(&mut run_args);
         validate_monitor_args(&run_args)?;
 
@@ -1313,6 +1327,7 @@ fn build_replay_beh_args(
         web_fingerprint: false,
         web_checks: false,
         execute_verification: false,
+        incremental_ingest: false,
         verification_max_checks: 10,
         pentest: false,
         aggressive_pentest: false,
@@ -1571,6 +1586,7 @@ fn spec_to_beh_args(spec: platform::PipelineJobSpec) -> anyhow::Result<BehArgs> 
         web_fingerprint: spec.web_fingerprint,
         web_checks: spec.web_checks,
         execute_verification: false,
+        incremental_ingest: false,
         verification_max_checks: 10,
         pentest: spec.pentest,
         aggressive_pentest: spec.aggressive_pentest,

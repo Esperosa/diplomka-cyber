@@ -29,18 +29,7 @@ pub fn build_validation_bundle(report: &RunReport) -> ValidationBundle {
         report,
         &["plaintext_management_protocol", "http_basic_without_tls"],
     );
-    let traffic = matching_findings(
-        report,
-        &[
-            "unexpected_traffic",
-            "external_flow_observed",
-            "connection_timeout_burst",
-            "packet_rate_spike",
-            "packet_loss_signal",
-            "service_overload_risk",
-            "inductive_volume_anomaly",
-        ],
-    );
+    let traffic = matching_findings(report, crate::finding_kinds::TRAFFIC_LIKE);
     let cve_findings = matching_findings(
         report,
         &[

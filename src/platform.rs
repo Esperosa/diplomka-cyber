@@ -108,7 +108,13 @@ pub struct IssuedToken {
     pub token_name: String,
     pub raw_token: String,
     pub created_at: DateTime<Utc>,
+    /// `None` = token nikdy nevyprsi (jen na vyslovne pozadani, `--ttl-days 0`).
+    pub expires_at: Option<DateTime<Utc>>,
 }
+
+/// Bezpecny vychozi zivot tokenu; delsi/neomezeny zivot musi operator zvolit
+/// vedome (`platform token issue --ttl-days`).
+pub const DEFAULT_TOKEN_TTL_DAYS: i64 = 90;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AuthIdentity {
@@ -323,6 +329,7 @@ pub fn init_database(path: &Path) -> Result<()> {
             enabled INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             last_used_at TEXT,
+            expires_at TEXT,
             FOREIGN KEY(user_id) REFERENCES users(id)
         );
         CREATE TABLE IF NOT EXISTS jobs (
@@ -412,18 +419,36 @@ pub fn create_or_update_user(path: &Path, username: &str, role: Role) -> Result<
 }
 
 pub fn issue_token(path: &Path, username: &str, token_name: &str) -> Result<IssuedToken> {
+    issue_token_with_ttl(path, username, token_name, Some(DEFAULT_TOKEN_TTL_DAYS))
+}
+
+pub fn issue_token_with_ttl(
+    path: &Path,
+    username: &str,
+    token_name: &str,
+    ttl_days: Option<i64>,
+) -> Result<IssuedToken> {
     let conn = open_connection(path)?;
     let user = load_user_by_username(&conn, username)?
         .ok_or_else(|| BakulaError::Processing(format!("Uzivatel {username} neexistuje.")))?;
     let raw_token = format!("bakula_{}_{}", username, Uuid::new_v4().simple());
     let token_hash = hash_token(&raw_token);
     let created_at = Utc::now();
+    let expires_at = ttl_days
+        .filter(|days| *days > 0)
+        .map(|days| created_at + chrono::Duration::days(days));
     conn.execute(
         "
-        INSERT INTO api_tokens (user_id, name, token_hash, enabled, created_at)
-        VALUES (?1, ?2, ?3, 1, ?4)
+        INSERT INTO api_tokens (user_id, name, token_hash, enabled, created_at, expires_at)
+        VALUES (?1, ?2, ?3, 1, ?4, ?5)
         ",
-        params![user.id, token_name, token_hash, format_dt(created_at)],
+        params![
+            user.id,
+            token_name,
+            token_hash,
+            format_dt(created_at),
+            expires_at.map(format_dt)
+        ],
     )
     .map_err(to_processing_error)?;
     Ok(IssuedToken {
@@ -432,6 +457,7 @@ pub fn issue_token(path: &Path, username: &str, token_name: &str) -> Result<Issu
         token_name: token_name.to_string(),
         raw_token,
         created_at,
+        expires_at,
     })
 }
 
@@ -447,8 +473,9 @@ pub fn authenticate_token(path: &Path, raw_token: &str) -> Result<Option<AuthIde
             WHERE api_tokens.token_hash = ?1
               AND api_tokens.enabled = 1
               AND users.enabled = 1
+              AND (api_tokens.expires_at IS NULL OR api_tokens.expires_at > ?2)
             ",
-            params![token_hash],
+            params![token_hash, now_string()],
             |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
@@ -1340,7 +1367,37 @@ fn open_connection(path: &Path) -> Result<Connection> {
         .map_err(to_processing_error)?;
     conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(to_processing_error)?;
+    ensure_token_expiry_column(&conn)?;
     Ok(conn)
+}
+
+/// Migrace starsich DB: sloupec `expires_at` pridany az pozdeji. Stavajici
+/// tokeny dostanou NULL (= neexpiruji) - operator je ma rotovat; automaticke
+/// zneplatneni by tise rozbilo bezici integrace.
+fn ensure_token_expiry_column(conn: &Connection) -> Result<()> {
+    let table_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'api_tokens'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(to_processing_error)?
+        > 0;
+    if !table_exists {
+        return Ok(());
+    }
+    let has_column = conn
+        .prepare("PRAGMA table_info(api_tokens)")
+        .map_err(to_processing_error)?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(to_processing_error)?
+        .filter_map(|name| name.ok())
+        .any(|name| name == "expires_at");
+    if !has_column {
+        conn.execute("ALTER TABLE api_tokens ADD COLUMN expires_at TEXT", [])
+            .map_err(to_processing_error)?;
+    }
+    Ok(())
 }
 
 fn build_ha_candidates(nodes: &[NodeRecord], policy: Option<&HaPolicy>) -> Vec<HaCandidate> {
@@ -1531,6 +1588,81 @@ mod tests {
             r#"{"workspace_root":"ws","nazev":"test","scope":[],"nmap_xml":null,"suricata_eve":null,"zeek_dir":null}"#,
         )
         .expect("minimalni PipelineJobSpec")
+    }
+
+    fn db_with_user() -> (tempfile::TempDir, PathBuf) {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db_path = temp.path().join("platform.sqlite");
+        init_database(&db_path).expect("init db");
+        create_or_update_user(&db_path, "alice", Role::Analyst).expect("user");
+        (temp, db_path)
+    }
+
+    #[test]
+    fn token_with_default_ttl_authenticates_and_has_expiry() {
+        let (_temp, db) = db_with_user();
+        let token = issue_token(&db, "alice", "t").expect("issue");
+        assert!(token.expires_at.is_some());
+        assert!(
+            authenticate_token(&db, &token.raw_token)
+                .expect("auth")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn expired_token_is_rejected() {
+        let (_temp, db) = db_with_user();
+        let token = issue_token(&db, "alice", "t").expect("issue");
+        let conn = open_connection(&db).expect("conn");
+        conn.execute(
+            "UPDATE api_tokens SET expires_at = ?1",
+            params![format_dt(Utc::now() - chrono::Duration::seconds(5))],
+        )
+        .expect("expire");
+        drop(conn);
+        assert!(
+            authenticate_token(&db, &token.raw_token)
+                .expect("auth")
+                .is_none(),
+            "token po expiraci nesmi projit"
+        );
+    }
+
+    #[test]
+    fn ttl_zero_means_explicitly_non_expiring() {
+        let (_temp, db) = db_with_user();
+        let token = issue_token_with_ttl(&db, "alice", "forever", Some(0)).expect("issue");
+        assert!(token.expires_at.is_none());
+        assert!(
+            authenticate_token(&db, &token.raw_token)
+                .expect("auth")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn legacy_database_without_expires_column_is_migrated_and_old_tokens_keep_working() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let db = temp.path().join("old.sqlite");
+        init_database(&db).expect("init");
+        create_or_update_user(&db, "alice", Role::Viewer).expect("user");
+        let token = issue_token_with_ttl(&db, "alice", "old", Some(0)).expect("issue");
+
+        // Simulace stare DB: sloupec expires_at neexistuje.
+        let raw = Connection::open(&db).expect("raw");
+        raw.execute_batch("ALTER TABLE api_tokens DROP COLUMN expires_at;")
+            .expect("drop column");
+        drop(raw);
+
+        assert!(
+            authenticate_token(&db, &token.raw_token)
+                .expect("auth")
+                .is_some(),
+            "stary token (bez expirace) musi po migraci dal fungovat"
+        );
+        let after = issue_token(&db, "alice", "new").expect("issue po migraci");
+        assert!(after.expires_at.is_some());
     }
 
     /// Regresni test na bezpecnostni bug: `claim_due_job` drive nevybiral joby ve

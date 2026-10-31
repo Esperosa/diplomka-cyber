@@ -324,6 +324,7 @@ impl OpsStore {
             .unwrap_or_default();
         let at = Utc::now().to_rfc3339();
         let hash = hash_entry(&prev, &at, actor, action, subject, detail);
+        tracing::info!(target: "bakula::audit", %actor, %action, %subject, %detail, %hash);
         tx.execute(
             "INSERT INTO audit_log (at, actor, action, subject, detail, prev_hash, hash)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -753,6 +754,28 @@ impl OpsStore {
         Ok(report)
     }
 
+    /// Pocty akci podle stavu + pocet zaznamu auditu (pro `/metrics`).
+    pub fn metrics_snapshot(&self) -> Result<(std::collections::BTreeMap<String, i64>, i64)> {
+        let conn = self.conn()?;
+        let mut counts = std::collections::BTreeMap::new();
+        let mut statement = conn
+            .prepare("SELECT status, COUNT(*) FROM enforcement_actions GROUP BY status")
+            .map_err(db_error)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(db_error)?;
+        for row in rows {
+            let (status, count) = row.map_err(db_error)?;
+            counts.insert(status, count);
+        }
+        let audit: i64 = conn
+            .query_row("SELECT COUNT(*) FROM audit_log", [], |row| row.get(0))
+            .map_err(db_error)?;
+        Ok((counts, audit))
+    }
+
     fn set_status(&self, id: i64, status: &str) -> Result<()> {
         self.conn()?
             .execute(
@@ -840,6 +863,24 @@ mod tests {
             reason: "test".to_string(),
             finding_id: None,
         }
+    }
+
+    #[test]
+    fn metrics_snapshot_counts_actions_by_status_and_audit_entries() {
+        let (_dir, store) = store();
+        let a = store
+            .propose(&request("203.0.113.5"), &protected(), "alice")
+            .unwrap()
+            .unwrap();
+        store
+            .propose(&request("203.0.113.6"), &protected(), "alice")
+            .unwrap()
+            .unwrap();
+        store.decide(a.id, false, "bob").unwrap();
+        let (counts, audit) = store.metrics_snapshot().unwrap();
+        assert_eq!(counts.get("rejected"), Some(&1));
+        assert_eq!(counts.get("proposed"), Some(&1));
+        assert!(audit >= 3);
     }
 
     #[test]

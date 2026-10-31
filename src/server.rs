@@ -132,9 +132,10 @@ pub async fn serve_with_config(addr: SocketAddr, config: AppConfig) -> Result<()
         .nest("/api", api)
         .fallback_service(ServeDir::new(ui_dir))
         .layer(axum::middleware::map_response(disable_cache_headers))
+        .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state);
 
-    println!("Bakula UI bezi na http://{addr}");
+    tracing::info!(%addr, "Bakula UI bezi");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
@@ -191,7 +192,8 @@ async fn metrics(State(state): State<AppState>, headers: HeaderMap) -> impl Into
     let workspace = Workspace::open(&state.workspace_root).map_err(to_http_error)?;
     let runs = workspace.list_runs().map_err(to_http_error)?;
     let latest = runs.first();
-    let metrics = render_metrics(&runs, latest);
+    let mut metrics = render_metrics(&runs, latest);
+    metrics.push_str(&render_ops_metrics(&state));
     Ok::<_, (StatusCode, String)>((
         [(
             header::CONTENT_TYPE,
@@ -199,6 +201,70 @@ async fn metrics(State(state): State<AppState>, headers: HeaderMap) -> impl Into
         )],
         metrics,
     ))
+}
+
+/// Provozni metriky zasahu: pocty akci podle stavu, aktualni mod, delka auditu.
+/// Nedostupna ops DB nesmi shodit cele `/metrics` - vypise se jen `bakula_ops_up 0`.
+fn render_ops_metrics(state: &AppState) -> String {
+    let mode = match state.ops.config.mode {
+        ops::EnforcementMode::DryRun => "dry_run",
+        ops::EnforcementMode::Enforce => "enforce",
+    };
+    let mut text = String::new();
+    text.push_str(
+        "# HELP bakula_enforcement_mode Aktualni rezim zasahu (1 = aktivni).
+",
+    );
+    text.push_str(
+        "# TYPE bakula_enforcement_mode gauge
+",
+    );
+    text.push_str(&format!(
+        "bakula_enforcement_mode{{mode=\"{mode}\"}} 1
+"
+    ));
+    match ops_store(state).and_then(|store| store.metrics_snapshot()) {
+        Ok((counts, audit)) => {
+            text.push_str(
+                "# HELP bakula_ops_up Ops databaze je dostupna.
+# TYPE bakula_ops_up gauge
+bakula_ops_up 1
+",
+            );
+            text.push_str(
+                "# HELP bakula_enforcement_actions Pocet zasahu podle stavu.
+",
+            );
+            text.push_str(
+                "# TYPE bakula_enforcement_actions gauge
+",
+            );
+            for (status, count) in counts {
+                text.push_str(&format!(
+                    "bakula_enforcement_actions{{status=\"{status}\"}} {count}
+"
+                ));
+            }
+            text.push_str(
+                "# HELP bakula_audit_entries_total Pocet zaznamu audit logu.
+",
+            );
+            text.push_str(
+                "# TYPE bakula_audit_entries_total counter
+",
+            );
+            text.push_str(&format!(
+                "bakula_audit_entries_total {audit}
+"
+            ));
+        }
+        Err(_) => text.push_str(
+            "# TYPE bakula_ops_up gauge
+bakula_ops_up 0
+",
+        ),
+    }
+    text
 }
 
 async fn get_ai_status(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
@@ -763,16 +829,24 @@ fn spawn_ops_sweep(state: AppState) {
         loop {
             interval.tick().await;
             let state = state.clone();
-            let _ = tokio::task::spawn_blocking(move || -> crate::Result<()> {
-                let store = ops_store(&state)?;
-                store.sweep(
-                    state.ops.config.mode,
-                    state.ops.executor.as_ref(),
-                    Utc::now(),
-                )?;
-                Ok(())
-            })
-            .await;
+            let outcome =
+                tokio::task::spawn_blocking(move || -> crate::Result<ops::SweepReport> {
+                    let store = ops_store(&state)?;
+                    store.sweep(
+                        state.ops.config.mode,
+                        state.ops.executor.as_ref(),
+                        Utc::now(),
+                    )
+                })
+                .await;
+            match outcome {
+                Ok(Ok(report)) if report != ops::SweepReport::default() => {
+                    tracing::info!(?report, "ops sweep zmenil stav");
+                }
+                Ok(Ok(_)) => {}
+                Ok(Err(error)) => tracing::warn!(%error, "ops sweep selhal"),
+                Err(error) => tracing::warn!(%error, "ops sweep task spadl"),
+            }
         }
     });
 }
@@ -1288,6 +1362,22 @@ mod tests {
         let state = test_state(temp.path().to_path_buf());
         let response = post_enforcement_approve(State(state), Path(1), HeaderMap::new()).await;
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn metrics_include_enforcement_mode_and_action_counts() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+        let _ = post_enforcement_propose(
+            State(state.clone()),
+            csrf_headers(),
+            propose_body("203.0.113.7"),
+        )
+        .await;
+        let text = render_ops_metrics(&state);
+        assert!(text.contains("bakula_enforcement_mode{mode=\"dry_run\"} 1"));
+        assert!(text.contains("bakula_enforcement_actions{status=\"proposed\"} 1"));
+        assert!(text.contains("bakula_ops_up 1"));
     }
 
     #[tokio::test]

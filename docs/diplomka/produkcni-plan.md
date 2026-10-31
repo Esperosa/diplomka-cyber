@@ -254,10 +254,11 @@ Vsichni 3 nezavisle konvergovali ke stejnemu zaveru po videni druhych dvou zprav
 | Constant-time static token comparison | **HOTOVO** (31.10.2026) | - |
 | `ScopePolicy` (A9 krok 1, sdileny modul) | **HOTOVO** (31.10.2026, `src/scope_policy.rs`) | - |
 | `verification_planner.rs` produkcni vstupni bod, shadow mode | **HOTOVO** (31.10.2026) - viz nize | - |
-| `verification_planner.rs` automaticka exekuce passive/read-only kontrol | **Dalsi krok** - vyzaduje A9 rozpoctove/rate-limit mantinely pred prvnim skutecnym volanim | - |
+| `verification_planner.rs` automaticka exekuce passive/read-only kontrol | **HOTOVO** (31.10.2026, `src/verification_exec.rs`, opt-in `--execute-verification`) | - |
 | `enforce.block_ip` rozhodovaci jadro (generovani `nft` prikazu, ZADNA exekuce) | **HOTOVO** (31.10.2026, `src/enforcement.rs`) - viz nize | - |
-| `enforce.block_ip` zapojeni do job systemu + skutecna exekuce | **Dalsi krok** - vyzaduje rozsireni `platform.rs`'s job dispatche (dnes natvrdo `PipelineJobSpec`), audit log, nezavisly periodicky sweep, lidske schvaleni pred prvnim skutecnym `nft` volani | - |
-| Structured logging (`tracing`), FindingKindSpec/mas_* dedup, supply-chain blocking+SBOM, continuous ingest offsety, token expiry (platform.rs) | **Dalsi krok, levne, bez kontroverze** | - |
+| `enforce.block_ip` zivotni cyklus, audit log, sweep, API, skutecna exekuce | **HOTOVO** (31.10.2026, `src/ops.rs` + `/api/enforcement/*`) - rozhodnuto NEjit ppres `platform.rs` job dispatch (viz nize) | - |
+| Structured logging (`tracing`), continuous ingest offsety, enforcement/audit metriky | **HOTOVO** (31.10.2026) | - |
+| FindingKindSpec dedup, supply-chain blocking+SBOM, token expiry (platform.rs) | **Dalsi krok, levne, bez kontroverze** | - |
 | Vlastni nftables/eBPF/XDP gateway-agent, DNS RPZ, inline Suricata IPS | Odlozeno (orchestrace existujicich nastroju staci) | realna tap-vs-inline topologie u skutecneho nasazeni |
 | Postgres migrace pro H5 multi-host | Odlozeno | 2. realny control-plane uzel |
 | Multi-tenant (`tenant_id`) | Odlozeno, jen 1-stranovy design dokument tvaru - **hotovo**, `docs/diplomka/eval/multi-tenant-schema-design.md` | 2. realny tenant |
@@ -340,3 +341,63 @@ nezmenen (modul jeste nenapojen do `pipeline::run_pipeline` - zadne volaci
 misto dnes neexistuje).
 
 Fazovani (po scope-revalidacni oprave): **Faze A** (3-4 tydny) - `ScopePolicy` generalizace (A9 prvni cast, vola se PRI VYKONANI kazdeho aktivniho executoru, ne jen pri planovani), audit log + schvalovaci tabulka v SQLite, structured logging, supply-chain blocking+SBOM, `external_sql.rs` smazani, mas_*/FindingKindSpec dedup, continuous ingest offsety, token expiry + constant-time compare, 1-stranovy tenant design dokument. **Faze B** (3-4 tydny) - `verification_planner.rs` katalog kandidatu (reuse nmap/webscan/pentest/`inspect_metrics_content` executoru) + shadow mode, pak automaticka exekuce jen passive/read-only kontrol. **Faze C** (2-3 tydny) - `enforce.block_ip` broker job s 3 mantinely z kola 2, propose-only → schvaleni-gated realne vykonani. Vse ostatni zustava na trigger, ne na kalendari.
+
+
+## Faze B/C dokoncena (31.10.2026): provozni vrstva jadra
+
+Reakce na pozadavek "stavet cele jadro a navazujici faze v jednom behu". Vse
+ma testy a zadna nova schopnost nezmenila vychozi chovani (golden snapshot se
+zmenil jen o aditivni prazdne pole `verification_results`).
+
+**Rozhodnuti o architekture zasahu.** Puvodni plan pocital s "broker job kind"
+`enforce.block_ip`. Po prozkoumani se ukazalo, ze `platform.rs` job system je
+natvrdo svazany s jednim typem (`PipelineJobSpec`) a pridani druheho typu by
+zasahlo do nejlepe otestovane casti H5 (fencing, leasy, DLQ). Zasahy proto
+zijou v samostatne `ops.sqlite` (`src/ops.rs`) s vlastnim zivotnim cyklem a
+schvalovanim - zadny zasah do job dispatche, zadna regrese v H5.
+
+**`src/ops.rs` - audit + zasahy**
+- Audit log je append-only (SQLite triggery blokuji UPDATE/DELETE) a
+  tamper-evident: `hash = sha256(prev_hash | at | actor | action | subject |
+  detail)`, `verify_audit_chain` prepocita retez (test ukazuje, ze primy
+  zasah do souboru po odstraneni triggeru je odhalen).
+- Zivotni cyklus `proposed -> approved -> applied -> expired`, vetve
+  `rejected` / `failed`. Duplicitni aktivni navrh na stejnou IP se odmita.
+- **Dry-run je vychozi**; skutecny `nft` jen pri `BAKULA_ENFORCEMENT_MODE=enforce`
+  (presny retezec, preklep = dry-run). Chranene rozsahy (+ `BAKULA_PROTECTED_RANGES`)
+  a TTL strop se kontroluji znovu pri aplikaci.
+- Exekutor je `dyn NftExecutor` (`SystemNft` / falesny v testech); `bakula`
+  zalozi vlastni `table inet bakula` atomicky (`nft -f`, jen kdyz neexistuje,
+  jen `drop` pravidla) a nikdy nesaha na cizi pravidla.
+- **Nezavisly sweep** (kazdych 60 s a pri cteni seznamu): expirace po TTL +
+  drift - prvek v kernelu bez aktivni akce se odstrani, aktivni akce bez
+  prvku v kernelu se oznaci (kernel timeout / rucni zasah).
+- API: `/api/enforcement/{actions,propose,{id}/approve,{id}/reject}`,
+  `/api/audit`, `/api/audit/verify`; mutace vyzaduji auth + CSRF hlavicku,
+  oddeleni povinnosti: analytik navrhuje, schvaluje jen operator/admin.
+- Prometheus: `bakula_enforcement_mode`, `bakula_enforcement_actions{status}`,
+  `bakula_audit_entries_total`, `bakula_ops_up`.
+
+**`src/verification_exec.rs` - exekuce kontrol** (opt-in `--execute-verification`):
+scope se overuje znovu pri vykonani, kontroly s `requires_approval` se nikdy
+nespusti automaticky, globalni/per-cil rozpocet, minimalni odstup mezi
+kontrolami na stejny cil, idempotence (stejna metoda+asset se spusti jednou,
+dalsi hypotezy dostanou `reused`). Lokalni exekutory: read-only GET na otevrene
+webove porty (telo max 64 KiB), lokalni CVE re-evaluace, pasivni baseline.
+
+**`src/ingest.rs` - inkrementalni ingest** (`--incremental-ingest`, zapnuto
+automaticky pro `monitor --continuous`): offset + otisk prvnich zpracovanych
+bajtu; rotace/nahrazeni souboru se pozna (i pri stejne velikosti) a je
+viditelne v logu; neuplny posledni radek se nikdy nezpracuje napul; kurzor se
+posune az po uspesnem ulozeni behu (at-least-once). Testem nalezena a
+opravena chyba: otisk prvnich 256 B se menil pripisovanim do kratkych souboru
+- otisk ted pokryva jen uz zpracovane bajty.
+
+**`src/logging.rs`** - `tracing`, `BAKULA_LOG_FORMAT=json`, `BAKULA_LOG`; logy
+vzdy na stderr, audit zaznamy pod cilem `bakula::audit`, `TraceLayer` na API.
+
+**Vedome stale odlozeno** (trigger beze zmeny): Postgres/multi-tenant/mTLS/OIDC/
+HA/K8s, vlastni packet-path engine, DNS RPZ, inline IPS. Kalibrace
+(`IsotonicCalibrator`) zustava jen v `eval/` - potrebuje lokalni oznacena data
+nasazeni, na datasetech CTU-13/IoT-23 trenovana pravdepodobnost by se mylne
+tvarila jako kalibrovana pro jinou sit.

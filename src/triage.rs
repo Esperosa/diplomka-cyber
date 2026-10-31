@@ -88,15 +88,9 @@ pub fn build_triage_actions(report: &RunReport) -> Vec<TriageAction> {
         .findings
         .iter()
         .filter(|item| {
-            matches!(
-                item.finding_type.as_str(),
-                "service_overload_risk"
-                    | "packet_rate_spike"
-                    | "connection_timeout_burst"
-                    | "unexpected_traffic"
-                    | "external_flow_observed"
-                    | "packet_loss_signal"
-            )
+            // `inductive_volume_anomaly` ma nize vlastni vetev (jina akce).
+            crate::finding_kinds::is_traffic_like(&item.finding_type)
+                && item.finding_type != "inductive_volume_anomaly"
         })
         .collect::<Vec<_>>();
     let inductive_findings = report

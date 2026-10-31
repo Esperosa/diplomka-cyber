@@ -114,7 +114,7 @@ pub fn run_targeted_followup_nmap(
     let targets = collect_followup_targets(inventory);
     let (targets, excluded) = filter_targets_in_scope(targets, scope);
     for ip in &excluded {
-        println!("Cileny follow-up: {ip} je mimo povoleny --scope, probing se na nej nepusti.");
+        tracing::warn!(%ip, "cileny follow-up: cil je mimo povoleny --scope, probing se nepusti");
     }
     if targets.is_empty() {
         return Ok(None);
@@ -186,7 +186,7 @@ pub fn run_forensic_followup_nmap(
     let targets = collect_forensic_targets(hosts);
     let (targets, excluded) = filter_targets_in_scope(targets, scope);
     for ip in &excluded {
-        println!("Forenzni follow-up: {ip} je mimo povoleny --scope, probing se na nej nepusti.");
+        tracing::warn!(%ip, "forenzni follow-up: cil je mimo povoleny --scope, probing se nepusti");
     }
     if targets.is_empty() {
         return Ok(None);
