@@ -63,6 +63,10 @@ impl Role {
                 "jobs.execute",
                 "cluster.read",
                 "cluster.manage",
+                "enforcement.read",
+                "enforcement.write",
+                "enforcement.approve",
+                "audit.read",
             ],
             Self::Analyst => &[
                 "runs.read",
@@ -72,6 +76,9 @@ impl Role {
                 "jobs.read",
                 "jobs.write",
                 "cluster.read",
+                "enforcement.read",
+                "enforcement.write",
+                "audit.read",
             ],
             Self::Viewer => &[
                 "runs.read",

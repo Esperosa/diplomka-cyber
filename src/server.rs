@@ -12,7 +12,7 @@ use axum::{
     body::{Body, Bytes},
     extract::{Path, Query, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::{get, post},
 };
 use chrono::{DateTime, Utc};
@@ -23,7 +23,9 @@ use tower_http::services::ServeDir;
 
 use crate::{
     Result, ai, assistant, automation, config,
+    enforcement::{BlockIpRequest, EnforcementRejection},
     model::{AppConfig, RunIndexEntry, RunReport},
+    ops::{self, NftExecutor, OpsConfig, OpsStore, ProposeError},
     paths, platform, readiness,
     storage::Workspace,
     verification,
@@ -37,6 +39,24 @@ struct AppState {
     api_token: Arc<Option<String>>,
     platform_db: Arc<Option<PathBuf>>,
     automation_process: Arc<Mutex<Option<AutomationProcess>>>,
+    ops: Arc<OpsRuntime>,
+}
+
+/// Konfigurace + exekutor zasahu (`enforce.block_ip`). Exekutor je `dyn`, aby
+/// testy mohly pouzit falesny `nft` a handlery tak nikdy nesahly na realny firewall.
+struct OpsRuntime {
+    config: OpsConfig,
+    executor: Arc<dyn NftExecutor>,
+}
+
+impl OpsRuntime {
+    fn from_env() -> Self {
+        let config = OpsConfig::from_env();
+        let executor = Arc::new(ops::SystemNft {
+            bin: config.nft_bin.clone(),
+        });
+        Self { config, executor }
+    }
 }
 
 #[derive(Clone)]
@@ -71,7 +91,9 @@ pub async fn serve_with_config(addr: SocketAddr, config: AppConfig) -> Result<()
         api_token: Arc::new(config::resolve_api_token(&config)?),
         platform_db: Arc::new(platform_db),
         automation_process: Arc::new(Mutex::new(None)),
+        ops: Arc::new(OpsRuntime::from_env()),
     };
+    spawn_ops_sweep(state.clone());
     let ui_dir = paths::project_path(&["ui"]);
 
     let api = Router::new()
@@ -94,6 +116,12 @@ pub async fn serve_with_config(addr: SocketAddr, config: AppConfig) -> Result<()
         .route("/automation/restart", post(post_automation_restart))
         .route("/automation/reset", post(post_automation_reset))
         .route("/verification/latest", get(get_latest_verification))
+        .route("/enforcement/actions", get(get_enforcement_actions))
+        .route("/enforcement/propose", post(post_enforcement_propose))
+        .route("/enforcement/{id}/approve", post(post_enforcement_approve))
+        .route("/enforcement/{id}/reject", post(post_enforcement_reject))
+        .route("/audit", get(get_audit))
+        .route("/audit/verify", get(get_audit_verify))
         .route("/platform/cluster", get(get_platform_cluster))
         .route("/platform/jobs", get(get_platform_jobs))
         .route("/platform/users", get(get_platform_users))
@@ -692,6 +720,216 @@ fn render_metrics(runs: &[RunIndexEntry], latest: Option<&RunIndexEntry>) -> Str
     )
 }
 
+// --- zasahy (enforcement) a audit -----------------------------------------------
+
+fn error_response(status: StatusCode, message: impl Into<String>) -> Response {
+    (status, Json(serde_json::json!({ "error": message.into() }))).into_response()
+}
+
+fn pair_to_response(error: (StatusCode, String)) -> Response {
+    error_response(error.0, error.1)
+}
+
+fn ops_store(state: &AppState) -> crate::Result<OpsStore> {
+    OpsStore::open(&state.workspace_root.join("ops.sqlite"))
+}
+
+/// SQLite je blokujici - mimo async runtime, aby pomale zapisy nebrzdily ostatni
+/// pozadavky. `Err` je rovnou hotova HTTP odpoved (handler ji jen vrati).
+#[allow(clippy::result_large_err)]
+async fn run_blocking<T, F>(work: F) -> std::result::Result<T, Response>
+where
+    T: Send + 'static,
+    F: FnOnce() -> crate::Result<T> + Send + 'static,
+{
+    match tokio::task::spawn_blocking(work).await {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(error)) => Err(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Chyba serveru: {error}"),
+        )),
+        Err(error) => Err(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Chyba serveru: {error}"),
+        )),
+    }
+}
+
+/// Pravidelny nezavisly sweep: expirace po TTL + (v `enforce` modu) porovnani
+/// zivych `nft` setu s databazi. Bezi i v dry-run (expirace je jen DB operace).
+fn spawn_ops_sweep(state: AppState) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            let state = state.clone();
+            let _ = tokio::task::spawn_blocking(move || -> crate::Result<()> {
+                let store = ops_store(&state)?;
+                store.sweep(
+                    state.ops.config.mode,
+                    state.ops.executor.as_ref(),
+                    Utc::now(),
+                )?;
+                Ok(())
+            })
+            .await;
+        }
+    });
+}
+
+async fn get_enforcement_actions(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if let Err(error) = authorize_for(&headers, &state, &["enforcement.read"]) {
+        return pair_to_response(error);
+    }
+    let mode = state.ops.config.mode;
+    let worker_state = state.clone();
+    match run_blocking(move || {
+        let store = ops_store(&worker_state)?;
+        store.sweep(mode, worker_state.ops.executor.as_ref(), Utc::now())?;
+        store.list_actions()
+    })
+    .await
+    {
+        Ok(actions) => {
+            Json(serde_json::json!({ "mode": mode, "actions": actions })).into_response()
+        }
+        Err(response) => response,
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ProposeBody {
+    ip: String,
+    ttl_seconds: u64,
+    reason: String,
+    #[serde(default)]
+    finding_id: Option<String>,
+}
+
+async fn post_enforcement_propose(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<ProposeBody>,
+) -> Response {
+    let auth = match authorize_for(&headers, &state, &["enforcement.write"]) {
+        Ok(auth) => auth,
+        Err(error) => return pair_to_response(error),
+    };
+    if let Err(error) = ensure_csrf_guard_header(&auth, &headers) {
+        return pair_to_response(error);
+    }
+    let worker_state = state.clone();
+    let actor = auth.subject.clone();
+    let request = BlockIpRequest {
+        ip: body.ip,
+        ttl_seconds: body.ttl_seconds,
+        reason: body.reason,
+        finding_id: body.finding_id,
+    };
+    match run_blocking(move || {
+        ops_store(&worker_state)?.propose(&request, &worker_state.ops.config.protected, &actor)
+    })
+    .await
+    {
+        Ok(Ok(action)) => (StatusCode::CREATED, Json(action)).into_response(),
+        Ok(Err(ProposeError::Rejected(rejection))) => {
+            let name = match rejection {
+                EnforcementRejection::UnparseableIp => "UnparseableIp",
+                EnforcementRejection::ProtectedRange => "ProtectedRange",
+                EnforcementRejection::TtlExceedsMaximum => "TtlExceedsMaximum",
+            };
+            error_response(StatusCode::UNPROCESSABLE_ENTITY, name)
+        }
+        Ok(Err(ProposeError::AlreadyActive)) => {
+            error_response(StatusCode::UNPROCESSABLE_ENTITY, "AlreadyActive")
+        }
+        Err(response) => response,
+    }
+}
+
+async fn decide_enforcement(
+    state: AppState,
+    headers: HeaderMap,
+    id: i64,
+    approve: bool,
+) -> Response {
+    let auth = match authorize_for(&headers, &state, &["enforcement.approve"]) {
+        Ok(auth) => auth,
+        Err(error) => return pair_to_response(error),
+    };
+    if let Err(error) = ensure_csrf_guard_header(&auth, &headers) {
+        return pair_to_response(error);
+    }
+    let actor = auth.subject.clone();
+    let worker_state = state.clone();
+    match run_blocking(move || {
+        let store = ops_store(&worker_state)?;
+        let decided = store.decide(id, approve, &actor)?;
+        if approve {
+            store.apply_approved(
+                id,
+                worker_state.ops.config.mode,
+                &worker_state.ops.config.protected,
+                worker_state.ops.executor.as_ref(),
+                &actor,
+            )
+        } else {
+            Ok(decided)
+        }
+    })
+    .await
+    {
+        Ok(action) => Json(action).into_response(),
+        Err(response) => response,
+    }
+}
+
+async fn post_enforcement_approve(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Response {
+    decide_enforcement(state, headers, id, true).await
+}
+
+async fn post_enforcement_reject(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Response {
+    decide_enforcement(state, headers, id, false).await
+}
+
+#[derive(Debug, Deserialize)]
+struct AuditQuery {
+    limit: Option<usize>,
+}
+
+async fn get_audit(
+    State(state): State<AppState>,
+    Query(query): Query<AuditQuery>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(error) = authorize_for(&headers, &state, &["audit.read"]) {
+        return pair_to_response(error);
+    }
+    let limit = query.limit.unwrap_or(100).clamp(1, 1000);
+    match run_blocking(move || ops_store(&state)?.audit_list(limit)).await {
+        Ok(entries) => Json(entries).into_response(),
+        Err(response) => response,
+    }
+}
+
+async fn get_audit_verify(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if let Err(error) = authorize_for(&headers, &state, &["audit.read"]) {
+        return pair_to_response(error);
+    }
+    match run_blocking(move || ops_store(&state)?.verify_audit_chain()).await {
+        Ok(ok) => Json(serde_json::json!({ "chain_ok": ok })).into_response(),
+        Err(response) => response,
+    }
+}
+
 fn to_http_error(error: crate::BakulaError) -> (StatusCode, String) {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
@@ -961,7 +1199,109 @@ mod tests {
             api_token: Arc::new(None),
             platform_db: Arc::new(None),
             automation_process: Arc::new(Mutex::new(None)),
+            ops: Arc::new(OpsRuntime::from_env()),
         }
+    }
+
+    fn csrf_headers() -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-bakula-csrf", HeaderValue::from_static("1"));
+        headers
+    }
+
+    async fn body_json(response: Response) -> serde_json::Value {
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        serde_json::from_slice(&bytes).expect("json")
+    }
+
+    fn propose_body(ip: &str) -> Json<ProposeBody> {
+        Json(ProposeBody {
+            ip: ip.to_string(),
+            ttl_seconds: 300,
+            reason: "test".to_string(),
+            finding_id: None,
+        })
+    }
+
+    #[tokio::test]
+    async fn enforcement_propose_requires_csrf_header_for_anonymous_admin() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+        let response =
+            post_enforcement_propose(State(state), HeaderMap::new(), propose_body("203.0.113.5"))
+                .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn enforcement_propose_of_loopback_is_422_protected_range() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+        let response =
+            post_enforcement_propose(State(state), csrf_headers(), propose_body("127.0.0.1")).await;
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(body_json(response).await["error"], "ProtectedRange");
+    }
+
+    #[tokio::test]
+    async fn enforcement_approve_in_dry_run_never_reaches_applied() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+        assert_eq!(state.ops.config.mode, ops::EnforcementMode::DryRun);
+
+        let created = post_enforcement_propose(
+            State(state.clone()),
+            csrf_headers(),
+            propose_body("203.0.113.5"),
+        )
+        .await;
+        assert_eq!(created.status(), StatusCode::CREATED);
+        let id = body_json(created).await["id"].as_i64().expect("id");
+
+        let approved =
+            post_enforcement_approve(State(state.clone()), Path(id), csrf_headers()).await;
+        assert_eq!(approved.status(), StatusCode::OK);
+        assert_eq!(body_json(approved).await["status"], "approved");
+
+        let audit = get_audit(
+            State(state),
+            Query(AuditQuery { limit: Some(20) }),
+            HeaderMap::new(),
+        )
+        .await;
+        let entries = body_json(audit).await;
+        let actions: Vec<&str> = entries
+            .as_array()
+            .expect("array")
+            .iter()
+            .filter_map(|entry| entry["action"].as_str())
+            .collect();
+        assert!(actions.contains(&"enforcement.dry_run"), "{actions:?}");
+        assert!(actions.contains(&"enforcement.proposed"));
+    }
+
+    #[tokio::test]
+    async fn enforcement_approve_requires_csrf_header_for_anonymous_admin() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+        let response = post_enforcement_approve(State(state), Path(1), HeaderMap::new()).await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn audit_verify_reports_intact_chain() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+        let _ = post_enforcement_propose(
+            State(state.clone()),
+            csrf_headers(),
+            propose_body("203.0.113.9"),
+        )
+        .await;
+        let response = get_audit_verify(State(state), HeaderMap::new()).await;
+        assert_eq!(body_json(response).await["chain_ok"], true);
     }
 
     #[test]

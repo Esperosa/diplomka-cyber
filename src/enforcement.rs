@@ -117,25 +117,67 @@ pub fn plan_block(
         ttl_seconds: request.ttl_seconds,
         reason: request.reason.clone(),
         finding_id: request.finding_id.clone(),
-        nft_command: render_nft_add_element(&request.ip, request.ttl_seconds),
+        nft_command: render_nft_add_element(&addr, &request.ip, request.ttl_seconds),
     })
 }
 
-/// `bakula` vlastni jen svoji `table inet bakula`/`set blocked_ips` - nikdy se
-/// nedotyka operatorovych existujicich pravidel/tabulek/NAT. `flags timeout`
-/// znamena, ze kernel sam odstrani prvek po vyprseni TTL i kdyby `bakula`
-/// spadnul - self-healing bez zavislosti na tom, ze nejaky "unblock" job
+/// Nazev nftables setu pro danou rodinu adres - `bakula` vlastni jen svoji
+/// `table inet bakula` a v ni 2 sety (IPv4/IPv6), nikdy se nedotyka operatorovych
+/// existujicich pravidel/tabulek/NAT.
+pub fn set_name_for(addr: &IpAddr) -> &'static str {
+    match addr {
+        IpAddr::V4(_) => "blocked_ips",
+        IpAddr::V6(_) => "blocked_ips6",
+    }
+}
+
+/// `flags timeout` znamena, ze kernel sam odstrani prvek po vyprseni TTL i kdyby
+/// `bakula` spadnul - self-healing bez zavislosti na tom, ze nejaky "unblock" job
 /// skutecne dobehne (presne ten typ rizika, ktery uz jednou zpusobil
 /// lease-renewal bug v `platform.rs`).
-fn render_nft_add_element(ip: &str, ttl_seconds: u64) -> Vec<String> {
+fn render_nft_add_element(addr: &IpAddr, ip: &str, ttl_seconds: u64) -> Vec<String> {
     vec![
         "add".to_string(),
         "element".to_string(),
         "inet".to_string(),
         "bakula".to_string(),
-        "blocked_ips".to_string(),
+        set_name_for(addr).to_string(),
         format!("{{ {ip} timeout {ttl_seconds}s }}"),
     ]
+}
+
+/// Odebrani jedineho prvku z VLASTNIHO setu (drift sweep, rucni zruseni).
+pub fn render_nft_delete_element(ip: &str) -> Option<Vec<String>> {
+    let addr = ip.parse::<IpAddr>().ok()?;
+    Some(vec![
+        "delete".to_string(),
+        "element".to_string(),
+        "inet".to_string(),
+        "bakula".to_string(),
+        set_name_for(&addr).to_string(),
+        format!("{{ {ip} }}"),
+    ])
+}
+
+/// Atomicka definice vlastni tabulky (aplikuje se `nft -f`, jedna transakce) -
+/// jen kdyz tabulka jeste NEEXISTUJE, protoze `add rule` neni idempotentni.
+/// Obsahuje vyhradne `drop` pravidla nad vlastnimi sety, `policy accept` -
+/// nikdy `flush ruleset`, nikdy zmena cizich tabulek.
+pub fn render_setup_ruleset() -> String {
+    let mut text = String::new();
+    text.push_str("table inet bakula {\n");
+    text.push_str("\tset blocked_ips { type ipv4_addr; flags timeout; }\n");
+    text.push_str("\tset blocked_ips6 { type ipv6_addr; flags timeout; }\n");
+    for hook in ["input", "forward"] {
+        text.push_str(&format!(
+            "\tchain {hook} {{ type filter hook {hook} priority -10; policy accept;\n"
+        ));
+        text.push_str("\t\tip saddr @blocked_ips drop\n");
+        text.push_str("\t\tip6 saddr @blocked_ips6 drop\n");
+        text.push_str("\t}\n");
+    }
+    text.push_str("}\n");
+    text
 }
 
 #[cfg(test)]
@@ -196,6 +238,30 @@ mod tests {
     fn plan_block_rejects_unparseable_ip_fail_closed() {
         let result = plan_block(&request("not-an-ip", 60), &protected());
         assert_eq!(result.unwrap_err(), EnforcementRejection::UnparseableIp);
+    }
+
+    #[test]
+    fn ipv6_block_targets_the_ipv6_set() {
+        let plan = plan_block(&request("2001:db8::5", 60), &protected()).unwrap();
+        assert!(plan.nft_command.contains(&"blocked_ips6".to_string()));
+        let plan4 = plan_block(&request("203.0.113.9", 60), &protected()).unwrap();
+        assert!(plan4.nft_command.contains(&"blocked_ips".to_string()));
+    }
+
+    #[test]
+    fn setup_ruleset_contains_only_drop_rules_in_own_table() {
+        let ruleset = render_setup_ruleset();
+        assert!(ruleset.starts_with("table inet bakula {"));
+        assert!(!ruleset.contains("flush"));
+        assert!(!ruleset.contains("reject"));
+        assert_eq!(ruleset.matches(" drop").count(), 4);
+    }
+
+    #[test]
+    fn delete_element_only_targets_own_set() {
+        let command = render_nft_delete_element("203.0.113.9").unwrap();
+        assert_eq!(command[4], "blocked_ips");
+        assert!(render_nft_delete_element("nonsense").is_none());
     }
 
     #[test]
