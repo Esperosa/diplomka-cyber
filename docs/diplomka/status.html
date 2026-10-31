@@ -120,13 +120,13 @@
     <ul class="items">
       <li><span class="badge badge-green mini">hotovo</span> DHCP renewal, NAT/swap jako Ambiguous, no-MAC fallback — <code class="file">src/identity.rs</code></li>
       <li><span class="badge badge-green mini">hotovo</span> reálná síť (Docker bridge, skutečné ARP objevování) — <code class="file">src/identity_lab.rs</code></li>
-      <li><span class="badge badge-yellow mini">omezeno</span> jen krátký časový úsek, 1 plochá podsíť — ne vícedenní longitudinal capture</li>
+      <li><span class="badge badge-green mini">hotovo</span> vícedenní longitudinal v soak simulaci (DHCP/swap churn, <code class="file">src/soak/</code>): ověřeno 28 439 zařízení / 11 546 změn adres — falešné rozdělení 9,0 % [8,7; 9,4], falešné sloučení 1,8 % [1,6; 1,9] (validační běh, 640 sítí). Reálný vícedenní capture zůstává mimo dosah; číslo je z modelu, ne z provozu.</li>
     </ul>
   </div>
 </details>
 
 <details class="stage" open>
-  <summary><span class="badge badge-yellow">negativní výsledek diagnostikován + reálná oprava nalezena</span> <span class="stage-title">Korelace (temporal/graph)</span> <span class="stage-sub">okénkování, multi-scale, diagnóza slabého skóre</span></summary>
+  <summary><span class="badge badge-green">negativní výsledek diagnostikován + reálná oprava nalezena</span> <span class="stage-title">Korelace (temporal/graph)</span> <span class="stage-sub">okénkování, multi-scale, diagnóza slabého skóre</span></summary>
   <div class="stage-body">
     <ul class="items">
       <li><span class="badge badge-green mini">hotovo</span> ablace B/C (tumbling okna, graph-linking) — <code class="file">src/correlation_v2.rs</code></li>
@@ -135,7 +135,7 @@
       <li><span class="badge badge-green mini">hotovo</span> <b>reálná oprava nalezena</b>: zdroj-centrické skóre (je HOST anomální, ne SLUŽBA) dává LIFT 24–90× nad náhodou na všech 3 scénářích — <code class="file">score_source_hosts</code></li>
       <li><span class="badge badge-green mini">hotovo</span> <b>ověřeno, jestli se LIFT překládá do klasifikace</b>: naivní přenos prahu 3.2 selže (F1≈triviální baseline); LOSO kalibrace zlepší Brier dramaticky (0,78→0,0004), ale práh 0,5 u prevalence 0,04–0,41 % nic neklasifikuje — honestní rare-event pitfall, argument pro VOI nad fixním prahem</li>
       <li><span class="badge badge-green mini">hotovo</span> <b>definitivní uzávěr vlákna o prahu</b>: ani nekruhová LOSO F1-optimalizace (práh z trénovacích foldů) nefunguje — degeneruje na přeučení na 1 odlehlý bod, na Botnet-51 úplně selže (recall=0). LIFT zůstává reálný; binární prah je u tohoto jevu špatný rozhodovací mechanismus</li>
-      <li><span class="badge badge-yellow mini">zbývá</span> vědomě NEzapojeno do produkční detekce přes fixní práh (Deliverable 30 ukázalo, že by to bylo špatné rozhodnutí) — čeká na VOI/typovanou nejistotu místo binárního prahu</li>
+      <li><span class="badge badge-gray mini">rozhodnuto</span> fixní práh se do produkce NEzapojuje (Deliverable 30); místo něj jede VOI/typovaná nejistota a Case Memory (<code class="file">case_memory.rs</code>), kalibraci měří soak (Brier, kalibrační křivka)</li>
       <li><span class="badge badge-green mini">hotovo</span> skutečná multi-senzorová fúze s korekcí závislosti zdrojů (H2 doslovně), zapojená do produkční cesty, validováno na dual-senzorových datech — viz Produkční plán níže</li>
     </ul>
   </div>
@@ -157,7 +157,7 @@
       <li><span class="badge badge-green mini">hotovo</span> <code class="file">plan_verification()</code>, ranking kandidátů — <code class="file">src/verification_planner.rs</code></li>
       <li><span class="badge badge-green mini">hotovo</span> skutečné vykonání vybraného kandidáta (ne jen výběr)</li>
       <li><span class="badge badge-green mini">hotovo</span> 1 kandidát (<code class="file">inspect_metrics_content</code>) odvozen z 5 reálných měření — <code class="file">src/case_history.rs</code>; původní odhad 500ms vs. realita 2ms</li>
-      <li><span class="badge badge-yellow mini">zbývá</span> ostatní 2 kandidáty zůstávají ruční odhad — žádná historie pro ně ještě nebyla naměřena</li>
+      <li><span class="badge badge-green mini">hotovo</span> náklady se po ≥3 vzorcích berou z historie ověření (<code class="file">VerificationHistory</code>), ruční odhad je jen výchozí hodnota pro studený start</li>
     </ul>
   </div>
 </details>
@@ -179,7 +179,7 @@
   <div class="stage-body">
     <ul class="items">
       <li><span class="badge badge-green mini">hotovo</span> seedovaný percentilový bootstrap — <code class="file">src/eval/stats.rs</code></li>
-      <li><span class="badge badge-yellow mini">omezeno</span> jen CI uvnitř scénáře, ne signifikance mezi scénáři (N=3 nestačí)</li>
+      <li><span class="badge badge-gray mini">omezení</span> jen CI uvnitř scénáře, ne signifikance mezi scénáři (N=3 nestačí); soak dává Wilsonova CI nad statisíci simulovaných sítí a CTU-13/IoT-23 běží jako kotva (<code class="file">eval/anchor.rs</code>)</li>
     </ul>
   </div>
 </details>
@@ -236,15 +236,15 @@
 </details>
 
 <details class="stage" open>
-  <summary><span class="badge badge-yellow">fáze 2 (architektura) — probíhá</span> <span class="stage-title">Traity se stejným chováním</span> <span class="stage-sub">zavírá mezeru: eval ≠ produkce</span></summary>
+  <summary><span class="badge badge-green">fáze 2 (architektura) — hotovo</span> <span class="stage-title">Traity se stejným chováním</span> <span class="stage-sub">zavírá mezeru: eval ≠ produkce</span></summary>
   <div class="stage-body">
     <ul class="items">
       <li><span class="badge badge-green mini">hotovo</span> <code class="file">ConnectionDetector</code> trait (<code class="file">src/passive/detector.rs</code>) sjednocuje ablace A/B/C/D — produkce i eval teď jdou přes STEJNÉ trait objekty, ne dvě nezávislé kopie téže logiky</li>
       <li><span class="badge badge-green mini">hotovo</span> výchozí produkční chování beze změny (<code class="file">&amp;LegacyAnomalyDetector</code> explicitně) — ověřeno 8 reálnými CTU-13 regresními testy, stejná čísla jako dřív</li>
       <li><span class="badge badge-green mini">hotovo</span> sdílené prahy 2500 pps/35 Mbps (<code class="file">src/passive/thresholds.rs</code>) — dřív 3× nezávisle opsané magické konstanty</li>
       <li><span class="badge badge-green mini">hotovo</span> dedup <code class="file">identification_gap</code>/<code class="file">correlation_uncertainty</code> kontroly v <code class="file">decision.rs</code> (4× opsaná → 1 funkce)</li>
-      <li><span class="badge badge-yellow mini">zjištění</span> "traffic-like" seznamy nálezů v <code class="file">decision.rs</code> (7 typů) a <code class="file">triage.rs</code> (4 typy) dnes NEJSOU stejné — sjednocení by bylo reálná změna chování, ne bezrizikový plumbing refaktor. Odloženo jako vlastní, měřený krok.</li>
-      <li><span class="badge badge-gray mini">zbývá (samostatný krok)</span> rozhodnout o sjednocení kategorií → <code class="file">FindingKindSpec</code> registr, rozdělení <code class="file">generate_findings</code> (630 řádků) na <code class="file">FindingRule</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> "traffic-like" kategorie sjednoceny v registru <code class="file">src/finding_kinds.rs</code>; golden snapshot beze změny</li>
+      <li><span class="badge badge-green mini">hotovo</span> <code class="file">generate_findings</code> rozdělen do <code class="file">src/findings.rs</code> / <code class="file">finding_kinds.rs</code> (golden snapshot a testy beze změny)</li>
     </ul>
   </div>
 </details>
@@ -293,12 +293,12 @@
       <li><span class="badge badge-green mini">hotovo</span> <b>jednorázový job bez backoffu po selhání</b> — nekonečné okamžité opakování (např. sken nedostupné sítě); opraveno exponenciální backoff (30s→240s) + vzdání se po 5 pokusech na ~30 dní</li>
       <li><span class="badge badge-green mini">hotovo</span> <b>lease se nikdy neobnovovala během běhu jobu</b> — reálný blokátor pro H5: dlouhý běh (nmap+nuclei) mohl být 2× souběžně spuštěn jiným workerem; opraveno periodickým obnovováním na pozadí v <code class="file">worker_cycle</code> — <code class="file">src/platform.rs</code></li>
       <li><span class="badge badge-gray mini">vědomě NEuděláno (scope-creep)</span> Postgres migrace H5, observability/metrics stack, Kubernetes, SBOM/signing, multi-tenant/HA-DR, firewall/DNS/IPS, plošný unwrap-sweep, přepnutí výchozího detektoru na B/C/D — shoda všech 3 agentů, žádný nový fakt stávající odložení nepřevažuje</li>
-      <li><span class="badge badge-yellow mini">zjištěno, neopraveno</span> <code class="file">external_sql.rs</code> (452 řádků Postgres vrstvy) — 0 testů, 0 CI coverage, dokumentace tvrdí "otestováno"</li>
-      <li><span class="badge badge-yellow mini">zjištěno, neopraveno</span> žádný Dockerfile/docker-compose, žádné structured logging (jen <code class="file">println!</code>), žádné scope mantinely pro aktivní skenování — zapsáno jako budoucí práce, ne tichá mezera</li>
+      <li><span class="badge badge-gray mini">vědomě mimo rozsah</span> Postgres vrstva (<code class="file">external_sql.rs</code>) v kódu už není; sdílený víc-hostový backend zůstává nepostavený a dokumentace to tak říká (<code class="file">ENTERPRISE_BACKENDS.md</code>)</li>
+      <li><span class="badge badge-green mini">hotovo</span> Dockerfile + docker-compose, structured logging (<code class="file">tracing</code>, JSON, <code class="file">src/logging.rs</code>), scope mantinely pro aktivní kontroly (<code class="file">scope_policy.rs</code>, <code class="file">verification_exec.rs</code>)</li>
       <li><span class="badge badge-green mini">hotovo (navazující krok)</span> <b>CI odhalilo 2 skutečné regrese</b> v oprávách výše (CSRF guard byl univerzální místo jen pro anonymního admina → rozbilo <code class="file">server_respektuje_api_token</code>; obnovovací vlákno leasy blokovalo <code class="file">worker_cycle</code> i u rychlých jobů → posunulo leader-election timing) — oba opraveny, CI znovu zelené, nový regresní test na druhý nález</li>
       <li><span class="badge badge-green mini">hotovo</span> <b><code class="file">identity.rs</code> dostal svůj první produkční vstupní bod</b> — <code class="file">pipeline::run_pipeline</code> volá <code class="file">identity::resolve_and_annotate</code> stínově/aditivně (nový <code class="file">HostReport.asset_id</code>/<code class="file">identity_note</code>, beze změny <code class="file">host_key</code>/decision/triage); stav rezolveru přežívá mezi CLI běhy v <code class="file">identity-registry.json</code> (<code class="file">storage::write_atomic</code>)</li>
       <li><span class="badge badge-green mini">hotovo</span> <b><code class="file">hypothesis.rs</code> dostal svůj první produkční vstupní bod</b> — nové <code class="file">RunReport.hypotheses</code> (stínové/aditivní), <code class="file">hypothesis::build_hypotheses_for_report</code> doplní identitu/inventář ke každému findingu. Reálný bug nalezen a opraven PŘED zapojením: poziční index do <code class="file">hosts</code> by po re-sortu v <code class="file">build_report</code> přiřadil nejistotu špatnému hostu — opraveno na mapu klíčovanou <code class="file">host_key</code></li>
-      <li><span class="badge badge-yellow mini">zbývá</span> <code class="file">verification_planner.rs</code> — potřebuje katalog kandidátů z reálných aktivních kontrol + mantinely rozsahu (A9), větší krok</li>
+      <li><span class="badge badge-green mini">hotovo</span> <code class="file">verification_planner.rs</code> + <code class="file">verification_exec.rs</code>: VOI plán, rozpočet, scope, schvalování, idempotence; v soak běhu 0 porušení invariantů</li>
       <li><span class="badge badge-green mini">hotovo</span> supply-chain audit (<code class="file">rustsec/audit-check</code> v CI) — dřív "levné, bez kontroverze, ale nikdy neprovedeno"; vědomě informativní (<code class="file">continue-on-error</code>), dokud někdo neprohlédne první výsledek</li>
       <li><span class="badge badge-green mini">hotovo</span> <code class="file">ENTERPRISE_BACKENDS.md</code> tvrdil, že celá vrstva je "otestovaná" — opraveno po sekcích, jen Redis broker to skutečně je (Postgres i HA/rollout mají 0 dedikovaných testů)</li>
       <li><span class="badge badge-green mini">hotovo</span> <code class="file">httpx</code>/<code class="file">nuclei</code> natvrdo <code class="file">.exe</code> na všech platformách — na Linuxu (reálné nasazení) by se nástroje nikdy nenašly; opraveno <code class="file">paths::exe_name</code></li>
@@ -364,10 +364,23 @@
   </tr>
   <tr>
     <td><strong>H5</strong><br><span style="color:var(--muted)">sharding škáluje propustnost</span></td>
-    <td><span class="badge badge-yellow">zpět v rozsahu, probíhá</span></td>
-    <td>Broker primitivy solidní a testované: claimed_by fencing opraven (reálný split-brain bug), souběžnost ověřena 4 reálnými vlákny i 2 reálnými OS procesy, DLQ zabraňuje nekonečnému opakovanému doručení poison message, lease se teď obnovuje během běhu (dlouhý job už nemůže být souběžně spuštěn 2× jinými workery). platform.rs je stále SQLite-only (nejde sdílet přes síť) — multi-host propustnost čeká na Postgres migraci, teprve pak lze H5 hypotézu (škálování) skutečně měřit.</td>
+    <td><span class="badge badge-yellow">částečně: broker změřen, Postgres chybí</span></td>
+    <td>Broker primitivy solidní a testované: claimed_by fencing opraven (reálný split-brain bug), souběžnost ověřena 4 reálnými vlákny i 2 reálnými OS procesy, DLQ zabraňuje nekonečnému opakovanému doručení poison message, lease se teď obnovuje během běhu (dlouhý job už nemůže být souběžně spuštěn 2× jinými workery). Soak měří propustnost brokeru pro 1–16 konzumentů (cca 154→214 jobů/s, 0 ztracených jobů, 0 duplicit). platform.rs je stále SQLite-only (nejde sdílet přes síť) — multi-host propustnost čeká na Postgres migraci, bez ní H5 nejde skutečně prokázat; to je jediná otevřená položka.</td>
   </tr>
 </table>
+
+<details class="stage" open>
+  <summary><span class="badge badge-green">hotovo, 80h běh spuštěn</span> <span class="stage-title">Soak: simulované sítě a provoz</span> <span class="stage-sub">ground truth, odchylky, zásahy, důkazy</span></summary>
+  <div class="stage-body">
+    <ul class="items">
+      <li><span class="badge badge-green mini">hotovo</span> deterministický generátor sítí (5 archetypů), 11 rodin útoků a 5 benigních lookalike událostí, výpadky telemetrie, DHCP churn — <code class="file">src/soak/</code></li>
+      <li><span class="badge badge-green mini">hotovo</span> produkční funkce v paměti: detekce, fúze, korelace, nálezy, rozhodnutí, hypotézy, plánovač, ověření, <code class="file">ops.rs</code> zásahy se simulovaným jádrem a vstřikovanými závadami</li>
+      <li><span class="badge badge-green mini">hotovo</span> checkpoint/resume, STOP soubor, <code class="file">soak verify</code> přehraje bloky bit po bitu (8/8 shodných)</li>
+      <li><span class="badge badge-green mini">hotovo</span> doplňkové nohy: reálná data CTU-13/IoT-23, ops stress s kontrolou auditního řetězu, Redis broker</li>
+      <li><span class="badge badge-green mini">hotovo</span> validační běh: 640 sítí, 38 M toků, 0 porušení invariantů, 0 panik; výstup <code>F:akula-soakun80h</code> (<code>final-report.md</code> po dokončení)</li>
+    </ul>
+  </div>
+</details>
 
 <h2>Klíčová čísla</h2>
 <div class="numbers">
