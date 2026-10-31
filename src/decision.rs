@@ -36,14 +36,7 @@ pub fn build_decision_bundle(report: &RunReport) -> DecisionBundle {
     let cve_like = report
         .findings
         .iter()
-        .filter(|finding| {
-            matches!(
-                finding.finding_type.as_str(),
-                "high_risk_cve_exposure"
-                    | "known_exploited_vulnerability"
-                    | "probable_exploitation_interest"
-            )
-        })
+        .filter(|finding| crate::finding_kinds::is_cve_like(&finding.finding_type))
         .collect::<Vec<_>>();
     let traffic_like = report
         .findings
@@ -697,15 +690,11 @@ fn agent_lifecycle_evidence(
 }
 
 fn is_cve_signal(finding: &Finding) -> bool {
-    matches!(
-        finding.finding_type.as_str(),
-        "high_risk_cve_exposure"
-            | "known_exploited_vulnerability"
-            | "probable_exploitation_interest"
-    ) || finding.evidence.iter().any(|item| {
-        let value = item.to_ascii_lowercase();
-        value.contains("cve") || value.contains("kev") || value.contains("epss")
-    })
+    crate::finding_kinds::is_cve_like(&finding.finding_type)
+        || finding.evidence.iter().any(|item| {
+            let value = item.to_ascii_lowercase();
+            value.contains("cve") || value.contains("kev") || value.contains("epss")
+        })
 }
 
 fn is_plaintext_signal(finding: &Finding) -> bool {

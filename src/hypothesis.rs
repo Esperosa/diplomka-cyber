@@ -9,15 +9,20 @@
 //! pravdepodobnosti kompromitace: "pokud nejsou odhady kalibrovane, radeji vracet
 //! ordinalni skore nez falesne presne procento."
 //!
-//! **Co tento modul NEDELA:** nepocita `aleatoric`/`epistemic`/`interpretation`
-//! nejistotu (zustavaji `None`) - vyzadovaly by historickou baseline/Case Memory
-//! (navrh sekce 5.6), ktera v systemu jeste neexistuje. `probability` je VZDY `None` -
-//! zadny placeholder odvozeny z `Confidence::weight()`, protoze by to jen presunulo
-//! presne ten problem, ktery navrh zakazuje, o jednu vrstvu dal. Napojeni na
-//! `decision.rs::rank_finding` (nahrazeni ad-hoc scoringu) je navazujici krok, ne tento.
+//! **Pravdepodobnost a epistemicka nejistota** pochazi VYHRADNE z Case Memory
+//! (`case_memory.rs`, navrh sekce 5.6): kdyz existuje odhad pro dany `finding_type`
+//! (>= `MIN_CASES` overenych pripadu), `probability` = posteriorni stred a
+//! `uncertainty.epistemic` = SIRKA 95% credible intervalu (hi95 - lo95, 0..1; uzky
+//! interval = malo nejistoty z nedostatku dat), `model_version` nese verzi pameti.
+//! Bez odhadu zustava `probability`/`epistemic` `None` - zadny placeholder odvozeny z
+//! `Confidence::weight()`, protoze by to jen presunulo presne ten problem, ktery navrh
+//! zakazuje, o jednu vrstvu dal. `aleatoric`/`interpretation` se stale nepocitaji
+//! (vyzadovaly by historickou baseline provozu). Napojeni na
+//! `decision.rs::rank_finding` (nahrazeni ad-hoc scoringu) je navazujici krok.
 
 use serde::{Deserialize, Serialize};
 
+use crate::case_memory::CaseMemory;
 use crate::identity::IdentityMatch;
 use crate::model::{Confidence, CorrelationInfo, Finding, HostReport, InventoryRecord, Severity};
 
@@ -80,7 +85,7 @@ impl TypedUncertainty {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SecurityHypothesis {
     pub affected_assets: Vec<String>,
     pub hypothesis_type: String,
@@ -88,7 +93,8 @@ pub struct SecurityHypothesis {
     /// Zadny mechanismus na detekci rozporujicich dukazu dnes neexistuje - vzdy
     /// prazdne, dokud nebude Case Memory (navrh sekce 5.6).
     pub contradicting_evidence: Vec<String>,
-    /// VZDY `None` v tomto kroku - viz modulova dokumentace.
+    /// `Some` jen kdyz Case Memory ma odhad pro tento typ nalezu - viz modulova
+    /// dokumentace.
     pub probability: Option<f64>,
     pub uncertainty: TypedUncertainty,
     pub potential_impact: f64,
@@ -173,6 +179,7 @@ pub fn build_hypotheses_for_report(
     findings: &[Finding],
     hosts: &[HostReport],
     identity_by_host_key: &std::collections::HashMap<String, IdentityMatch>,
+    memory: Option<&CaseMemory>,
 ) -> Vec<SecurityHypothesis> {
     findings
         .iter()
@@ -193,9 +200,26 @@ pub fn build_hypotheses_for_report(
                         .map(|service| &service.inventory)
                 })
             });
-            build_hypothesis(finding, None, identity, inventory)
+            let mut hypothesis = build_hypothesis(finding, None, identity, inventory);
+            if let Some(memory) = memory {
+                apply_case_memory(&mut hypothesis, memory);
+            }
+            hypothesis
         })
         .collect()
+}
+
+/// Doplni `probability`, `epistemic` a `model_version` z Case Memory - jen kdyz
+/// odhad existuje (jinak hypotezu nemeni, ani o bajt).
+pub fn apply_case_memory(hypothesis: &mut SecurityHypothesis, memory: &CaseMemory) {
+    if let Some(estimate) = memory.estimate(&hypothesis.hypothesis_type) {
+        hypothesis.probability = Some(estimate.probability);
+        hypothesis.uncertainty.epistemic = Some((estimate.hi95 - estimate.lo95).clamp(0.0, 1.0));
+        hypothesis.model_version = format!(
+            "{}+case-memory-v{}",
+            hypothesis.model_version, estimate.version
+        );
+    }
 }
 
 #[cfg(test)]
@@ -236,6 +260,84 @@ mod tests {
             detection_source: "nmap".to_string(),
             confidence,
         }
+    }
+
+    fn memory_with(finding_type: &str, confirmed: usize, refuted: usize) -> CaseMemory {
+        use crate::case_memory::{CaseRecord, CaseSource, Outcome};
+        let mut memory = CaseMemory::in_memory();
+        let start = chrono::Utc::now() - chrono::Duration::days(2);
+        for index in 0..(confirmed + refuted) {
+            let outcome = if index < confirmed {
+                Outcome::Confirmed
+            } else {
+                Outcome::Refuted
+            };
+            memory.record(CaseRecord::new(
+                finding_type,
+                None,
+                outcome,
+                CaseSource::Operator {
+                    actor: "tester".to_string(),
+                },
+                1.0,
+                start + chrono::Duration::minutes(index as i64 * 70),
+            ));
+        }
+        memory
+    }
+
+    #[test]
+    fn without_memory_estimate_probability_stays_none_and_output_is_unchanged() {
+        let f = finding(Confidence::High, Severity::High);
+        let plain = build_hypothesis(&f, None, None, None);
+        let findings = vec![f];
+        let from_none = build_hypotheses_for_report(&findings, &[], &Default::default(), None);
+        let empty = CaseMemory::in_memory();
+        let from_empty =
+            build_hypotheses_for_report(&findings, &[], &Default::default(), Some(&empty));
+        assert_eq!(from_none[0], plain);
+        assert_eq!(from_empty[0], plain);
+        assert!(plain.probability.is_none() && plain.uncertainty.epistemic.is_none());
+    }
+
+    #[test]
+    fn memory_below_min_cases_does_not_fabricate_a_probability() {
+        let f = finding(Confidence::High, Severity::High);
+        let memory = memory_with("unexpected_traffic", 4, 0);
+        let result = build_hypotheses_for_report(&[f], &[], &Default::default(), Some(&memory));
+        assert!(result[0].probability.is_none());
+    }
+
+    #[test]
+    fn memory_estimate_fills_probability_epistemic_width_and_version() {
+        let f = finding(Confidence::High, Severity::High);
+        let memory = memory_with("unexpected_traffic", 8, 2);
+        let estimate = memory.estimate("unexpected_traffic").unwrap();
+        let result = build_hypotheses_for_report(&[f], &[], &Default::default(), Some(&memory));
+        let h = &result[0];
+        assert!((h.probability.unwrap() - estimate.probability).abs() < 1e-12);
+        let width = h.uncertainty.epistemic.unwrap();
+        assert!((width - (estimate.hi95 - estimate.lo95)).abs() < 1e-12);
+        assert!(width > 0.0 && width < 1.0);
+        assert!(
+            h.model_version
+                .ends_with(&format!("+case-memory-v{}", estimate.version))
+        );
+    }
+
+    #[test]
+    fn more_evidence_narrows_the_epistemic_interval() {
+        let f = finding(Confidence::High, Severity::High);
+        let few = memory_with("unexpected_traffic", 8, 2);
+        let many = memory_with("unexpected_traffic", 80, 20);
+        let narrow = |m: &CaseMemory| {
+            build_hypotheses_for_report(std::slice::from_ref(&f), &[], &Default::default(), Some(m))
+                [0]
+            .uncertainty
+            .epistemic
+            .unwrap()
+        };
+        assert!(narrow(&many) < narrow(&few));
     }
 
     #[test]
@@ -395,7 +497,7 @@ mod tests {
         ];
 
         let hypotheses =
-            build_hypotheses_for_report(&findings, &sorted_hosts, &identity_by_host_key);
+            build_hypotheses_for_report(&findings, &sorted_hosts, &identity_by_host_key, None);
 
         // findings[0] je pro host_a (New, nizsi nejistota nez Ambiguous),
         // findings[1] je pro host_b (Ambiguous, nejvyssi nejistota) - presne

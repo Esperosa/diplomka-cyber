@@ -14,11 +14,7 @@
 //!   tamper-evident (`hash = sha256(prev_hash | pole zaznamu)`, `verify_audit_chain`).
 //! - `bakula` meni vyhradne vlastni `table inet bakula`, nikdy cizi pravidla.
 
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-    time::Duration,
-};
+use std::{path::Path, process::Command, time::Duration};
 
 use chrono::{DateTime, Utc};
 use ipnet::IpNet;
@@ -203,6 +199,9 @@ pub struct SweepReport {
     pub expired: usize,
     pub drift_removed: Vec<String>,
     pub drift_missing: Vec<String>,
+    /// Chyby pri komunikaci s jadrem - sweep kvuli nim NEpada (dalsi tik to zkusi
+    /// znovu) a hlavne z nich nic nededuje (nedostupne jadro != "prvky zmizely").
+    pub failed: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -213,8 +212,17 @@ pub enum ProposeError {
 
 // --- store -------------------------------------------------------------------
 
+/// Zdroj casu - vychozi systemove hodiny; soak/testy dodaji virtualni cas, aby TTL a
+/// expirace sly deterministicky podle simulovaneho, ne skutecneho casu.
+pub type Clock = std::sync::Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>;
+
+/// Jedno trvale spojeni (ne spojeni na kazde volani): na Windows kazde otevreni/
+/// zavreni WAL souboru vyrabi a maze `-wal`/`-shm` (antivirus je pokazde skenuje) -
+/// soak to zmeril jako ~0,5 s na cyklus. `Mutex` serializuje pristup; zadna metoda
+/// nesmi volat jinou, zatimco drzi zamek (pred volanim `get_action` se zamek uvolni).
 pub struct OpsStore {
-    path: PathBuf,
+    conn: std::sync::Mutex<Connection>,
+    clock: Option<Clock>,
 }
 
 fn db_error(error: rusqlite::Error) -> BakulaError {
@@ -243,10 +251,20 @@ impl OpsStore {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let store = Self {
-            path: path.to_path_buf(),
-        };
-        let conn = store.conn()?;
+        let conn = Connection::open(path).map_err(db_error)?;
+        conn.busy_timeout(Duration::from_secs(5))
+            .map_err(db_error)?;
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .map_err(db_error)?;
+        Self::from_connection(conn)
+    }
+
+    /// Pametova databaze - bez souboru; pro simulace/testy, kde nejde o trvanlivost.
+    pub fn open_in_memory() -> Result<Self> {
+        Self::from_connection(Connection::open_in_memory().map_err(db_error)?)
+    }
+
+    fn from_connection(conn: Connection) -> Result<Self> {
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS audit_log (
@@ -279,19 +297,34 @@ impl OpsStore {
                 expires_at TEXT,
                 error TEXT
             );
+            CREATE INDEX IF NOT EXISTS idx_actions_ip_status ON enforcement_actions(ip, status);
+            CREATE INDEX IF NOT EXISTS idx_actions_status ON enforcement_actions(status);
             ",
         )
         .map_err(db_error)?;
-        Ok(store)
+        Ok(Self {
+            conn: std::sync::Mutex::new(conn),
+            clock: None,
+        })
     }
 
-    fn conn(&self) -> Result<Connection> {
-        let conn = Connection::open(&self.path).map_err(db_error)?;
-        conn.busy_timeout(Duration::from_secs(5))
-            .map_err(db_error)?;
-        conn.pragma_update(None, "journal_mode", "WAL")
-            .map_err(db_error)?;
-        Ok(conn)
+    /// Pouzije dodane hodiny misto systemovych (deterministicka simulace/testy).
+    pub fn with_clock(mut self, clock: Clock) -> Self {
+        self.clock = Some(clock);
+        self
+    }
+
+    pub fn now(&self) -> DateTime<Utc> {
+        match &self.clock {
+            Some(clock) => clock(),
+            None => Utc::now(),
+        }
+    }
+
+    fn conn(&self) -> Result<std::sync::MutexGuard<'_, Connection>> {
+        self.conn
+            .lock()
+            .map_err(|_| BakulaError::Processing("ops SQLite zamek je poskozeny".to_string()))
     }
 
     // --- audit ---
@@ -301,13 +334,21 @@ impl OpsStore {
         let tx = conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(db_error)?;
-        let id = Self::audit_in_tx(&tx, actor, action, subject, detail)?;
+        let id = Self::audit_in_tx(
+            &tx,
+            &self.now().to_rfc3339(),
+            actor,
+            action,
+            subject,
+            detail,
+        )?;
         tx.commit().map_err(db_error)?;
         Ok(id)
     }
 
     fn audit_in_tx(
         tx: &rusqlite::Transaction<'_>,
+        at: &str,
         actor: &str,
         action: &str,
         subject: &str,
@@ -322,8 +363,7 @@ impl OpsStore {
             .optional()
             .map_err(db_error)?
             .unwrap_or_default();
-        let at = Utc::now().to_rfc3339();
-        let hash = hash_entry(&prev, &at, actor, action, subject, detail);
+        let hash = hash_entry(&prev, at, actor, action, subject, detail);
         tracing::info!(target: "bakula::audit", %actor, %action, %subject, %detail, %hash);
         tx.execute(
             "INSERT INTO audit_log (at, actor, action, subject, detail, prev_hash, hash)
@@ -484,6 +524,7 @@ impl OpsStore {
         if active > 0 {
             Self::audit_in_tx(
                 &tx,
+                &self.now().to_rfc3339(),
                 actor,
                 "enforcement.duplicate",
                 &plan.ip,
@@ -492,7 +533,7 @@ impl OpsStore {
             tx.commit().map_err(db_error)?;
             return Ok(Err(ProposeError::AlreadyActive));
         }
-        let now = Utc::now().to_rfc3339();
+        let now = self.now().to_rfc3339();
         tx.execute(
             "INSERT INTO enforcement_actions
              (ip, ttl_seconds, reason, finding_id, status, nft_command, proposed_at, proposed_by)
@@ -511,12 +552,14 @@ impl OpsStore {
         let id = tx.last_insert_rowid();
         Self::audit_in_tx(
             &tx,
+            &self.now().to_rfc3339(),
             actor,
             "enforcement.proposed",
             &plan.ip,
             &format!("id={id} ttl={}s {}", plan.ttl_seconds, plan.reason),
         )?;
         tx.commit().map_err(db_error)?;
+        drop(conn);
         Ok(Ok(self
             .get_action(id)?
             .expect("prave vlozena akce existuje")))
@@ -541,11 +584,12 @@ impl OpsStore {
         tx.execute(
             "UPDATE enforcement_actions SET status = ?1, decided_by = ?2, decided_at = ?3
              WHERE id = ?4 AND status = 'proposed'",
-            params![status, actor, Utc::now().to_rfc3339(), id],
+            params![status, actor, self.now().to_rfc3339(), id],
         )
         .map_err(db_error)?;
         Self::audit_in_tx(
             &tx,
+            &self.now().to_rfc3339(),
             actor,
             if approve {
                 "enforcement.approved"
@@ -556,6 +600,7 @@ impl OpsStore {
             &format!("id={id}"),
         )?;
         tx.commit().map_err(db_error)?;
+        drop(conn);
         Ok(self.get_action(id)?.expect("akce existuje"))
     }
 
@@ -614,7 +659,7 @@ impl OpsStore {
         })();
         match outcome {
             Ok(()) => {
-                let now = Utc::now();
+                let now = self.now();
                 let expires = now + chrono::Duration::seconds(action.ttl_seconds as i64);
                 let mut conn = self.conn()?;
                 let tx = conn
@@ -628,12 +673,14 @@ impl OpsStore {
                 .map_err(db_error)?;
                 Self::audit_in_tx(
                     &tx,
+                    &self.now().to_rfc3339(),
                     actor,
                     "enforcement.applied",
                     &action.ip,
                     &format!("id={id} ttl={}s", action.ttl_seconds),
                 )?;
                 tx.commit().map_err(db_error)?;
+                drop(conn);
                 Ok(self.get_action(id)?.expect("akce existuje"))
             }
             Err(error) => self.mark_failed(id, &action.ip, &error.to_string(), actor),
@@ -658,12 +705,14 @@ impl OpsStore {
         .map_err(db_error)?;
         Self::audit_in_tx(
             &tx,
+            &self.now().to_rfc3339(),
             actor,
             "enforcement.failed",
             ip,
             &format!("id={id} {reason}"),
         )?;
         tx.commit().map_err(db_error)?;
+        drop(conn);
         Ok(self.get_action(id)?.expect("akce existuje"))
     }
 
@@ -698,8 +747,16 @@ impl OpsStore {
             }
         }
 
-        if mode != EnforcementMode::Enforce || !executor.table_exists()? {
+        if mode != EnforcementMode::Enforce {
             return Ok(report);
+        }
+        match executor.table_exists() {
+            Ok(true) => {}
+            Ok(false) => return Ok(report),
+            Err(error) => {
+                report.failed.push(format!("table_exists: {error}"));
+                return Ok(report);
+            }
         }
 
         let still_active: Vec<std::net::IpAddr> = self
@@ -711,25 +768,43 @@ impl OpsStore {
 
         let mut live: Vec<std::net::IpAddr> = Vec::new();
         for set in ["blocked_ips", "blocked_ips6"] {
-            live.extend(
-                executor
-                    .list_elements(set)?
-                    .iter()
-                    .filter_map(|text| text.parse::<std::net::IpAddr>().ok()),
-            );
+            match executor.list_elements(set) {
+                Ok(elements) => live.extend(
+                    elements
+                        .iter()
+                        .filter_map(|text| text.parse::<std::net::IpAddr>().ok()),
+                ),
+                Err(error) => {
+                    // Bez spolehliveho seznamu prvku nelze rozhodnout o driftu.
+                    report.failed.push(format!("list_elements {set}: {error}"));
+                    return Ok(report);
+                }
+            }
         }
 
         for ip in live.iter().filter(|ip| !still_active.contains(ip)) {
             let text = ip.to_string();
             if let Some(command) = render_nft_delete_element(&text) {
-                executor.run(&command)?;
-                self.audit(
-                    "sweep",
-                    "enforcement.drift_removed",
-                    &text,
-                    "prvek v kernelu bez aktivni akce",
-                )?;
-                report.drift_removed.push(text);
+                match executor.run(&command) {
+                    Ok(()) => {
+                        self.audit(
+                            "sweep",
+                            "enforcement.drift_removed",
+                            &text,
+                            "prvek v kernelu bez aktivni akce",
+                        )?;
+                        report.drift_removed.push(text);
+                    }
+                    Err(error) => {
+                        self.audit(
+                            "sweep",
+                            "enforcement.drift_remove_failed",
+                            &text,
+                            &error.to_string(),
+                        )?;
+                        report.failed.push(format!("delete {text}: {error}"));
+                    }
+                }
             }
         }
         for action in self
@@ -1153,6 +1228,38 @@ mod tests {
             .sweep(EnforcementMode::Enforce, &nft, Utc::now())
             .unwrap();
         assert_eq!(report.drift_missing, vec!["203.0.113.5".to_string()]);
+    }
+
+    /// Nalez ze soak behu: selhani prikazu `nft delete` shodilo cely sweep (a v simulaci
+    /// cely epizod). Ted se zaznamena a sweep pokracuje; nedostupne jadro nikdy
+    /// neznamena "aktivni akce zmizely".
+    #[test]
+    fn sweep_survives_kernel_command_failure_and_does_not_invent_drift() {
+        let (_dir, store) = store();
+        let nft = FakeNft::default();
+        *nft.table_present.lock().unwrap() = true;
+        nft.elements
+            .lock()
+            .unwrap()
+            .push("198.51.100.77".to_string());
+        let failing = FakeNft {
+            fail_run: true,
+            table_present: std::sync::Mutex::new(true),
+            elements: std::sync::Mutex::new(vec!["198.51.100.77".to_string()]),
+            ..Default::default()
+        };
+        let report = store
+            .sweep(EnforcementMode::Enforce, &failing, Utc::now())
+            .unwrap();
+        assert!(report.drift_removed.is_empty());
+        assert_eq!(report.failed.len(), 1);
+        assert!(
+            store
+                .audit_list(5)
+                .unwrap()
+                .iter()
+                .any(|e| e.action == "enforcement.drift_remove_failed")
+        );
     }
 
     #[test]

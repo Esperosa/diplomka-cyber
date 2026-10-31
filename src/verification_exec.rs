@@ -254,6 +254,119 @@ pub fn execute_plans(
     results
 }
 
+// --- uceni z vysledku: Case Memory + historie vykonani -------------------------
+
+/// Co se z behu naucilo (jen pocty, pro log/testy).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LearningSummary {
+    pub cases_accepted: usize,
+    pub cases_quarantined: usize,
+    pub samples_recorded: usize,
+}
+
+/// Dobrovolne zjednoduseny proxy informacniho zisku (viz
+/// `case_history::VerificationHistory`): 1.0 = kontrola dala verdikt tam, kde
+/// pamet zadny odhad nemela, NEBO verdikt, ktery odporuje dosavadni vetsine
+/// (`probability >= 0.5` ~ "potvrzeno"); 0.0 = verdikt jen potvrdil, co pamet
+/// uz vedela, nebo kontrola zadny verdikt nedala.
+pub fn information_gain_proxy(
+    result: &VerificationResult,
+    prior: &crate::case_memory::CaseMemory,
+    now: chrono::DateTime<chrono::Utc>,
+) -> f64 {
+    use crate::case_memory::{Outcome, case_from_verification_result};
+    let Some(case) = case_from_verification_result(result, now) else {
+        return 0.0;
+    };
+    match prior.estimate(&case.finding_type) {
+        None => 1.0,
+        Some(estimate) => {
+            let prior_says_real = estimate.probability >= 0.5;
+            let case_says_real = case.outcome == Outcome::Confirmed;
+            if prior_says_real == case_says_real {
+                0.0
+            } else {
+                1.0
+            }
+        }
+    }
+}
+
+/// Zaznamy pro historii: jen SKUTECNE vykonane kontroly (`executed`, ne `reused`/
+/// `skipped`/`needs_approval`). `network_cost` = 0.01 * pocet odeslanych
+/// HTTP pozadavku (pocet "GET " ve vysledku), ostatni metody 0.
+pub fn history_samples(
+    results: &[VerificationResult],
+    mut gain: impl FnMut(&VerificationResult) -> f64,
+) -> Vec<(String, crate::case_history::ExecutionSample)> {
+    results
+        .iter()
+        .filter(|result| result.status == "executed")
+        .map(|result| {
+            let requests = result
+                .outcome
+                .as_deref()
+                .map(|text| text.matches("GET ").count())
+                .unwrap_or(0);
+            (
+                result.method.clone(),
+                crate::case_history::ExecutionSample {
+                    runtime_ms: result.runtime_ms,
+                    network_cost: 0.01 * requests as f64,
+                    information_gain: gain(result),
+                },
+            )
+        })
+        .collect()
+}
+
+/// Zapise vysledky behu do `case-memory.json` a `verification-history.json`
+/// (oboji pod zamkem, atomicky). Nic nevykonano/nenamapovano = zadny soubor se
+/// nevytvori ani nezmeni. `prior` je pamet NACTENA PRED behem - zisk se meri proti
+/// tomu, co system vedel dřív, ne proti vlastnimu prave zapsanemu zaznamu.
+pub fn record_learning(
+    workspace: &std::path::Path,
+    results: &[VerificationResult],
+    prior: &crate::case_memory::CaseMemory,
+) -> Result<LearningSummary> {
+    use crate::case_memory::{CaseMemory, RecordOutcome, case_from_verification_result};
+    let now = chrono::Utc::now();
+    let mut summary = LearningSummary::default();
+
+    let cases: Vec<_> = results
+        .iter()
+        .filter_map(|result| case_from_verification_result(result, now))
+        .collect();
+    if !cases.is_empty() {
+        let outcomes = CaseMemory::update(&workspace.join("case-memory.json"), |memory| {
+            cases
+                .into_iter()
+                .map(|case| memory.record(case))
+                .collect::<Vec<_>>()
+        })?;
+        for outcome in outcomes {
+            match outcome {
+                RecordOutcome::Accepted => summary.cases_accepted += 1,
+                RecordOutcome::Quarantined(_) => summary.cases_quarantined += 1,
+            }
+        }
+    }
+
+    let samples = history_samples(results, |result| information_gain_proxy(result, prior, now));
+    if !samples.is_empty() {
+        summary.samples_recorded = samples.len();
+        crate::case_history::VerificationHistory::update(
+            &workspace.join("verification-history.json"),
+            |history| {
+                for (method, sample) in samples {
+                    history.record(&method, sample);
+                }
+            },
+        )?;
+    }
+    Ok(summary)
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
@@ -459,5 +572,129 @@ mod tests {
             &Recording::new(false),
         );
         assert!(results.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod learning_tests {
+    use super::*;
+    use crate::case_memory::{CaseMemory, CaseRecord, CaseSource, Outcome};
+
+    fn result(
+        ft: &str,
+        method: &str,
+        status: &str,
+        outcome: &str,
+        runtime: u64,
+    ) -> VerificationResult {
+        VerificationResult {
+            hypothesis_type: ft.to_string(),
+            method: method.to_string(),
+            asset: "192.168.1.5".to_string(),
+            status: status.to_string(),
+            outcome: Some(outcome.to_string()),
+            runtime_ms: runtime,
+        }
+    }
+
+    fn exposure_ok() -> VerificationResult {
+        result(
+            "management_surface_exposure",
+            "read_only_content_inspection",
+            "executed",
+            "GET http://192.168.1.5:80/ -> 200, server: nginx, 5 B; GET http://192.168.1.5:8080/ -> 200, server: x, 5 B",
+            120,
+        )
+    }
+
+    #[test]
+    fn nothing_executed_or_mapped_writes_no_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let results = vec![
+            result(
+                "unexpected_traffic",
+                "passive_extended_observation",
+                "needs_approval",
+                "",
+                0,
+            ),
+            result("x", "cve_intel_relookup", "reused", "3 CVE", 0),
+        ];
+        let summary = record_learning(dir.path(), &results, &CaseMemory::in_memory()).unwrap();
+        assert_eq!(summary, LearningSummary::default());
+        assert!(!dir.path().join("case-memory.json").exists());
+        assert!(!dir.path().join("verification-history.json").exists());
+    }
+
+    #[test]
+    fn executed_inspection_records_case_and_sample_with_request_based_cost() {
+        let dir = tempfile::tempdir().unwrap();
+        let summary =
+            record_learning(dir.path(), &[exposure_ok()], &CaseMemory::in_memory()).unwrap();
+        assert_eq!(summary.cases_accepted, 1);
+        assert_eq!(summary.samples_recorded, 1);
+        let history = crate::case_history::VerificationHistory::load_or_default(
+            &dir.path().join("verification-history.json"),
+        );
+        let sample = history.samples("read_only_content_inspection")[0];
+        assert_eq!(sample.runtime_ms, 120);
+        assert!((sample.network_cost - 0.02).abs() < 1e-12, "2 pozadavky");
+        assert_eq!(
+            sample.information_gain, 1.0,
+            "bez drivejsiho odhadu = novy verdikt"
+        );
+        let memory = CaseMemory::load_or_default(&dir.path().join("case-memory.json"));
+        assert_eq!(memory.accepted_len(), 1);
+    }
+
+    #[test]
+    fn information_gain_is_zero_when_verdict_only_confirms_the_prior_and_one_when_it_contradicts() {
+        let mut prior = CaseMemory::in_memory();
+        let start = chrono::Utc::now() - chrono::Duration::days(1);
+        for i in 0..8 {
+            prior.record(CaseRecord::new(
+                "management_surface_exposure",
+                None,
+                Outcome::Confirmed,
+                CaseSource::Operator { actor: "a".into() },
+                1.0,
+                start + chrono::Duration::minutes(i * 70),
+            ));
+        }
+        let now = chrono::Utc::now();
+        assert_eq!(information_gain_proxy(&exposure_ok(), &prior, now), 0.0);
+        let refuting = result(
+            "management_surface_exposure",
+            "read_only_content_inspection",
+            "executed",
+            "GET http://192.168.1.5:80/ -> 404, server: -, 0 B",
+            50,
+        );
+        assert_eq!(information_gain_proxy(&refuting, &prior, now), 1.0);
+        let unmapped = result(
+            "unexpected_traffic",
+            "passive_extended_observation",
+            "executed",
+            "bez kroku",
+            0,
+        );
+        assert_eq!(information_gain_proxy(&unmapped, &prior, now), 0.0);
+    }
+
+    #[test]
+    fn only_really_executed_checks_become_history_samples() {
+        let results = vec![
+            exposure_ok(),
+            result(
+                "management_surface_exposure",
+                "read_only_content_inspection",
+                "reused",
+                "GET a -> 200, a, 1 B",
+                0,
+            ),
+            result("x", "cve_intel_relookup", "failed", "boom", 3),
+        ];
+        let samples = history_samples(&results, |_| 0.5);
+        assert_eq!(samples.len(), 1);
     }
 }

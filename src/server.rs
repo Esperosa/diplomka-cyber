@@ -22,7 +22,9 @@ use tokio_stream::{StreamExt, wrappers::ReceiverStream};
 use tower_http::services::ServeDir;
 
 use crate::{
-    Result, ai, assistant, automation, config,
+    Result, ai, assistant, automation,
+    case_memory::{self, CaseMemory, CaseRecord, CaseSource},
+    config,
     enforcement::{BlockIpRequest, EnforcementRejection},
     model::{AppConfig, RunIndexEntry, RunReport},
     ops::{self, NftExecutor, OpsConfig, OpsStore, ProposeError},
@@ -122,6 +124,10 @@ pub async fn serve_with_config(addr: SocketAddr, config: AppConfig) -> Result<()
         .route("/enforcement/{id}/reject", post(post_enforcement_reject))
         .route("/audit", get(get_audit))
         .route("/audit/verify", get(get_audit_verify))
+        .route(
+            "/runs/{run_id}/findings/{finding_id}/verdict",
+            post(post_finding_verdict),
+        )
         .route("/platform/cluster", get(get_platform_cluster))
         .route("/platform/jobs", get(get_platform_jobs))
         .route("/platform/users", get(get_platform_users))
@@ -939,6 +945,20 @@ async fn decide_enforcement(
     match run_blocking(move || {
         let store = ops_store(&worker_state)?;
         let decided = store.decide(id, approve, &actor)?;
+        if let Some(finding_id) = decided.finding_id.as_deref() {
+            // Rozhodnuti operatora je (slabsi) dukaz o nalezu; selhani zapisu
+            // pameti nesmi zablokovat samotne rozhodnuti.
+            let outcome = if approve {
+                case_memory::Outcome::Confirmed
+            } else {
+                case_memory::Outcome::Refuted
+            };
+            if let Err(error) =
+                record_finding_case(&worker_state, None, finding_id, outcome, 0.5, &actor)
+            {
+                tracing::warn!(%error, finding_id, "zapis Case Memory z rozhodnuti o zasahu selhal");
+            }
+        }
         if approve {
             store.apply_approved(
                 id,
@@ -990,6 +1010,118 @@ async fn get_audit(
     let limit = query.limit.unwrap_or(100).clamp(1, 1000);
     match run_blocking(move || ops_store(&state)?.audit_list(limit)).await {
         Ok(entries) => Json(entries).into_response(),
+        Err(response) => response,
+    }
+}
+
+// --- Case Memory: verdikt operatora k nalezu --------------------------------------
+
+/// Najde typ nalezu v konkretnim behu (`run_id`) nebo, kdyz neni zadan, v nejnovejsim.
+fn finding_type_of(
+    state: &AppState,
+    run_id: Option<&str>,
+    finding_id: &str,
+) -> crate::Result<Option<String>> {
+    let workspace = Workspace::open(&state.workspace_root)?;
+    let run_id = match run_id {
+        Some(run_id) => run_id.to_string(),
+        None => match workspace.list_runs()?.first() {
+            Some(entry) => entry.run_id.clone(),
+            None => return Ok(None),
+        },
+    };
+    let report = workspace.load_report(&run_id)?;
+    Ok(report
+        .findings
+        .iter()
+        .find(|finding| finding.finding_id == finding_id)
+        .map(|finding| finding.finding_type.clone()))
+}
+
+/// Zapise operatorsky dukaz do Case Memory (pod zamkem) a audit. `None` = nalez
+/// nenalezen (nic se nezapise).
+fn record_finding_case(
+    state: &AppState,
+    run_id: Option<&str>,
+    finding_id: &str,
+    outcome: case_memory::Outcome,
+    weight: f64,
+    actor: &str,
+) -> crate::Result<Option<(case_memory::RecordOutcome, Option<case_memory::Estimate>)>> {
+    let Some(finding_type) = finding_type_of(state, run_id, finding_id)? else {
+        return Ok(None);
+    };
+    let record = CaseRecord::new(
+        &finding_type,
+        None,
+        outcome,
+        CaseSource::Operator {
+            actor: actor.to_string(),
+        },
+        weight,
+        Utc::now(),
+    );
+    let (recorded, estimate) =
+        CaseMemory::update(&state.workspace_root.join("case-memory.json"), |memory| {
+            let recorded = memory.record(record);
+            (recorded, memory.estimate(&finding_type))
+        })?;
+    ops_store(state)?.audit(
+        actor,
+        "finding.verdict",
+        finding_id,
+        &format!("{finding_type} {outcome:?} weight={weight} -> {recorded:?}"),
+    )?;
+    Ok(Some((recorded, estimate)))
+}
+
+#[derive(Debug, Deserialize)]
+struct VerdictBody {
+    verdict: String,
+}
+
+async fn post_finding_verdict(
+    State(state): State<AppState>,
+    Path((run_id, finding_id)): Path<(String, String)>,
+    headers: HeaderMap,
+    Json(body): Json<VerdictBody>,
+) -> Response {
+    let auth = match authorize_for(&headers, &state, &["findings.write"]) {
+        Ok(auth) => auth,
+        Err(error) => return pair_to_response(error),
+    };
+    if let Err(error) = ensure_csrf_guard_header(&auth, &headers) {
+        return pair_to_response(error);
+    }
+    if !crate::storage::is_valid_run_id(&run_id) {
+        return error_response(StatusCode::BAD_REQUEST, "Neplatny run_id.");
+    }
+    let outcome = match body.verdict.as_str() {
+        "confirmed" => case_memory::Outcome::Confirmed,
+        "refuted" => case_memory::Outcome::Refuted,
+        _ => {
+            return error_response(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "verdict musi byt 'confirmed' nebo 'refuted'",
+            );
+        }
+    };
+    let actor = auth.subject.clone();
+    match run_blocking(move || {
+        record_finding_case(&state, Some(&run_id), &finding_id, outcome, 1.0, &actor)
+    })
+    .await
+    {
+        Ok(Some((recorded, estimate))) => {
+            let status = match recorded {
+                case_memory::RecordOutcome::Accepted => "accepted".to_string(),
+                case_memory::RecordOutcome::Quarantined(reason) => {
+                    format!("quarantined:{reason:?}")
+                }
+            };
+            Json(serde_json::json!({ "recorded": status, "estimate": estimate })).into_response()
+        }
+        Ok(None) => error_response(StatusCode::NOT_FOUND, "Nalez v tomto behu neexistuje."),
         Err(response) => response,
     }
 }
@@ -1378,6 +1510,186 @@ mod tests {
         assert!(text.contains("bakula_enforcement_mode{mode=\"dry_run\"} 1"));
         assert!(text.contains("bakula_enforcement_actions{status=\"proposed\"} 1"));
         assert!(text.contains("bakula_ops_up 1"));
+    }
+
+    fn seed_run_with_finding(workspace: &std::path::Path) -> (String, String) {
+        use crate::model::{Confidence, Finding, Severity};
+        let now = Utc::now();
+        let mut report = crate::report::build_report(
+            "verdict-test",
+            "verdict-test",
+            now,
+            now,
+            Vec::new(),
+            Vec::new(),
+            "t",
+            "t",
+            "passive-only",
+            crate::model::PassiveWindow {
+                start: now,
+                end: now,
+                time_window_s: 300,
+            },
+            crate::model::SourceMetadata::default(),
+            Vec::new(),
+            Vec::new(),
+        );
+        report.findings.push(Finding {
+            finding_id: "finding:verdict:1".to_string(),
+            finding_type: "management_surface_exposure".to_string(),
+            title: "t".to_string(),
+            severity: Severity::High,
+            confidence: Confidence::High,
+            host_key: Some("10.0.0.1".to_string()),
+            service_key: None,
+            rationale: "r".to_string(),
+            evidence: Vec::new(),
+            recommendation: "x".to_string(),
+        });
+        let run_id = report.run.run_id.clone();
+        let dir = workspace.join("runs").join(&run_id);
+        std::fs::create_dir_all(&dir).expect("run dir");
+        std::fs::write(
+            dir.join("report.json"),
+            serde_json::to_string(&report).expect("json"),
+        )
+        .expect("write report");
+        let index = serde_json::json!({ "runs": [{
+            "run_id": run_id,
+            "nazev": "verdict-test",
+            "created_at": now,
+            "scope": [],
+            "hosts_total": 0,
+            "services_total": 0,
+            "cves_total": 0,
+            "events_total": 0
+        }]});
+        std::fs::write(workspace.join("runs").join("index.json"), index.to_string())
+            .expect("write index");
+        (run_id, "finding:verdict:1".to_string())
+    }
+
+    #[tokio::test]
+    async fn verdict_requires_csrf_header_for_anonymous_admin() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+        let response = post_finding_verdict(
+            State(state),
+            Path(("run-x".to_string(), "finding:1".to_string())),
+            HeaderMap::new(),
+            Json(VerdictBody {
+                verdict: "confirmed".to_string(),
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn verdict_rejects_unknown_value_and_unknown_finding() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+        let (run_id, finding_id) = seed_run_with_finding(temp.path());
+
+        let bad = post_finding_verdict(
+            State(state.clone()),
+            Path((run_id.clone(), finding_id.clone())),
+            csrf_headers(),
+            Json(VerdictBody {
+                verdict: "maybe".to_string(),
+            }),
+        )
+        .await;
+        assert_eq!(bad.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let missing = post_finding_verdict(
+            State(state),
+            Path((run_id, "finding:neexistuje".to_string())),
+            csrf_headers(),
+            Json(VerdictBody {
+                verdict: "confirmed".to_string(),
+            }),
+        )
+        .await;
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn verdict_is_recorded_in_case_memory_and_audit_log() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+        let (run_id, finding_id) = seed_run_with_finding(temp.path());
+
+        let response = post_finding_verdict(
+            State(state.clone()),
+            Path((run_id, finding_id)),
+            csrf_headers(),
+            Json(VerdictBody {
+                verdict: "confirmed".to_string(),
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(body_json(response).await["recorded"], "accepted");
+
+        let memory = CaseMemory::load_or_default(&temp.path().join("case-memory.json"));
+        assert_eq!(memory.accepted_len(), 1);
+        let audit = get_audit(
+            State(state),
+            Query(AuditQuery { limit: Some(20) }),
+            HeaderMap::new(),
+        )
+        .await;
+        let entries = body_json(audit).await;
+        assert!(
+            entries
+                .as_array()
+                .expect("array")
+                .iter()
+                .any(|entry| entry["action"] == "finding.verdict")
+        );
+    }
+
+    #[tokio::test]
+    async fn enforcement_approve_and_reject_with_finding_record_weak_cases() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+        let (_run_id, finding_id) = seed_run_with_finding(temp.path());
+
+        for (ip, approve) in [("203.0.113.21", true), ("203.0.113.22", false)] {
+            let body = Json(ProposeBody {
+                ip: ip.to_string(),
+                ttl_seconds: 300,
+                reason: "t".to_string(),
+                finding_id: Some(finding_id.clone()),
+            });
+            let created =
+                post_enforcement_propose(State(state.clone()), csrf_headers(), body).await;
+            let id = body_json(created).await["id"].as_i64().expect("id");
+            let response = if approve {
+                post_enforcement_approve(State(state.clone()), Path(id), csrf_headers()).await
+            } else {
+                post_enforcement_reject(State(state.clone()), Path(id), csrf_headers()).await
+            };
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+        let memory = CaseMemory::load_or_default(&temp.path().join("case-memory.json"));
+        assert_eq!(memory.accepted_len(), 2);
+    }
+
+    #[tokio::test]
+    async fn enforcement_without_finding_id_leaves_case_memory_untouched() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let state = test_state(temp.path().to_path_buf());
+        let created = post_enforcement_propose(
+            State(state.clone()),
+            csrf_headers(),
+            propose_body("203.0.113.30"),
+        )
+        .await;
+        let id = body_json(created).await["id"].as_i64().expect("id");
+        let _ = post_enforcement_reject(State(state), Path(id), csrf_headers()).await;
+        assert!(!temp.path().join("case-memory.json").exists());
     }
 
     #[tokio::test]

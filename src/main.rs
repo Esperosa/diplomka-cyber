@@ -57,6 +57,63 @@ enum Command {
     Broker(BrokerCommand),
     #[command(subcommand)]
     Demo(DemoCommand),
+    /// Dlouhodoby soak/zatezovy beh simulovanych siti (viz docs/diplomka/eval/soak-harness.md).
+    #[command(subcommand)]
+    Soak(SoakCommand),
+}
+
+#[derive(Subcommand, Debug)]
+enum SoakCommand {
+    Run(SoakRunArgs),
+    Verify(SoakVerifyArgs),
+    Report(SoakReportArgs),
+}
+
+#[derive(Args, Debug)]
+struct SoakRunArgs {
+    #[arg(long)]
+    out: PathBuf,
+    /// Casovy limit behu v hodinach; 0 = bez limitu (zastavi soubor STOP v --out).
+    #[arg(long, default_value_t = 0.0)]
+    wall_hours: f64,
+    #[arg(long)]
+    max_networks: Option<u64>,
+    /// Pocet pracovnich vlaken (vychozi 3/4 logickych jader).
+    #[arg(long)]
+    threads: Option<usize>,
+    #[arg(long, default_value_t = 16)]
+    block_size: u64,
+    /// Delka epizodu ve virtualnich hodinach; 0 = nahodne 24/48/72/96.
+    #[arg(long, default_value_t = 0)]
+    episode_hours: u32,
+    #[arg(long, default_value_t = 20_260_131)]
+    seed: u64,
+    #[arg(long, default_value_t = 300)]
+    checkpoint_secs: u64,
+    #[arg(long, default_value_t = 600)]
+    report_secs: u64,
+    /// Navazat na predchozi beh v --out (zachova seed, velikost bloku, delku epizodu).
+    #[arg(long, default_value_t = false)]
+    resume: bool,
+    /// Vypnout doplnkove nohy (realna data, ops stress, broker).
+    #[arg(long, default_value_t = false)]
+    no_legs: bool,
+}
+
+#[derive(Args, Debug)]
+struct SoakVerifyArgs {
+    #[arg(long)]
+    out: PathBuf,
+    #[arg(long, default_value_t = 20)]
+    samples: usize,
+    #[arg(long, default_value_t = 1)]
+    seed: u64,
+}
+
+#[derive(Args, Debug)]
+struct SoakReportArgs {
+    #[arg(long)]
+    out: PathBuf,
 }
 
 #[derive(Subcommand, Debug)]
@@ -452,6 +509,10 @@ struct DemoArgs {
     workspace: PathBuf,
 }
 
+#[global_allocator]
+static ALLOCATOR: bakula_program::soak::alloc::CountingAlloc =
+    bakula_program::soak::alloc::CountingAlloc;
+
 fn main() -> anyhow::Result<()> {
     bakula_program::logging::init();
     let cli = Cli::parse();
@@ -834,6 +895,35 @@ fn main() -> anyhow::Result<()> {
             let min_idle_ms = (args.lease_s.max(0) as usize).saturating_mul(1000);
             let message = broker::claim_one(&config, &args.node_id, 500, min_idle_ms)?;
             println!("{}", serde_json::to_string_pretty(&message)?);
+        }
+        Command::Soak(SoakCommand::Run(args)) => {
+            let mut cfg = bakula_program::soak::runner::SoakConfig::with_defaults(args.out.clone());
+            cfg.wall_hours = args.wall_hours;
+            cfg.max_networks = args.max_networks;
+            if let Some(threads) = args.threads {
+                cfg.threads = threads.max(1);
+            }
+            cfg.block_size = args.block_size.max(1);
+            cfg.episode_hours = args.episode_hours;
+            cfg.run_seed = args.seed;
+            cfg.checkpoint_secs = args.checkpoint_secs.max(1);
+            cfg.report_secs = args.report_secs.max(1);
+            cfg.legs = !args.no_legs;
+            bakula_program::soak::runner::run(cfg, args.resume)?;
+        }
+        Command::Soak(SoakCommand::Verify(args)) => {
+            let (ok, total) =
+                bakula_program::soak::runner::verify(&args.out, args.samples, args.seed)?;
+            println!("verifikace: {ok}/{total} bloku bit po bitu shodnych");
+            if ok != total {
+                anyhow::bail!("reprodukovatelnost porusena: {} bloku se lisi", total - ok);
+            }
+        }
+        Command::Soak(SoakCommand::Report(args)) => {
+            let state = bakula_program::soak::runner::load_state(&args.out)?;
+            let markdown =
+                bakula_program::soak::report::render_markdown(&state, state.elapsed_wall_s, true);
+            println!("{markdown}");
         }
         Command::Demo(DemoCommand::E2e(args)) => {
             let sim_dir = args.workspace.join("simulace");

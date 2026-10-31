@@ -26,8 +26,8 @@ use clap::Args;
 use ipnet::IpNet;
 
 use crate::{
-    automation, config, context, correlation, cpe, decision, diff, findings, hypothesis, identity,
-    ingest, intel, lanes,
+    automation, case_history, case_memory, config, context, correlation, cpe, decision, diff,
+    findings, hypothesis, identity, ingest, intel, lanes,
     model::{MonitoringLane, NormalizedEvent, RunReport, Severity, TriageAction},
     nmap, passive, paths, pentest, report, scope_policy, simulation,
     storage::{RunArtifacts, Workspace},
@@ -1050,9 +1050,12 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
         hosts,
         unmapped_events,
     );
-    report.summary.mas_parallelism_ratio = mas_parallelism_ratio;
-    report.summary.mas_queue_wait_ms_avg = mas_queue_wait_ms_avg;
-    report.summary.mas_agent_sla_ratio = mas_agent_sla_ratio;
+    // Zaokrouhleno JEDNOU tady (2 desetinna mista, stejne jako drive pri
+    // zpetnem cteni pres `automation::derive_insights`); lokalni nezaokrouhlene
+    // hodnoty se dal pouzivaji jen pro popisky MAS lane nize.
+    report.summary.mas_parallelism_ratio = automation::round_ratio(mas_parallelism_ratio);
+    report.summary.mas_queue_wait_ms_avg = automation::round_ratio(mas_queue_wait_ms_avg);
+    report.summary.mas_agent_sla_ratio = automation::round_ratio(mas_agent_sla_ratio);
     report.network_assets = context_bundle.network_assets;
     report.topology_edges = context_bundle.topology_edges;
     if report.network_assets.is_empty() {
@@ -1376,10 +1379,18 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     report
         .findings
         .dedup_by(|left, right| left.finding_id == right.finding_id);
+    // Case Memory (chybejici soubor = prazdna pamet, nic se nemeni) + historie
+    // vykonanych kontrol: odhady pro hypotezy a planner pochazeji z overenych dat.
+    let case_memory =
+        case_memory::CaseMemory::load_or_default(&args.workspace.join("case-memory.json"));
+    let verification_history = case_history::VerificationHistory::load_or_default(
+        &args.workspace.join("verification-history.json"),
+    );
     report.hypotheses = hypothesis::build_hypotheses_for_report(
         &report.findings,
         &report.hosts,
         &identity_by_host_key,
+        Some(&case_memory),
     );
     // Faze B (produkcni-plan.md, 31.10.2026): stinove planovani - zadna aktivni
     // kontrola se tady nevykonava, jen se zapisuje, co by `verification_planner`
@@ -1391,7 +1402,11 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
         .hypotheses
         .iter()
         .filter_map(|hypothesis| {
-            verification_planner::plan_for_hypothesis(hypothesis, &verification_scope)
+            verification_planner::plan_for_hypothesis_with_history(
+                hypothesis,
+                &verification_scope,
+                &verification_history,
+            )
         })
         .collect();
     if args.execute_verification {
@@ -1406,6 +1421,14 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
             &budget,
             &verification_exec::LocalRunner,
         );
+        // Uceni selze tise jen v logu - nesmi shodit beh, ktery uz probehl.
+        if let Err(error) = verification_exec::record_learning(
+            &args.workspace,
+            &report.verification_results,
+            &case_memory,
+        ) {
+            tracing::warn!(%error, "zapis Case Memory / historie overeni selhal");
+        }
     }
     report.summary.findings_total = report.findings.len();
     report.summary.audit_findings_total = report
@@ -1490,9 +1513,6 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     report.summary.service_identity_coverage_ratio =
         automation_insights.service_identity_coverage_ratio;
     report.summary.tooling_coverage_ratio = automation_insights.tooling_coverage_ratio;
-    report.summary.mas_parallelism_ratio = automation_insights.mas_parallelism_ratio;
-    report.summary.mas_queue_wait_ms_avg = automation_insights.mas_queue_wait_ms_avg;
-    report.summary.mas_agent_sla_ratio = automation_insights.mas_agent_sla_ratio;
     report.summary.mas_consensus_score = automation_insights.mas_consensus_score;
     report.summary.mas_consensus_state = automation_insights.mas_consensus_state;
     if args.hloubkove_overeni {

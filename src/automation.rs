@@ -110,9 +110,6 @@ pub struct AutomationInsights {
     pub automation_agents_total: usize,
     pub automation_rounds_total: usize,
     pub forensic_targets_total: usize,
-    pub mas_parallelism_ratio: f64,
-    pub mas_queue_wait_ms_avg: f64,
-    pub mas_agent_sla_ratio: f64,
     pub mas_consensus_score: f64,
     pub mas_consensus_state: String,
 }
@@ -275,12 +272,9 @@ pub fn derive_insights(report: &RunReport) -> AutomationInsights {
         .filter_map(|finding| {
             if matches!(
                 finding.finding_type.as_str(),
-                "identification_gap"
-                    | "management_surface_exposure"
-                    | "high_risk_cve_exposure"
-                    | "known_exploited_vulnerability"
-                    | "probable_exploitation_interest"
-            ) {
+                "identification_gap" | "management_surface_exposure"
+            ) || crate::finding_kinds::is_cve_like(&finding.finding_type)
+            {
                 finding.service_key.clone()
             } else {
                 None
@@ -517,9 +511,6 @@ pub fn derive_insights(report: &RunReport) -> AutomationInsights {
     } else {
         round_ratio(activated as f64 / available as f64)
     };
-    let mas_parallelism_ratio = round_ratio(report.summary.mas_parallelism_ratio);
-    let mas_queue_wait_ms_avg = round_ratio(report.summary.mas_queue_wait_ms_avg);
-    let mas_agent_sla_ratio = round_ratio(report.summary.mas_agent_sla_ratio);
     let mas_consensus_score = round_ratio(report.summary.mas_consensus_score);
     let mas_consensus_state = if report.summary.mas_consensus_state.trim().is_empty() {
         "pending".to_string()
@@ -839,9 +830,6 @@ pub fn derive_insights(report: &RunReport) -> AutomationInsights {
         automation_agents_total,
         automation_rounds_total,
         forensic_targets_total,
-        mas_parallelism_ratio,
-        mas_queue_wait_ms_avg,
-        mas_agent_sla_ratio,
         mas_consensus_score,
         mas_consensus_state,
     }
@@ -979,9 +967,9 @@ pub fn build_automation_report(cycle_reports: &[RunReport]) -> AutomationReport 
             automation_agents_total: insights.automation_agents_total,
             automation_rounds_total: insights.automation_rounds_total,
             forensic_targets_total: insights.forensic_targets_total,
-            mas_parallelism_ratio: insights.mas_parallelism_ratio,
-            mas_queue_wait_ms_avg: insights.mas_queue_wait_ms_avg,
-            mas_agent_sla_ratio: insights.mas_agent_sla_ratio,
+            mas_parallelism_ratio: round_ratio(latest.summary.mas_parallelism_ratio),
+            mas_queue_wait_ms_avg: round_ratio(latest.summary.mas_queue_wait_ms_avg),
+            mas_agent_sla_ratio: round_ratio(latest.summary.mas_agent_sla_ratio),
             mas_consensus_score: insights.mas_consensus_score,
             mas_consensus_state: insights.mas_consensus_state,
         },
@@ -1367,7 +1355,7 @@ fn neural_score(features: &[f64], weights: &[f64], bias: f64) -> f64 {
     1.0 / (1.0 + (-linear).exp())
 }
 
-fn round_ratio(value: f64) -> f64 {
+pub(crate) fn round_ratio(value: f64) -> f64 {
     (value * 100.0).round() / 100.0
 }
 

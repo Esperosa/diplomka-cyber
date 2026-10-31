@@ -25,6 +25,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::case_history::{
+    MIN_SAMPLES_FOR_HISTORY, VerificationHistory, derive_candidate_from_samples,
+};
 use crate::hypothesis::SecurityHypothesis;
 
 /// Kandidat na dalsi overovaci kontrolu - jeste NEVYBRANA/nevykonana akce.
@@ -183,6 +186,35 @@ pub fn candidates_for_hypothesis_type(hypothesis_type: &str) -> Vec<Verification
     candidates
 }
 
+/// Katalog s odhady z historie: pro kazdou metodu s `>= MIN_SAMPLES_FOR_HISTORY`
+/// realnymi vzorky se `estimated_runtime_ms`/`network_cost`/`information_gain`
+/// nahradi prumerem (`case_history::derive_candidate_from_samples`);
+/// `disruption_risk` a `requires_approval` zustavaji z katalogu (bezpecnostni
+/// rozhodnuti se neuci z mereni rychlosti). Metody bez dost vzorku zustavaji na
+/// kuratorskych konstantach v `candidates_for_hypothesis_type` - historie pro ne
+/// jeste neexistuje, takze zadne vymysleni.
+pub fn candidates_with_history(
+    hypothesis_type: &str,
+    history: &VerificationHistory,
+) -> Vec<VerificationCandidate> {
+    candidates_for_hypothesis_type(hypothesis_type)
+        .into_iter()
+        .map(|candidate| {
+            let samples = history.samples(&candidate.method);
+            if samples.len() >= MIN_SAMPLES_FOR_HISTORY {
+                derive_candidate_from_samples(
+                    &candidate.method,
+                    samples,
+                    candidate.disruption_risk,
+                    candidate.requires_approval,
+                )
+            } else {
+                candidate
+            }
+        })
+        .collect()
+}
+
 /// Vysledek planovani pro JEDNU hypotezu - stinovy/aditivni vystup (viz
 /// `RunReport.verification_plans`). `excluded_out_of_scope` jsou assety z
 /// `hypothesis.affected_assets`, ktere `ScopePolicy` vyradila PRED planovanim -
@@ -203,6 +235,17 @@ pub fn plan_for_hypothesis(
     hypothesis: &SecurityHypothesis,
     scope: &crate::scope_policy::ScopePolicy,
 ) -> Option<HypothesisVerificationPlan> {
+    plan_for_hypothesis_with_history(hypothesis, scope, &VerificationHistory::default())
+}
+
+/// Stejne jako `plan_for_hypothesis`, ale odhady nakladu/zisku vezme z historie
+/// skutecnych vykonani, kde jich je dost (`candidates_with_history`). S prazdnou
+/// historii je vystup bajtove shodny s `plan_for_hypothesis`.
+pub fn plan_for_hypothesis_with_history(
+    hypothesis: &SecurityHypothesis,
+    scope: &crate::scope_policy::ScopePolicy,
+    history: &VerificationHistory,
+) -> Option<HypothesisVerificationPlan> {
     let (in_scope_assets, excluded_out_of_scope) = scope.partition(
         hypothesis.affected_assets.clone(),
         std::string::String::as_str,
@@ -210,7 +253,7 @@ pub fn plan_for_hypothesis(
     if in_scope_assets.is_empty() {
         return None;
     }
-    let candidates = candidates_for_hypothesis_type(&hypothesis.hypothesis_type);
+    let candidates = candidates_with_history(&hypothesis.hypothesis_type, history);
     let plan = plan_verification(hypothesis, candidates);
     Some(HypothesisVerificationPlan {
         hypothesis_type: hypothesis.hypothesis_type.clone(),
@@ -321,6 +364,98 @@ mod tests {
         let mut h = hypothesis(0.6);
         h.affected_assets = assets.iter().map(|ip| ip.to_string()).collect();
         h
+    }
+
+    fn sample(runtime_ms: u64, cost: f64, gain: f64) -> crate::case_history::ExecutionSample {
+        crate::case_history::ExecutionSample {
+            runtime_ms,
+            network_cost: cost,
+            information_gain: gain,
+        }
+    }
+
+    #[test]
+    fn empty_history_gives_byte_identical_catalog_for_every_known_type() {
+        let empty = VerificationHistory::default();
+        for kind in [
+            "identification_gap",
+            "correlation_uncertainty",
+            "management_surface_exposure",
+            "new_exposed_service",
+            "plaintext_management_protocol",
+            "http_basic_without_tls",
+            "insecure_auth_possible",
+            "high_risk_cve_exposure",
+            "known_exploited_vulnerability",
+            "probable_exploitation_interest",
+            "unknown",
+        ] {
+            assert_eq!(
+                serde_json::to_string(&candidates_with_history(kind, &empty)).unwrap(),
+                serde_json::to_string(&candidates_for_hypothesis_type(kind)).unwrap(),
+                "{kind}"
+            );
+        }
+        let h = hypothesis(0.7);
+        let scope = crate::scope_policy::ScopePolicy::new(vec!["10.0.0.0/8".parse().unwrap()]);
+        assert_eq!(
+            serde_json::to_string(&plan_for_hypothesis(&h, &scope)).unwrap(),
+            serde_json::to_string(&plan_for_hypothesis_with_history(&h, &scope, &empty)).unwrap()
+        );
+    }
+
+    #[test]
+    fn history_overrides_estimates_only_after_three_samples_and_keeps_safety_fields() {
+        let mut history = VerificationHistory::default();
+        history.record("nmap_targeted_followup", sample(1000, 0.5, 0.2));
+        history.record("nmap_targeted_followup", sample(3000, 0.5, 0.4));
+        let two = candidates_with_history("identification_gap", &history);
+        let nmap = two
+            .iter()
+            .find(|c| c.method == "nmap_targeted_followup")
+            .unwrap();
+        assert_eq!(nmap.estimated_runtime_ms, 20_000, "2 vzorky stale nestaci");
+
+        history.record("nmap_targeted_followup", sample(2000, 0.5, 0.3));
+        let three = candidates_with_history("identification_gap", &history);
+        let nmap = three
+            .iter()
+            .find(|c| c.method == "nmap_targeted_followup")
+            .unwrap();
+        assert_eq!(nmap.estimated_runtime_ms, 2000);
+        assert!((nmap.estimated_network_cost - 0.5).abs() < 1e-12);
+        assert!((nmap.estimated_information_gain - 0.3).abs() < 1e-12);
+        assert!(
+            (nmap.disruption_risk - 0.3).abs() < 1e-12,
+            "disruption z katalogu"
+        );
+        assert!(nmap.requires_approval, "approval gate z katalogu");
+        let baseline = three
+            .iter()
+            .find(|c| c.method == "passive_extended_observation")
+            .unwrap();
+        assert_eq!(baseline.estimated_information_gain, 0.2);
+    }
+
+    #[test]
+    fn history_changes_the_ranking_when_real_measurements_differ_from_guesses() {
+        let mut history = VerificationHistory::default();
+        for _ in 0..3 {
+            history.record("nmap_targeted_followup", sample(100, 0.0, 1.0));
+        }
+        let mut h = hypothesis(0.9);
+        h.hypothesis_type = "identification_gap".to_string();
+        let scope = crate::scope_policy::ScopePolicy::new(vec!["10.0.0.0/8".parse().unwrap()]);
+        let before = plan_for_hypothesis(&h, &scope).unwrap();
+        let after = plan_for_hypothesis_with_history(&h, &scope, &history).unwrap();
+        assert_eq!(
+            before.plan.chosen.unwrap().candidate.method,
+            "passive_extended_observation"
+        );
+        assert_eq!(
+            after.plan.chosen.unwrap().candidate.method,
+            "nmap_targeted_followup"
+        );
     }
 
     #[test]

@@ -25,19 +25,9 @@ pub fn build_validation_bundle(report: &RunReport) -> ValidationBundle {
     let internal_pentest_checks_total = internal_pentest_checks_total(report);
     let aggressive_pentest_checks_total = aggressive_pentest_checks_total(report);
     let web_targets_total = web_targets_total(report);
-    let plaintext = matching_findings(
-        report,
-        &["plaintext_management_protocol", "http_basic_without_tls"],
-    );
+    let plaintext = matching_findings(report, crate::finding_kinds::PLAINTEXT_LIKE);
     let traffic = matching_findings(report, crate::finding_kinds::TRAFFIC_LIKE);
-    let cve_findings = matching_findings(
-        report,
-        &[
-            "high_risk_cve_exposure",
-            "known_exploited_vulnerability",
-            "probable_exploitation_interest",
-        ],
-    );
+    let cve_findings = matching_findings(report, crate::finding_kinds::CVE_LIKE);
     let exposed_changes = report
         .diff
         .as_ref()

@@ -537,17 +537,16 @@ fn parse_osv_match(cve_id: &str, payload: OsvVulnerability) -> Option<IntelMatch
 
 fn collect_attack_context(report: &RunReport) -> Vec<IntelMatch> {
     let mut matches = Vec::new();
-    let has_plaintext = report.findings.iter().any(|finding| {
-        matches!(
-            finding.finding_type.as_str(),
-            "plaintext_management_protocol" | "http_basic_without_tls"
-        )
-    }) || report_event_types(report).any(|event_type| {
-        matches!(
-            event_type,
-            "plaintext_protocol" | "http_basic_without_tls" | "insecure_auth_possible"
-        )
-    });
+    let has_plaintext = report
+        .findings
+        .iter()
+        .any(|finding| crate::finding_kinds::is_plaintext_like(&finding.finding_type))
+        || report_event_types(report).any(|event_type| {
+            matches!(
+                event_type,
+                "plaintext_protocol" | "http_basic_without_tls" | "insecure_auth_possible"
+            )
+        });
     if has_plaintext {
         matches.push(attack_context_match(
             "T1040",

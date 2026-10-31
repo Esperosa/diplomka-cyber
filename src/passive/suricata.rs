@@ -16,6 +16,19 @@ pub fn parse_suricata(
     end: DateTime<Utc>,
 ) -> Result<Vec<NormalizedEvent>> {
     let content = fs::read_to_string(path)?;
+    parse_suricata_str(&content, &path.to_string_lossy(), scope, start, end)
+}
+
+/// Stejna logika nad textem (`label` nahrazuje cestu v logu/`raw_ref`) - pouziva ji
+/// i soak simulator, aby generovane alerty prochazely PRESNE produkcnim parserem
+/// (klasifikace signatur, scope a casove okno), ne paralelni kopii.
+pub(crate) fn parse_suricata_str(
+    content: &str,
+    label: &str,
+    scope: &[IpNet],
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+) -> Result<Vec<NormalizedEvent>> {
     let mut events = Vec::new();
     for (line_no, raw_line) in content.lines().enumerate() {
         let line = raw_line.trim();
@@ -27,7 +40,7 @@ pub fn parse_suricata(
             Err(error) => {
                 eprintln!(
                     "VAROVANI: {} radek {}: nelze naparsovat JSON ({error}), radek se vynecha",
-                    path.display(),
+                    label,
                     line_no + 1
                 );
                 continue;
@@ -47,7 +60,7 @@ pub fn parse_suricata(
             Err(error) => {
                 eprintln!(
                     "VAROVANI: {} radek {}: {error}, radek se vynecha",
-                    path.display(),
+                    label,
                     line_no + 1
                 );
                 continue;
@@ -88,7 +101,7 @@ pub fn parse_suricata(
             source: "suricata".to_string(),
             rule_id: Some(signature_id.to_string()),
             message: signature.to_string(),
-            raw_ref: Some(path.to_string_lossy().to_string()),
+            raw_ref: Some(label.to_string()),
             count: 1,
         });
     }

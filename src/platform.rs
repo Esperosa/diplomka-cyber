@@ -67,6 +67,7 @@ impl Role {
                 "enforcement.write",
                 "enforcement.approve",
                 "audit.read",
+                "findings.write",
             ],
             Self::Analyst => &[
                 "runs.read",
@@ -79,6 +80,7 @@ impl Role {
                 "enforcement.read",
                 "enforcement.write",
                 "audit.read",
+                "findings.write",
             ],
             Self::Viewer => &[
                 "runs.read",

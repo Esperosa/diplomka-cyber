@@ -25,6 +25,7 @@ pub(crate) use anomaly::score_connection_keys;
 #[allow(unused_imports)]
 pub(crate) use anomaly::score_source_hosts;
 pub(crate) use detector::{ConnectionDetector, LegacyAnomalyDetector};
+pub(crate) use suricata::parse_suricata_str;
 pub(crate) use zeek::parse_zeek_log;
 pub use zeek::{ZeekParseResult, parse_zeek_dir};
 
