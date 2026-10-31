@@ -55,6 +55,48 @@ button {
   outline-offset: 0.2rem;
 }
 
+/* Vlastni posuvniky: tenke, zaoblene, v barvach tematu; jednotne pro vsechny posuvne plochy.
+   Chromium a Safari kresli ::-webkit-scrollbar (cesta ma hover i active), Firefox bere scrollbar-*.
+   scrollbar-width/color se nastavuje jen ve Firefoxu, jinak by v Chromiu (od v121) pseudoprvky vypnulo. */
+* {
+  --sb: 0.7rem;
+}
+*::-webkit-scrollbar {
+  width: var(--sb);
+  height: var(--sb);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 0.7rem;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--thumb);
+  border: 0.2rem solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+  min-height: 2.2rem;
+  min-width: 2.2rem;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--thumb-hover);
+  background-clip: padding-box;
+  border-width: 0.14rem;
+}
+*::-webkit-scrollbar-thumb:active {
+  background: var(--ink);
+  background-clip: padding-box;
+  border-width: 0.1rem;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+@supports (-moz-appearance: none) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--thumb) transparent;
+  }
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -130,6 +172,7 @@ h4 {
   height: 100%;
   width: auto;
   fill: currentColor;
+  shape-rendering: geometricPrecision;
 }
 .dm .off {
   opacity: 0.1;

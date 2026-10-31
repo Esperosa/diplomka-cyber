@@ -73,6 +73,9 @@
   --line-2: rgba(14, 14, 13, 0.4);
   --signal: #d71921;
   --signal-ink: #b3121a;
+  --thumb: rgba(14, 14, 13, 0.3);
+  --thumb-hover: rgba(14, 14, 13, 0.55);
+  --dock-filter: url(#dock-glass-light);
   --on-signal: #ffffff;
 
   --mono: "Sedmdvacet Mono", "Cascadia Mono", Consolas, monospace;
@@ -83,7 +86,18 @@
   --on-hot: var(--on-signal);
   --chain: #dcdad2;
   --chain-2: #bdbbb2;
-  --ease: cubic-bezier(0.2, 0, 0, 1);
+  /* Pohybovy system: jedna sada dob a kfivek pro cele UI. Animuje se jen transform, opacity a clip-path
+     (vyjimka: sirka sloupce asistenta, kde si to autor vyzadal). */
+  --dur-fast: 0.16s;
+  --dur-base: 0.28s;
+  --dur-slow: 0.44s;
+  --dur-page: 0.54s;
+  --stagger: 0.05s;
+  --ease-soft: cubic-bezier(0.3, 0.7, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.35, 0.5, 1); /* jen drobne ovladaci prvky: navrat po stisku */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease: var(--ease-out);
   --pitch: 4rem;
 
   --fs-xs: 0.72rem;
@@ -114,6 +128,9 @@
     --line-2: rgba(236, 235, 229, 0.4);
     --signal: #e5262e;
     --signal-ink: #ff6a70;
+    --thumb: rgba(236, 235, 229, 0.28);
+    --thumb-hover: rgba(236, 235, 229, 0.55);
+    --dock-filter: url(#dock-glass-dark);
     --chain: #262624;
     --chain-2: #3a3a37;
   }
@@ -131,4 +148,22 @@
   --line-2: rgba(236, 235, 229, 0.4);
   --signal: #e5262e;
   --signal-ink: #ff6a70;
+  --thumb: rgba(236, 235, 229, 0.28);
+  --thumb-hover: rgba(236, 235, 229, 0.55);
+  --dock-filter: url(#dock-glass-dark);
+}
+
+:root[data-theme="light"] {
+  --thumb: rgba(14, 14, 13, 0.3);
+  --thumb-hover: rgba(14, 14, 13, 0.55);
+  --dock-filter: url(#dock-glass-light);
+}
+
+@property --as-col {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+:root {
+  --as-w: clamp(22rem, 30vw, 28rem);
 }

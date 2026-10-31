@@ -1,14 +1,21 @@
 /* Kostra: horni lista, dok, hlavni plocha, asistent. Bez stránkového scrollu. */
 .shell {
+  --as-col: 0px;
   height: 100dvh;
   display: grid;
-  grid-template-columns: 9.6rem minmax(0, 1fr);
+  grid-template-columns: 10.6rem minmax(0, 1fr) var(--as-col);
   grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
-    "bar bar"
-    "dock err"
-    "dock stage";
+    "bar bar bar"
+    "dock err as"
+    "dock stage as";
   overflow: hidden;
+  /* zavirani: plocha se roztahuje o chlup rychleji a bez dojezdu */
+  transition: --as-col var(--dur-base) var(--ease-inout);
+}
+.assistant-open .shell {
+  --as-col: calc(var(--as-w) + 1rem);
+  transition: --as-col var(--dur-slow) var(--ease-out);
 }
 
 .bar {
@@ -29,7 +36,7 @@
 }
 
 .spacer {
-  flex: 1;
+  display: none;
 }
 
 .run-pick select {
@@ -144,82 +151,267 @@
   color: var(--ink-2);
 }
 
-/* Dok: vlevo retez spojenych bublin ("goo"), vpravo popisky. Bubliny kresli samostatna vrstva pod odkazy. */
+/* Informacni pas: kde jsem (rozsah, profil, cas behu, pocty, server, autopilot, token) */
+/* Pas je soucasti horni listy: na siroke obrazovce lezi v jednom radku mezi nazvem a tlacitky.
+   Pilulky se razeni podle dulezitosti; co se nevejde, prelomi se do skryteho druheho radku
+   a plny vypis je vzdy v nabidce "vse". */
+.infoband {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0.4rem 0 0.2rem;
+}
+.info-pills {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  height: 1.75rem;
+  overflow: hidden;
+  align-content: flex-start;
+}
+.ipill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 1.75rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 1.1rem 0.95rem 1.15rem 0.9rem;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.ipill:nth-child(even) {
+  border-radius: 0.95rem 1.15rem 0.9rem 1.1rem;
+}
+.ipill-k {
+  color: var(--ink-2);
+}
+.ipill-v {
+  max-width: 15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink);
+}
+.ipill[data-info="server"]::before,
+.ipill[data-info="auto"]::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--ink);
+  flex: none;
+}
+.ipill.is-hot {
+  border-color: var(--signal);
+}
+.ipill.is-hot .ipill-v {
+  color: var(--signal-ink);
+}
+.ipill.is-hot[data-info="server"]::before {
+  background: var(--signal);
+}
+.info-more {
+  flex: none;
+}
+.info-sum {
+  min-height: var(--tap);
+  min-width: var(--tap);
+  margin: -0.5rem 0;
+  display: grid;
+  place-items: center;
+  padding: 0 0.1rem;
+  cursor: pointer;
+}
+.ipill-more {
+  gap: 0.3rem;
+  padding: 0 0.7rem;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.info-sum:hover .ipill-more,
+.info-more[open] .ipill-more {
+  background: var(--surface-2);
+}
+.ipill-dots {
+  width: 0.9rem;
+  height: 0.3rem;
+  background: radial-gradient(circle, var(--ink-2) 0.12rem, transparent 0.13rem) 0 0 / 0.3rem 0.3rem repeat-x;
+}
+.info-pop {
+  z-index: 46;
+  min-width: 17rem;
+  gap: 0;
+  padding: 0.7rem 1rem;
+}
+.info-pop dl {
+  margin: 0;
+}
+.irow {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+.irow:last-child {
+  border-bottom: 0;
+}
+.irow dt {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  padding-top: 0.1rem;
+}
+.irow dd {
+  margin: 0;
+  text-align: right;
+}
+.irow.is-hot dd {
+  color: var(--signal-ink);
+}
+
+/* Dok: retez bublin z tekuteho skla. Vrstva .dock-goo kresli tvary (bubliny, mosty, aktivni kapku),
+   SVG filtr z nich udela souvisle sklo; text, odznak a "perla" aktivni polozky lezi nad sklem.
+   Polozky se rovnomerne rozlozi do cele vysky (flex 1): na nizkych oknech se zhusti, na vysokych roztahnou. */
 .dock {
   grid-area: dock;
   position: relative;
+  padding: 0.3rem 0.5rem 0.7rem 0.6rem;
+  overflow: hidden; /* dok se vzdy vejde: vsechno se pocita z dostupne vysky, nikdy se neposouva */
+  container-type: size;
+  --pitch: calc(100cqh / var(--n, 7));
+  --bead: clamp(1.45rem, calc(var(--pitch) * 0.56), 2.9rem);
+  --blob: calc(var(--bead) * 1.3);
+  --core: calc(var(--bead) * 1.02);
+  --col: clamp(2.5rem, calc(var(--pitch) * 0.92), 3.7rem);
+}
+@container (max-height: 25rem) {
+  .dock-label {
+    display: none;
+  }
+  .dock-item {
+    gap: 0;
+  }
+}
+.dock-track {
+  position: relative;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  padding: 0.5rem 0.4rem 1rem 0.6rem;
-  overflow-y: auto;
-  scrollbar-width: none;
 }
 .dock-goo {
   position: absolute;
-  left: 0.6rem;
-  width: 3.4rem;
-  top: 0.5rem;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--col);
   display: flex;
   flex-direction: column;
-  filter: url(#goo);
+  filter: var(--dock-filter);
   pointer-events: none;
+  z-index: 0;
 }
 .dock-goo i {
   position: relative;
   display: block;
-  height: var(--pitch);
+  flex: 1 1 0;
 }
 .dock-goo i::before {
   content: "";
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 2.3rem;
-  height: 2.3rem;
-  margin: -1.15rem 0 0 -1.15rem;
+  width: var(--bead);
+  height: var(--bead);
+  margin: calc(var(--bead) / -2) 0 0 calc(var(--bead) / -2);
   border-radius: 50%;
-  background: var(--line);
-  transition: width 0.32s var(--ease), height 0.32s var(--ease), margin 0.32s var(--ease), background 0.2s;
+  background: #000;
 }
-.dock-goo i:not(:last-child)::after {
+.dock-goo i:nth-last-child(n + 4)::after {
   content: "";
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 0.6rem;
+  width: calc(var(--bead) * 0.3);
   height: 100%;
-  margin-left: -0.3rem;
-  background: var(--line);
+  margin-left: calc(var(--bead) * -0.15);
+  background: #000;
 }
-.dock-goo i.on::before {
-  width: 3.2rem;
-  height: 3.2rem;
-  margin: -1.6rem 0 0 -1.6rem;
+/* Aktivni kapka je vetsi nez bubliny a prelevá se mezi polozkami; "stopa" ji o chvili pozdeji
+   dohani, takze se pri pohybu tekute natahuje a zase stahuje. Animuje se jen transform. */
+.dock-blob,
+.dock-core {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--col);
+  height: calc(100% / var(--n));
+  display: grid;
+  place-items: center;
+  transform: translate3d(0, calc(var(--i, 0) * 100%), 0);
+  transition: transform var(--dur-slow) var(--ease-out);
+  will-change: transform;
+}
+.dock-blob::before {
+  content: "";
+  width: var(--blob);
+  height: var(--blob);
+  border-radius: 50%;
+  background: #000;
+}
+.dock-trail {
+  transition-duration: calc(var(--dur-slow) * 1.75);
+}
+.dock-trail::before {
+  width: calc(var(--bead) * 0.95);
+  height: calc(var(--bead) * 0.95);
+}
+.dock-core {
+  z-index: 1;
+  pointer-events: none;
+}
+.dock-core::before {
+  content: "";
+  width: var(--core);
+  height: var(--core);
+  border-radius: 50%;
   background: var(--ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 0.15rem 0.5rem rgba(0, 0, 0, 0.25);
 }
 .dock-item {
   position: relative;
-  height: var(--pitch);
-  flex: none;
+  z-index: 2;
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 0.9rem;
+  gap: 0.6rem;
   color: var(--ink);
   text-decoration: none;
+  border-radius: var(--r-pill); /* tvar je stale stejny, aby obrys fokusu sedel od prvniho snimku */
 }
 .dock-disc {
   position: relative;
   flex: none;
-  width: 3.4rem;
-  height: 3.4rem;
+  width: var(--col);
+  height: 100%;
   display: grid;
   place-items: center;
   font-family: var(--mono);
   font-size: var(--fs-xs);
   font-weight: 500;
   letter-spacing: 0.02em;
+  transition: color var(--dur-base) var(--ease-out) var(--stagger);
 }
 .dock-abbr {
   display: block;
@@ -231,6 +423,7 @@
   font-size: var(--fs-sm);
   color: var(--ink-2);
   white-space: nowrap;
+  transition: color var(--dur-base) var(--ease-out);
 }
 .dock-item.is-active .dock-label {
   color: var(--ink);
@@ -239,13 +432,18 @@
 .dock-item:hover .dock-label {
   color: var(--ink);
 }
+.dock-item:focus-visible {
+  outline-offset: -0.1rem;
+}
+/* Odznak lezi nad sklem a ma cisty okraj v barve pozadi, takze za bublinou nikdy nemizi. */
 .badge {
   position: absolute;
-  top: -0.2rem;
-  right: -0.35rem;
-  min-width: 1.15rem;
-  height: 1.15rem;
-  padding: 0 0.25rem;
+  z-index: 3;
+  top: calc(50% - var(--core) * 0.5 - 0.2rem);
+  left: calc(50% + var(--core) * 0.2);
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 0.28rem;
   border-radius: var(--r-pill);
   background: var(--signal);
   color: var(--on-signal);
@@ -254,6 +452,7 @@
   font-weight: 600;
   display: grid;
   place-items: center;
+  box-shadow: 0 0 0 0.16rem var(--bg), 0 0.12rem 0.4rem rgba(0, 0, 0, 0.3);
 }
 
 .errorbar {
@@ -313,24 +512,69 @@
   position: relative; /* drzi absolutne umistene prvky (sr-only) uvnitr posuvne plochy */
   overflow: auto;
   min-height: 0;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-2) transparent;
 }
 
-/* Asistent */
+/* Asistent je treti sloupec obrazovky: sloupec se plynule rozevre (--as-col na .shell, viz vyse),
+   hlavni plocha se zuzi a karta chatu se zhmotni z mista tlacitka (clip-path + posun zprava).
+   Karta ma pevnou sirku, takze se text pri animaci nepreskupuje. --c-* nastavuje assistant.ts. */
 .assistant {
-  position: fixed;
-  z-index: 40;
-  right: 0.75rem;
-  top: 4.4rem; /* pod horni listou: tlacitka Asistent a Vice zustavaji dostupna */
-  bottom: 0.75rem;
-  width: min(27rem, calc(100vw - 1.5rem));
+  grid-area: as;
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+.assistant-card {
+  position: absolute;
+  top: 0;
+  right: 1rem;
+  bottom: 1rem;
+  width: var(--as-w);
   display: flex;
   flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--line-2);
   border-radius: var(--r-pane);
   overflow: hidden;
+  visibility: hidden;
+  opacity: 0;
+  transform: translate3d(2rem, 0, 0);
+  clip-path: inset(var(--c-t, 0) var(--c-r, 0) var(--c-b, 100%) var(--c-l, 100%) round 50%);
+  transition:
+    clip-path var(--dur-base) var(--ease-inout),
+    transform var(--dur-base) var(--ease-inout),
+    opacity var(--dur-fast) linear var(--dur-fast),
+    visibility 0s linear var(--dur-base);
+}
+.assistant.is-open .assistant-card {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  clip-path: inset(0 0 0 0 round 0%);
+  transition:
+    clip-path var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out),
+    opacity var(--dur-fast) linear,
+    visibility 0s;
+}
+.assistant-card > * {
+  opacity: 0;
+  transition: opacity var(--dur-fast) linear;
+}
+.assistant.is-open .assistant-card > * {
+  opacity: 1;
+  transition: opacity var(--dur-base) linear calc(var(--dur-fast) + var(--stagger));
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-card,
+  .assistant.is-open .assistant-card,
+  .assistant-card > * {
+    transition: none !important;
+    clip-path: none;
+    transform: none;
+  }
+  .shell {
+    transition: none !important;
+  }
 }
 .assistant-head {
   display: flex;
@@ -418,39 +662,77 @@
   margin-top: 1rem;
 }
 
-/* ---- Uzsi obrazovky: dok dolu ---- */
+/* ---- Uzsi obrazovky: dok dolu, asistent pres celou obrazovku zprava ---- */
 @media (max-width: 64.06rem) {
   .shell {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto minmax(0, 1fr) auto;
     grid-template-areas: "bar" "err" "stage" "dock";
+    --as-col: 0px !important;
   }
   .bar {
+    flex-wrap: wrap;
+    row-gap: 0.3rem;
     padding: 0.6rem 0.9rem 0.4rem;
     gap: 0.5rem;
+  }
+  .infoband {
+    order: 20;
+    flex: 1 0 100%;
+    margin: 0;
   }
   .status-text {
     display: none;
   }
+  .run-pick {
+    flex: 1;
+    min-width: 0;
+  }
+  .run-pick select {
+    width: 100%;
+    max-width: none;
+  }
   .dock {
-    flex-direction: row;
-    justify-content: space-between;
-    gap: 0;
+    container-type: normal;
     padding: 0.2rem 0.5rem calc(0.4rem + env(safe-area-inset-bottom));
     overflow-x: auto;
     overflow-y: hidden;
   }
+  .dock-track {
+    height: auto;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  .dock-goo,
+  .dock-core {
+    display: none;
+  }
   .dock-item {
-    width: auto;
     flex: 1 0 3.3rem;
+    height: auto;
+    flex-direction: column;
+    gap: 0.15rem;
     padding: 0.2rem 0;
+  }
+  .dock-label {
+    display: block;
+    font-size: var(--fs-xs);
   }
   .dock-disc {
     width: 2.6rem;
     height: 2.6rem;
+    border: 1px solid var(--line-2);
+    border-radius: 50%;
+    transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out);
   }
-  .dock-label {
-    font-size: var(--fs-xs);
+  .dock-item.is-active .dock-disc {
+    background: var(--ink);
+    border-color: var(--ink);
+  }
+  .badge {
+    top: -0.25rem;
+    left: auto;
+    right: -0.3rem;
   }
   .stage {
     margin: 0 0.5rem 0.4rem;
@@ -465,58 +747,42 @@
   .wordmark {
     margin-right: 0;
   }
-  .run-pick {
-    flex: 1;
-    min-width: 0;
+  .info-pop {
+    right: -0.4rem;
+    max-width: calc(100vw - 1.5rem);
   }
-  .run-pick select {
-    width: 100%;
-    max-width: none;
+  /* asistent: panel pres celou obrazovku, vyjede zprava */
+  .assistant {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    pointer-events: none;
   }
-  .spacer {
-    display: none;
+  .assistant.is-open {
+    pointer-events: auto;
   }
-}
-
-@media (max-width: 64.06rem) {
-  .dock {
-    padding: 0.2rem 0.5rem calc(0.4rem + env(safe-area-inset-bottom));
+  .assistant-card {
+    inset: 0;
+    width: auto;
+    border: 0;
+    border-radius: 0;
+    transform: translate3d(100%, 0, 0);
   }
-  .dock-goo {
-    display: none;
-  }
-  .dock-item {
-    height: auto;
-    flex-direction: column;
-    gap: 0.15rem;
-  }
-  .dock-disc {
-    width: 2.6rem;
-    height: 2.6rem;
-    border: 1px solid var(--line-2);
-    border-radius: 50%;
-  }
-  .dock-item.is-active .dock-disc {
-    background: var(--ink);
-    border-color: var(--ink);
-  }
-  .dock-label {
-    font-size: var(--fs-xs);
+  .assistant.is-open .assistant-card {
+    transform: none;
   }
 }
 
-/* Telefon: horni lista ve dvou radcich, vyber behu dostane celou sirku */
+/* Telefon: vyber behu dostane celou sirku */
 @media (max-width: 40rem) {
-  .bar {
-    flex-wrap: wrap;
-    row-gap: 0.4rem;
-  }
-  .spacer {
-    display: block;
-  }
   .run-pick {
     order: 9;
     flex: 1 0 100%;
+  }
+  .spacer {
+    display: block;
+    flex: 1;
   }
   .pane-tools {
     width: 100%;

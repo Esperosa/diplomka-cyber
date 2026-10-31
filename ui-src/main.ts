@@ -1,5 +1,8 @@
 import { api, getToken, setAuthHandler, setToken } from "./api";
-import { renderLog, sendPrompt, setAssistantOpen, shellHtml } from "./assistant";
+import { renderLog, sendPrompt, setAssistantOpen, shellHtml, watchAssistantLayout } from "./assistant";
+import { FILTER_DEFS } from "./filters";
+import { infoBandHtml } from "./infoband";
+import { afterStageRender, initRipple } from "./motion";
 import { refreshAll, refreshAudit, refreshEnforcement } from "./data";
 import { tokenDialog } from "./dialogs";
 import { parseHash, navigate } from "./router";
@@ -37,13 +40,14 @@ function effectiveDark() {
 // ---------- kostra ----------
 function renderShell() {
   app.innerHTML = `
-  <svg class="goo-defs" aria-hidden="true" focusable="false"><defs><filter id="goo" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8" result="goo"/><feBlend in="SourceGraphic" in2="goo"/></filter></defs></svg>
+  ${FILTER_DEFS}
   <a class="skip" href="#stage">Přeskočit na obsah</a>
   <div class="shell">
     <header class="bar">
       <span class="wordmark">Skákavka</span>
       <label class="run-pick"><span class="sr-only">Běh</span><select id="runSelect" aria-label="Běh"></select></label>
       <span class="status" id="status" role="status"><span class="pulse" data-state="idle"></span><span class="status-text"></span></span>
+      <section class="infoband" id="infoband" aria-label="Kde jsem"></section>
       <span class="spacer"></span>
       <button type="button" class="btn btn-ghost" data-global="assistant-toggle" aria-controls="assistant" aria-expanded="false">Asistent</button>
       <details class="menu" id="moreMenu">
@@ -72,16 +76,11 @@ function currentView(): View {
 }
 
 function renderChrome() {
-  // dok
-  const dock = app.querySelector<HTMLElement>("#dock")!;
-  const pending = state.enforcement ? state.enforcement.actions.filter((a) => a.status === "proposed").length : 0;
-  const goo = `<div class="dock-goo" aria-hidden="true">${VIEWS.map((view) => `<i${view.id === state.section ? ' class="on"' : ""}></i>`).join("")}</div>`;
-  dock.innerHTML = goo + VIEWS.map((view) => {
-    const active = view.id === state.section;
-    const badge = view.id === "zasahy" && pending > 0 ? `<span class="badge" aria-label="${pending} čeká na schválení">${pending}</span>` : "";
-    return `<a class="dock-item${active ? " is-active" : ""}" href="#/${view.id}" data-nav="${view.id}" ${active ? 'aria-current="page"' : ""} aria-label="${esc(view.label)}">
-      <span class="dock-disc">${dockGlyph(view.abbr)}${badge}</span><span class="dock-label">${esc(view.label)}</span></a>`;
-  }).join("");
+  renderDock();
+  const infoband = app.querySelector<HTMLElement>("#infoband")!;
+  const infoOpen = infoband.querySelector<HTMLDetailsElement>("details")?.open ?? false;
+  infoband.innerHTML = infoBandHtml();
+  if (infoOpen) infoband.querySelector("details")?.setAttribute("open", "");
 
   // vyber behu
   const select = app.querySelector<HTMLSelectElement>("#runSelect")!;
@@ -116,9 +115,39 @@ function renderChrome() {
   tokenBtn.textContent = getToken() ? "Změnit token" : "Zadat token";
 }
 
-function dockGlyph(abbr: string): string {
-  // Dvoupismenna zkratka v bublině doku; plny nazev je v aria-label a popisku.
-  return `<span class="dock-abbr" aria-hidden="true">${esc(abbr)}</span>`;
+// Dok se vytvori jednou a pak se jen upravuje: tekute prelevani aktivni bubliny potrebuje stejne
+// DOM prvky mezi vykreslenimi (kdyby se prepsal innerHTML, animace by se ztratila).
+function renderDock() {
+  const dock = app.querySelector<HTMLElement>("#dock")!;
+  const pending = state.enforcement ? state.enforcement.actions.filter((a) => a.status === "proposed").length : 0;
+  let track = dock.querySelector<HTMLElement>(".dock-track");
+  if (!track) {
+    dock.innerHTML = `<div class="dock-track" style="--n:${VIEWS.length}">
+      <div class="dock-goo" aria-hidden="true">${VIEWS.map(() => "<i></i>").join("")}<span class="dock-blob"></span><span class="dock-blob dock-trail"></span></div>
+      <span class="dock-core" aria-hidden="true"></span>
+      ${VIEWS.map(
+        (view) => `<a class="dock-item" href="#/${view.id}" data-nav="${view.id}" aria-label="${esc(view.label)}" title="${esc(view.label)}">
+          <span class="dock-disc"><span class="dock-abbr" aria-hidden="true">${esc(view.abbr)}</span></span><span class="dock-label">${esc(view.label)}</span></a>`,
+      ).join("")}
+    </div>`;
+    track = dock.querySelector<HTMLElement>(".dock-track")!;
+  }
+  const index = Math.max(0, VIEWS.findIndex((view) => view.id === state.section));
+  track.style.setProperty("--i", String(index));
+  track.querySelectorAll<HTMLAnchorElement>(".dock-item").forEach((item, i) => {
+    const active = i === index;
+    item.classList.toggle("is-active", active);
+    if (active) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
+    const disc = item.querySelector<HTMLElement>(".dock-disc")!;
+    const badge = disc.querySelector<HTMLElement>(".badge");
+    if (VIEWS[i].id === "zasahy" && pending > 0) {
+      if (badge) {
+        badge.textContent = String(pending);
+        badge.setAttribute("aria-label", `${pending} čeká na schválení`);
+      } else disc.insertAdjacentHTML("beforeend", `<span class="badge" aria-label="${pending} čeká na schválení">${pending}</span>`);
+    } else badge?.remove();
+  });
 }
 
 function focusSignature(el: Element | null): string | null {
@@ -152,6 +181,7 @@ function renderStage() {
     }
   }
   currentView().after?.();
+  afterStageRender(stage, state.section);
 }
 
 function isEditing() {
@@ -190,8 +220,50 @@ function applyRoute(focusStage: boolean) {
   }
   if (section === "zasahy" && previous !== "zasahy") void refreshEnforcement();
   document.title = `${currentView().label} · Skákavka`;
-  renderAll();
-  if (focusStage && previous !== section) stage.focus({ preventScroll: true });
+  const changed = previous !== section;
+  const commit = () => {
+    renderAll();
+    if (focusStage && changed) stage.focus({ preventScroll: true });
+  };
+  if (!changed || !shellReady) {
+    commit();
+    return;
+  }
+  transitionSections(Math.sign(indexOf(section) - indexOf(previous)) >= 0 ? "down" : "up", commit);
+}
+
+// ---------- prechody mezi plochami ----------
+// Dolu v doku = nova plocha prijede zespodu, nahoru = shora. View Transitions API; kde chybi,
+// stejny pohyb zajisti CSS trida na .stage. Bez animace pri prefers-reduced-motion.
+let shellReady = false;
+let transitionEpoch = 0;
+function indexOf(id: SectionId) {
+  return VIEWS.findIndex((view) => view.id === id);
+}
+function transitionSections(direction: "down" | "up", commit: () => void) {
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduced) {
+    commit();
+    return;
+  }
+  const root = document.documentElement;
+  root.dataset.vt = direction;
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };
+  if (doc.startViewTransition) {
+    const t = doc.startViewTransition(commit);
+    void t.finished.catch(() => undefined).finally(() => {
+      if (root.dataset.vt === direction) delete root.dataset.vt;
+    });
+    return;
+  }
+  commit();
+  const epoch = ++transitionEpoch;
+  stage.classList.remove("enter-down", "enter-up");
+  void stage.offsetWidth;
+  stage.classList.add(direction === "down" ? "enter-down" : "enter-up");
+  window.setTimeout(() => {
+    if (epoch === transitionEpoch) stage.classList.remove("enter-down", "enter-up");
+  }, 520);
 }
 
 async function switchRun(runId: string) {
@@ -237,7 +309,8 @@ function closeMenus() {
 app.addEventListener("click", (event) => {
   const target = event.target as HTMLElement;
   const globalEl = target.closest<HTMLElement>("[data-global]");
-  if (!target.closest("details.menu")) closeMenus();
+  const insideMenu = target.closest("details.menu");
+  app.querySelectorAll<HTMLDetailsElement>("details.menu[open]").forEach((menu) => menu !== insideMenu && menu.removeAttribute("open"));
   if (globalEl) {
     if (globalEl.classList.contains("menu-item")) closeMenus();
     void runGlobal(globalEl);
@@ -261,7 +334,7 @@ app.addEventListener("keydown", (event) => {
     if (menu) {
       menu.removeAttribute("open");
       menu.querySelector<HTMLElement>("summary")?.focus();
-    } else if (state.assistantOpen) setAssistantOpen(false);
+    } else if (state.assistantOpen) setAssistantOpen(false, true);
   }
 });
 
@@ -311,13 +384,10 @@ async function runGlobal(el: HTMLElement) {
       applyTheme();
       break;
     case "assistant-toggle":
-      setAssistantOpen(!state.assistantOpen);
-      app.querySelector("[data-global='assistant-toggle']")?.setAttribute("aria-expanded", String(state.assistantOpen));
+      setAssistantOpen(!state.assistantOpen, true);
       break;
     case "assistant-close":
-      setAssistantOpen(false);
-      app.querySelector("[data-global='assistant-toggle']")?.setAttribute("aria-expanded", "false");
-      (app.querySelector("[data-global='assistant-toggle']") as HTMLElement | null)?.focus();
+      setAssistantOpen(false, true);
       break;
     case "retry":
       await refreshAll(false);
@@ -354,6 +424,12 @@ async function runGlobal(el: HTMLElement) {
     }
   }
 }
+
+// Posledni vstup (mys vs. klavesnice) rozhoduje, jestli se ukaze fokusovy prstenec.
+document.addEventListener("pointerdown", () => (document.documentElement.dataset.input = "pointer"), true);
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") document.documentElement.dataset.input = "key";
+}, true);
 
 window.addEventListener("hashchange", () => applyRoute(true));
 
@@ -409,7 +485,10 @@ async function init() {
   });
 
   renderShell();
+  initRipple(app, () => stage);
+  watchAssistantLayout();
   applyRoute(false);
+  shellReady = true;
   const { section, param } = parseHash(window.location.hash);
   if (param && section === "hostitele") state.selectedHost = param;
   await refreshAll(false);

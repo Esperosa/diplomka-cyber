@@ -1,5 +1,6 @@
-// Vlastni 5x7 tecko-maticovy displej. Zadne pismo z cizich zdroju: kazdy znak je
-// sedm radku po peti bitech, vykresleny jako SVG kruhy (barva z currentColor).
+// Vlastni 5x7 bodove pismo. Zadne pismo z cizich zdroju: kazdy znak je sedm radku po peti
+// bitech. Sousedni body se tekute spoji do tucnych, souvislych, zaoblenych tahu s ostrymi hranami
+// a barvou z currentColor (bez rasterovych filtru).
 
 const GLYPHS: Record<string, string[]> = {
   "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
@@ -62,25 +63,44 @@ export type DotOptions = {
   offDots?: boolean;
 };
 
-/** Vraci SVG retezec. Velikost se ridi CSS (vyska prvku), ne atributy. */
+/**
+ * Vraci SVG retezec. Velikost se ridi CSS (vyska prvku), ne atributy. Hodnota je v aria-label.
+ *
+ * Goo bez filtru: kazdy bod je kruh a sousedni body (i diagonalne) spojuje tucna ocka se zaoblenymi
+ * konci. Vysledek je jedna souvisla zaoblena silueta s ostrymi hranami, ktera je pri kazdem zvetseni,
+ * scrollu i zmene velikosti stejna (zadny rasterovy filtr, ktery by mohl blikat nebo se rozsypat).
+ */
 export function dotMatrix(text: string, options: DotOptions = {}): string {
   const clean = normalizeForMatrix(String(text));
   const chars = [...clean];
   const cols = Math.max(1, chars.length * 6 - 1);
   const rows = 7;
-  const dots: string[] = [];
+  const pad = 0.4;
+  const beads: string[] = [];
+  const links: string[] = [];
+  const offs: string[] = [];
   chars.forEach((char, index) => {
     const glyph = GLYPHS[char] ?? GLYPHS["?"];
+    const on = (x: number, y: number) => glyph[y]?.[x] === "1";
     glyph.forEach((line, y) => {
       [...line].forEach((bit, x) => {
         const cx = index * 6 + x + 0.5;
         const cy = y + 0.5;
-        if (bit === "1") dots.push(`<circle cx="${cx}" cy="${cy}" r="0.4"/>`);
-        else if (options.offDots) dots.push(`<circle class="off" cx="${cx}" cy="${cy}" r="0.4"/>`);
+        if (bit !== "1") {
+          if (options.offDots) offs.push(`<circle class="off" cx="${cx}" cy="${cy}" r="0.2"/>`);
+          return;
+        }
+        beads.push(`<circle cx="${cx}" cy="${cy}" r="0.62"/>`);
+        // spoj k sousedum vpravo, dolu a po obou diagonalach dolu (kazda dvojice jednou)
+        for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [-1, 1]] as const) {
+          if (on(x + dx, y + dy)) links.push(`M${cx} ${cy}L${cx + dx} ${cy + dy}`);
+        }
       });
     });
   });
-  return `<svg class="dm" viewBox="0 0 ${cols} ${rows}" role="img" aria-label="${escapeAttr(String(text))}" focusable="false">${dots.join("")}</svg>`;
+  const off = offs.length ? `<g>${offs.join("")}</g>` : "";
+  const body = `<g>${beads.join("")}</g><path d="${links.join("")}" fill="none" stroke="currentColor" stroke-width="1.04" stroke-linecap="round"/>`;
+  return `<svg class="dm" viewBox="${-pad} ${-pad} ${cols + 2 * pad} ${rows + 2 * pad}" role="img" aria-label="${escapeAttr(String(text))}" focusable="false">${off}${body}</svg>`;
 }
 
 function escapeAttr(value: string) {

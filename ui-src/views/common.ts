@@ -1,4 +1,5 @@
 import { state } from "../state";
+import { dotMatrix } from "../dotmatrix";
 import { esc } from "../ui";
 
 export function paneHead(title: string, tools = ""): string {
@@ -10,7 +11,10 @@ export function emptyState(title: string, text: string, action = ""): string {
 }
 
 export function readout(value: string | number, label: string, tone: "" | "hot" = "", small = false): string {
-  return `<div class="readout${tone ? ` is-${tone}` : ""}${small ? " is-small" : ""}"><div class="readout-num">${esc(String(value))}</div><div class="readout-label">${esc(label)}</div></div>`;
+  // Cisla se cte jako tucne bodove pismo (goo); text a dlouhe hodnoty zustavaji klasickym pismem.
+  const text = String(value);
+  const dots = !small && /^[0-9.:%/-]{1,6}$/.test(text);
+  return `<div class="readout${tone ? ` is-${tone}` : ""}${small ? " is-small" : ""}"><div class="readout-num${dots ? " is-dots" : ""}">${dots ? dotMatrix(text) : esc(text)}</div><div class="readout-label">${esc(label)}</div></div>`;
 }
 
 export function backButton(label = "Zpět na seznam"): string {

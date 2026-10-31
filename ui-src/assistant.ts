@@ -15,6 +15,7 @@ const SECTION_TO_PANEL: Record<string, string> = {
 
 export function shellHtml(): string {
   return `<aside id="assistant" class="assistant" role="complementary" aria-label="Asistent" hidden>
+    <div class="assistant-card">
     <header class="assistant-head">
       <h2>Asistent</h2>
       <button type="button" class="btn btn-ghost" data-global="assistant-close" aria-label="Zavřít asistenta">Zavřít</button>
@@ -25,6 +26,7 @@ export function shellHtml(): string {
       <textarea id="chatInput" rows="2" placeholder="Zeptej se na nález, stanici nebo další krok" required></textarea>
       <button type="submit" class="btn">Odeslat</button>
     </form>
+    </div>
   </aside>`;
 }
 
@@ -54,16 +56,88 @@ export function renderLog() {
   log.scrollTop = log.scrollHeight;
 }
 
-export function setAssistantOpen(open: boolean) {
+const CLOSE_MS = 360;
+let closeTimer = 0;
+
+function reducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * Spocita bod, ze ktereho se karta chatu "zhmotni" (stred tlacitka Asistent), vuci jejimu KONECNEMU
+ * umisteni (sloupec se v tu chvili jeste roztahuje). Jedno cteni layoutu, pak jen zapis promennych.
+ */
+function placeAssistant() {
+  const panel = document.getElementById("assistant");
+  const card = panel?.querySelector<HTMLElement>(".assistant-card");
+  if (!panel || !card) return;
+  const phone = window.matchMedia("(max-width: 64.06rem)").matches;
+  const btn = document.querySelector<HTMLElement>("[data-global='assistant-toggle']")?.getBoundingClientRect();
+  const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  let left: number, top: number, width: number, height: number;
+  if (phone) {
+    left = 0;
+    top = 0;
+    width = window.innerWidth;
+    height = window.innerHeight;
+  } else {
+    const dock = document.getElementById("dock")?.getBoundingClientRect();
+    const asW = parseFloat(getComputedStyle(card).getPropertyValue("--as-w")) || 0;
+    const w = asW || Math.min(Math.max(window.innerWidth * 0.3, 22 * rootPx), 28 * rootPx);
+    width = card.offsetWidth || w;
+    width = Math.min(Math.max(width, w), w);
+    left = window.innerWidth - rootPx - width;
+    top = dock?.top ?? 0;
+    height = (dock?.height ?? window.innerHeight) - rootPx;
+  }
+  const clamp = (v: number, max: number) => Math.min(Math.max(v, 0), max);
+  const ox = btn ? clamp(btn.left + btn.width / 2 - left, width) : width;
+  const oy = btn ? clamp(btn.top + btn.height / 2 - top, height) : 0;
+  card.style.setProperty("--c-t", `${oy.toFixed(0)}px`);
+  card.style.setProperty("--c-l", `${ox.toFixed(0)}px`);
+  card.style.setProperty("--c-r", `${(width - ox).toFixed(0)}px`);
+  card.style.setProperty("--c-b", `${(height - oy).toFixed(0)}px`);
+}
+
+export function watchAssistantLayout() {
+  if (typeof ResizeObserver === "undefined") return;
+  const observer = new ResizeObserver(() => {
+    if (state.assistantOpen) placeAssistant();
+  });
+  for (const sel of [".bar", "#errorbar"]) {
+    const el = document.querySelector(sel);
+    if (el) observer.observe(el);
+  }
+  window.addEventListener("resize", () => state.assistantOpen && placeAssistant());
+}
+
+/**
+ * Otevre/zavre asistenta. Okno se zhmotni z tlacitka (clip-path + posun, bez odskoku), po otevreni
+ * dostane fokus pole zpravy, po zavreni se fokus vrati na tlacitko. Bez animace u prefers-reduced-motion.
+ */
+export function setAssistantOpen(open: boolean, returnFocus = false) {
   update({ assistantOpen: open }, false);
   const panel = document.getElementById("assistant");
   if (!panel) return;
-  panel.hidden = !open;
+  const toggle = document.querySelector<HTMLElement>("[data-global='assistant-toggle']");
+  toggle?.setAttribute("aria-expanded", String(open));
+  window.clearTimeout(closeTimer);
   document.body.classList.toggle("assistant-open", open);
   if (open) {
+    panel.hidden = false;
     renderLog();
-    document.getElementById("chatInput")?.focus();
+    placeAssistant(); // vynuti vypocet vychoziho (zavreneho) stavu, aby prechod mel odkud startovat
+    panel.classList.add("is-open");
+    panel.removeAttribute("inert");
+    document.getElementById("chatInput")?.focus({ preventScroll: true });
+    return;
   }
+  placeAssistant();
+  panel.classList.remove("is-open");
+  panel.setAttribute("inert", "");
+  if (returnFocus) toggle?.focus({ preventScroll: true });
+  if (reducedMotion()) panel.hidden = true;
+  else closeTimer = window.setTimeout(() => (panel.hidden = true), CLOSE_MS);
 }
 
 export async function sendPrompt(prompt: string) {

@@ -176,6 +176,10 @@ function showcaseReport(id, nazev, minutesAgo) {
   ];
   r.summary.hosts_total = hosts.length;
   r.summary.services_total = hosts.reduce((n, h) => n + h.services.length, 0);
+  r.summary.events_total = 1284;
+  r.summary.realtime_sources_total = 3;
+  r.summary.wireless_clients_total = 14;
+  r.summary.topology_edges_total = 37;
   return r;
 }
 

@@ -1,0 +1,335 @@
+/* Pohybovy system: vsechny prechody pouzivaji tokeny z tokens.css (--dur-*, --ease-*, --stagger).
+   Animuje se transform, opacity a clip-path; vyjimka je sloupec asistenta (--as-col). */
+
+/* ---- Prechod mezi plochami: klidne prelevani ----
+   Stara plocha se zklidni (ztlumi a jemne rozostri), nova se tekute rozevre z "membrany" s mekce
+   zaoblenymi okraji, ktera se pomalu narovna; obsah vstupuje po vrstvach se zpozdenim.
+   Jedna krivka s dlouhym dozvukem, bez odskoku, bez dvou plne viditelnych ploch pres sebe. */
+.stage {
+  view-transition-name: stage;
+}
+.dock {
+  view-transition-name: dock; /* dok zije dal: jeho kapka se behem prechodu dokonci */
+}
+::view-transition-group(root),
+::view-transition-group(dock) {
+  animation: none;
+}
+::view-transition-old(root),
+::view-transition-old(dock) {
+  display: none;
+}
+::view-transition-new(root),
+::view-transition-new(dock) {
+  animation: none;
+}
+::view-transition-group(stage) {
+  animation-duration: 0s;
+}
+::view-transition-old(stage),
+::view-transition-new(stage) {
+  mix-blend-mode: normal;
+  animation-duration: var(--dur-page);
+  animation-fill-mode: both;
+}
+::view-transition-old(stage) {
+  animation-name: vt-calm-out;
+  animation-timing-function: var(--ease-soft);
+}
+::view-transition-new(stage) {
+  animation-name: vt-melt-in;
+  animation-timing-function: var(--ease-soft);
+}
+html[data-vt="up"]::view-transition-new(stage) {
+  animation-name: vt-melt-in-up;
+}
+@keyframes vt-calm-out {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  42%,
+  100% {
+    opacity: 0;
+    filter: blur(5px);
+  }
+}
+@keyframes vt-melt-in {
+  0% {
+    opacity: 0;
+    clip-path: inset(7% 3.5% 0 3.5% round 5.5rem 7rem 4rem 6rem / 6rem 4rem 7rem 5rem);
+    transform: translate3d(0, 1.6rem, 0);
+  }
+  30% {
+    opacity: 0;
+  }
+  62% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 2.6rem 3.8rem 2.2rem 3.1rem / 2.8rem 2.2rem 3.6rem 2.5rem);
+    transform: none;
+  }
+}
+@keyframes vt-melt-in-up {
+  0% {
+    opacity: 0;
+    clip-path: inset(0 3.5% 7% 3.5% round 4rem 6rem 5.5rem 7rem / 7rem 5rem 4rem 6rem);
+    transform: translate3d(0, -1.6rem, 0);
+  }
+  30% {
+    opacity: 0;
+  }
+  62% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 2.6rem 3.8rem 2.2rem 3.1rem / 2.8rem 2.2rem 3.6rem 2.5rem);
+    transform: none;
+  }
+}
+/* obsah noveho panelu vstupuje po vrstvach */
+@keyframes layer-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.9rem, 0);
+    filter: blur(3px);
+  }
+}
+html[data-vt] .stage > *,
+.stage.enter-down > *,
+.stage.enter-up > * {
+  animation: layer-in var(--dur-slow) var(--ease-soft) both;
+  animation-delay: calc(var(--dur-fast) + var(--stagger) * var(--layer, 0));
+}
+html[data-vt] .stage > :nth-child(2),
+.stage.enter-down > :nth-child(2),
+.stage.enter-up > :nth-child(2) {
+  --layer: 1;
+}
+html[data-vt] .stage > :nth-child(3),
+.stage.enter-down > :nth-child(3),
+.stage.enter-up > :nth-child(3) {
+  --layer: 2;
+}
+html[data-vt] .stage > :nth-child(n + 4),
+.stage.enter-down > :nth-child(n + 4),
+.stage.enter-up > :nth-child(n + 4) {
+  --layer: 3;
+}
+.stage.enter-down {
+  animation: vt-melt-in var(--dur-page) var(--ease-soft) both;
+}
+.stage.enter-up {
+  animation: vt-melt-in-up var(--dur-page) var(--ease-soft) both;
+}
+
+/* ---- Dialogy, toast, rozbalovani ---- */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.6rem, 0) scale(0.97);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+/* dialog a toast se zhmotni z kapky: kruhovy vyrez se rozevre ze stredu a jemne se zvetsi */
+@keyframes drop-in {
+  from {
+    clip-path: circle(0% at 50% 42%);
+    opacity: 0.4;
+    transform: scale(0.94);
+  }
+  to {
+    clip-path: circle(120% at 50% 50%);
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes toast-drop {
+  from {
+    clip-path: circle(0% at 50% 80%);
+    opacity: 0.4;
+    translate: 0 0.6rem;
+  }
+  to {
+    clip-path: circle(140% at 50% 50%);
+    opacity: 1;
+  }
+}
+.modal[open] {
+  animation: drop-in var(--dur-slow) var(--ease-soft) both;
+}
+.modal[open]::backdrop {
+  animation: fade-in var(--dur-base) linear;
+}
+.toast:not([hidden]) {
+  animation: toast-drop var(--dur-slow) var(--ease-soft) both;
+}
+.menu[open] > .menu-pop {
+  animation: pop-in var(--dur-fast) var(--ease-out);
+  transform-origin: top right;
+}
+@supports (interpolate-size: allow-keywords) {
+  :root {
+    interpolate-size: allow-keywords;
+  }
+  details:not(.menu)::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition:
+      block-size var(--dur-base) var(--ease-out),
+      content-visibility var(--dur-base) allow-discrete;
+  }
+  details:not(.menu)[open]::details-content {
+    block-size: auto;
+  }
+}
+
+/* ---- Fokus a stavy: tvar se nikdy nemeni, obrys sleduje border-radius prvku ---- */
+a,
+button,
+summary,
+select,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+/* Mysi/dotykovy vstup neukazuje fokusovy prstenec (programove obnoveny fokus po prekresleni
+   by jinak zablikal obrysem); klavesnice ho ukazuje vzdy. */
+html[data-input="pointer"] :focus-visible:not(input):not(textarea):not(select) {
+  outline-color: transparent;
+}
+
+/* ---- Jednotny jazyk ovladacich prvku: mekke vyboulení, tekute stlaceni, vlna od mista kliknuti ---- */
+.btn,
+.seg,
+.map-btn,
+.menu-item,
+.row,
+.run-pick select {
+  position: relative;
+  transform: translateZ(0) scale(1);
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+.btn,
+.seg,
+.map-btn,
+.menu-item,
+.row {
+  overflow: hidden; /* vlna zustava ve tvaru prvku (radius se dedi) */
+}
+@media (hover: hover) {
+  .btn:hover:not(:disabled),
+  .map-btn:hover:not(:disabled),
+  .run-pick select:hover:not(:disabled) {
+    transform: translateZ(0) scale(1.03);
+    transition-timing-function: var(--ease-out);
+  }
+  .seg:hover:not(:disabled):not(.is-on),
+  .menu-item:hover {
+    transform: translateZ(0) scale(1.02);
+    transition-timing-function: var(--ease-out);
+  }
+}
+.btn:active:not(:disabled),
+.seg:active:not(:disabled),
+.map-btn:active:not(:disabled),
+.menu-item:active {
+  transform: translateZ(0) scale(0.965, 0.925);
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-out);
+}
+.row:active {
+  transform: translateZ(0) scale(0.992, 0.97);
+  transition-duration: var(--dur-fast);
+}
+
+/* vlna: vyplni tvar prvku od mista kliknuti (--rx/--ry nastavuje main.ts) */
+.rip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--rip, color-mix(in srgb, currentColor 18%, transparent));
+  animation: ripple var(--dur-page) var(--ease-soft) both;
+}
+.row.rip {
+  --rip: color-mix(in srgb, var(--ink) 14%, transparent);
+}
+.row.is-selected.rip {
+  --rip: color-mix(in srgb, var(--bg) 20%, transparent);
+}
+@keyframes ripple {
+  from {
+    clip-path: circle(0 at var(--rx, 50%) var(--ry, 50%));
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  to {
+    clip-path: circle(150% at var(--rx, 50%) var(--ry, 50%));
+    opacity: 0;
+  }
+}
+
+/* segmentovy prepinac: aktivni "bublina" se prelevá mezi volbami (viz enhanceSegments v main.ts) */
+.segmented {
+  position: relative;
+}
+.seg-bubble {
+  position: absolute;
+  z-index: 0;
+  left: 0;
+  top: 0;
+  background: var(--ink);
+  border-radius: var(--r-pill);
+  pointer-events: none;
+  transform-origin: 0 50%;
+}
+.segmented.has-bubble .seg {
+  position: relative;
+  z-index: 1;
+}
+.segmented.has-bubble .seg.is-on {
+  background: transparent;
+  color: var(--bg);
+}
+
+/* pole a vyber: mekky naskok okraje */
+select,
+input,
+textarea {
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .seg,
+  .map-btn,
+  .menu-item,
+  .row,
+  .run-pick select {
+    transform: none !important;
+  }
+  .rip::after,
+  .seg-bubble {
+    display: none;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

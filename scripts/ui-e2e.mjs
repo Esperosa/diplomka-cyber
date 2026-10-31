@@ -194,20 +194,82 @@ try {
   await test("Asistent: otevre se, odpoved se streamuje, Esc zavre", async () => {
     const { page, context } = await open(base);
     await page.click('[data-global="assistant-toggle"]');
+    await page.waitForFunction(() => document.getElementById("assistant")?.getBoundingClientRect().width > 100, null, { timeout: 3000 }).catch(() => {});
     assert(await page.locator("#assistant").isVisible(), "asistent se neotevrel");
     await page.fill("#chatInput", "Co mam overit jako prvni?");
     await page.keyboard.press("Tab");
     await page.click('#chatForm button[type="submit"]');
     await page.waitForFunction(() => /nejdřív ověř službu/.test(document.querySelector("#chatLog")?.textContent ?? ""));
     await page.keyboard.press("Escape");
+    // zavreni je animovane (~0,4 s): okno zmizi az po dokonceni prechodu
+    await page.waitForFunction(() => document.getElementById("assistant")?.hidden === true, null, { timeout: 3000 });
     assert(!(await page.locator("#assistant").isVisible()), "Esc asistenta nezavrel");
+    assert(await page.evaluate(() => document.activeElement?.getAttribute("data-global") === "assistant-toggle"), "fokus se po zavreni nevratil na tlacitko Asistent");
+    await context.close();
+  });
+
+  await test("Asistent: po otevreni ma fokus pole zpravy, aria-expanded sedi, na telefonu je pres celou obrazovku", async () => {
+    const { page, context } = await open(base);
+    await page.click('[data-global="assistant-toggle"]');
+    assert(await page.evaluate(() => document.activeElement?.id === "chatInput"), "fokus neni v poli zpravy");
+    assert((await page.getAttribute('[data-global="assistant-toggle"]', "aria-expanded")) === "true", "aria-expanded neni true");
+    await page.waitForTimeout(600);
+    const box = await page.evaluate(() => { const r = document.getElementById("assistant").getBoundingClientRect(); const b = document.querySelector(".bar").getBoundingClientRect(); const i = document.getElementById("infoband").getBoundingClientRect(); return { top: r.top, barBottom: b.bottom, infoBottom: i.bottom }; });
+    assert(box.top >= box.barBottom - 1, `asistent zasahuje do listy/pasu (${JSON.stringify(box)})`);
+    await page.click('[data-global="assistant-close"]');
+    await page.waitForFunction(() => document.getElementById("assistant")?.hidden === true, null, { timeout: 3000 });
+    await context.close();
+    const phone = await open(base, { width: 390, height: 844 });
+    await phone.page.click('[data-global="assistant-toggle"]');
+    await phone.page.waitForTimeout(600);
+    const full = await phone.page.evaluate(() => { const r = document.getElementById("assistant").getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
+    assert(full[0] === 390 && full[1] === 844, `na telefonu neni pres celou obrazovku: ${full}`);
+    await phone.context.close();
+  });
+
+  await test("Horni lista: informacni pas ma jen skutecna data a plny vypis v rozbalovaci nabidce", async () => {
+    const { page, context } = await open(base);
+    const text = (await page.locator("#infoband").textContent()) ?? "";
+    assert(/rozsah/.test(text) && /profil/.test(text) && /před \d+ (min|h|dny)|před okamžikem/.test(text), `chybi rozsah/profil/cas: ${text}`);
+    assert(/server/.test(text) && /autopilot/.test(text) && /API/.test(text), "chybi server/autopilot/token");
+    assert(!/Mbit|rychlost|latence/i.test(text), "pas ukazuje nepodlozene hodnoty");
+    await page.click("#infoMenu summary");
+    const rows = await page.locator("#infoMenu .irow").count();
+    assert(rows >= 8, `plny vypis ma jen ${rows} radku`);
+    await context.close();
+  });
+
+  await test("Dok: bubliny vyplnuji vysku, polozky se neprekryvaji, aktivni kapka sedi na aktivni polozce", async () => {
+    for (const height of [480, 600, 700, 900, 1200]) {
+      const { page, context } = await open(base, { width: 1440, height });
+      await page.waitForTimeout(700);
+      const m = await page.evaluate(() => {
+        const items = [...document.querySelectorAll(".dock-item")].map((e) => e.getBoundingClientRect());
+        const dockEl = document.getElementById("dock"); const dock = dockEl.getBoundingClientRect(); const overflow = dockEl.scrollHeight - dockEl.clientHeight;
+        const core = document.querySelector(".dock-core").getBoundingClientRect();
+        const active = document.querySelector(".dock-item.is-active").getBoundingClientRect();
+        return { tops: items.map((r) => r.top), bottoms: items.map((r) => r.bottom), dockBottom: dock.bottom, overflow, coreY: core.top + core.height / 2, activeY: active.top + active.height / 2, h: items[0].height };
+      });
+      for (let i = 1; i < m.tops.length; i++) assert(m.tops[i] >= m.bottoms[i - 1] - 0.5, `${height}: polozky se prekryvaji`);
+      assert(m.overflow <= 1, `${height}: dok se musi posouvat (preteka o ${m.overflow} px)`);
+      assert(m.h >= 44, `${height}: polozka ma jen ${m.h} px`);
+      assert(Math.abs(m.coreY - m.activeY) < 2, `${height}: aktivni kapka nesedi na polozce`);
+      if (height >= 900) assert(m.dockBottom - m.bottoms[m.bottoms.length - 1] < 40, `${height}: dole zustava prazdne misto`);
+      await context.close();
+    }
+  });
+
+  await test("Cisla: velka cisla jsou bodove pismo s aria-label a spojenymi body", async () => {
+    const { page, context } = await open(base);
+    const info = await page.evaluate(() => { const svg = document.querySelector(".readout-num .dm"); return { label: svg?.getAttribute("aria-label"), links: Boolean(svg?.querySelector("path[d^='M']")), circles: svg?.querySelectorAll("circle").length }; });
+    assert(info.label && /^\d+$/.test(info.label) && info.links && info.circles > 3, `bodove cislo je spatne: ${JSON.stringify(info)}`);
     await context.close();
   });
 
   await test("Tmavy/svetly rezim: prepinac nastavi data-theme a respektuje system", async () => {
     const dark = await open(base, undefined, { colorScheme: "dark" });
     const bgDark = await dark.page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    await dark.page.click("details.menu > summary");
+    await dark.page.click("#moreMenu > summary");
     await dark.page.click('[data-global="theme"]');
     const attr = await dark.page.evaluate(() => document.documentElement.dataset.theme);
     const bgLight = await dark.page.evaluate(() => getComputedStyle(document.body).backgroundColor);
