@@ -5,18 +5,16 @@
   "type": "module",
   "scripts": {
     "build:ui": "node scripts/build-ui.mjs",
-    "test:ui": "node scripts/ui-smoke.mjs",
-    "test:ui-helpdesk": "node scripts/ui-helpdesk-check.mjs"
-  },
-  "dependencies": {
-    "lucide": "^0.539.0"
+    "typecheck:ui": "tsc -p tsconfig.ui.json",
+    "test:ui": "node scripts/ui-smoke.mjs && node scripts/ui-e2e.mjs",
+    "shots:ui": "node scripts/ui-shots.mjs",
+    "mock:ui": "node scripts/mock-server.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
     "esbuild": "^0.25.9",
     "jsdom": "^27.0.0",
     "playwright-core": "^1.59.1",
-    "tailwindcss": "^3.4.17",
     "typescript": "^5.9.2"
   }
 }

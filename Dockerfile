@@ -12,7 +12,7 @@
 
 FROM node:22-slim AS ui-builder
 WORKDIR /src
-COPY package.json package-lock.json tsconfig.ui.json tailwind.config.cjs ./
+COPY package.json package-lock.json tsconfig.ui.json ./
 COPY scripts ./scripts
 COPY ui-src ./ui-src
 RUN npm ci

@@ -415,7 +415,7 @@ fn server_vraci_api_a_ui() {
         .expect("ui request")
         .text()
         .expect("ui text");
-    assert!(html.contains("Bezpecnostni prehled site"));
+    assert!(html.contains("<title>Bakula</title>"));
     assert!(html.contains("id=\"app\""));
     assert!(html.contains("/styles.css?v="));
     assert!(html.contains("/app.js?v="));

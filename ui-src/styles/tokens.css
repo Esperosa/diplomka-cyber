@@ -1,0 +1,55 @@
+/* Tokeny. Jedna signalni cervena, jinak teple sede. Svetly i tmavy rezim jsou plnohodnotne. */
+:root {
+  color-scheme: light dark;
+
+  --bg: #efeee9;
+  --surface: #f8f7f3;
+  --surface-2: #e6e4dd;
+  --ink: #0e0e0d;
+  --ink-2: #55544e;
+  --line: rgba(14, 14, 13, 0.16);
+  --line-2: rgba(14, 14, 13, 0.4);
+  --signal: #d71921;
+  --signal-ink: #b3121a;
+  --on-signal: #ffffff;
+
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, Menlo, "Liberation Mono", monospace;
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+
+  --fs-xs: 0.72rem;
+  --fs-sm: 0.82rem;
+  --fs-md: 0.95rem;
+  --fs-lg: 1.25rem;
+
+  --tap: 2.75rem;
+  /* Organicke, zamerne nesymetricke rohy hlavni plochy. */
+  --r-pane: 2.6rem 3.8rem 2.2rem 3.1rem / 2.8rem 2.2rem 3.6rem 2.5rem;
+  --r-soft: 1.4rem;
+  --r-pill: 999px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0b0a;
+    --surface: #131312;
+    --surface-2: #1d1d1b;
+    --ink: #ecebe5;
+    --ink-2: #a7a69f;
+    --line: rgba(236, 235, 229, 0.16);
+    --line-2: rgba(236, 235, 229, 0.4);
+    --signal: #e5262e;
+    --signal-ink: #ff6a70;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0b0b0a;
+  --surface: #131312;
+  --surface-2: #1d1d1b;
+  --ink: #ecebe5;
+  --ink-2: #a7a69f;
+  --line: rgba(236, 235, 229, 0.16);
+  --line-2: rgba(236, 235, 229, 0.4);
+  --signal: #e5262e;
+  --signal-ink: #ff6a70;
+}
