@@ -40,5 +40,6 @@ Důvod „snippet“ = viděn jen výtah vyhledávače; „nedostupné“ = pln�
 | 34 | arXiv 2602.11019 (CERT r4.2) | – | vyloučeno | uživatelské audit logy, ne síť |
 | 35 | Maiolini et al. 2010 (judicial workspace) | – | vyloučeno | irelevantní |
 | 36 | Baywatch (Hu 2016) čísla výkonu | TPR/FPR | V2 | jen abstrakt; plný text nedostupný (řádek RQ4-015) |
+| 37 | Lee, Lee, An SSH predictive model using machine learning with web proxy session logs (Int. J. Inf. Secur. 2021, doi:10.1007/s10207-021-00555-6): původní RQ4-033 (Tab. 9: recall 70,52 %, FPR 5,18 %, 23 serverů) a RQ4-034 (Tab. 10: DARPA99, recall 100 %, precision 19,7 %, FPR 1,1 %) | SSH přes proxy, base-rate lekce | V2 | Springer closed access; nezávislá kontrola 2026-10-31 získala jen abstrakt; hodnoty z Tab. 9 a 10 nelze ověřit, přesunuto z extrakce při revizi; nesmí podporovat žádný závěr |
 
-Celkem 36 položek (V1/V0 33, vyloučeno 3), V2: Baywatch.
+Celkem 37 položek (V1/V0 33, vyloučeno 3, V2 z abstraktu 1 (Lee a Lee); Baywatch (#36) je V2 a zůstává v extrakci jako RQ4-015).

@@ -678,7 +678,7 @@ pub fn plan_episode(
                     .into_iter()
                     .map(|d| d as u32)
                     .filter(|d| model.devices[*d as usize].up)
-                    .collect()
+                    .collect::<Vec<u32>>()
             }
             Family::DnsTunnel => vec![model.dns],
             Family::CredentialStuffing | Family::WebExploit => vec![*rng.pick(&webs)],
@@ -725,6 +725,18 @@ pub fn plan_episode(
                 v
             }
             _ => Vec::new(),
+        };
+        // vsechny vybrane cile mohly byt vypnute: radsi jeden bezici nez prazdny seznam
+        let victim_devices = if victim_devices.is_empty()
+            && matches!(
+                family,
+                Family::PortScanHorizontal | Family::SlowScan | Family::Lateral
+            )
+            && !internal.is_empty()
+        {
+            vec![*rng.pick(&internal)]
+        } else {
+            victim_devices
         };
         let target_external = matches!(
             family,
@@ -1332,6 +1344,9 @@ fn emit_truth(
         }
         Kind::Attack(Family::PortScanHorizontal) => {
             let Some(src) = &attacker_ip else { return };
+            if truth.victim_devices.is_empty() {
+                return;
+            }
             let port = *rng.pick(&[22u16, 445, 3389, 23, 80, 443]);
             for &victim in &truth.victim_devices {
                 if rng.chance(0.3 + truth.intensity * 0.7) {
@@ -1373,6 +1388,9 @@ fn emit_truth(
         }
         Kind::Attack(Family::SlowScan) => {
             let Some(src) = &attacker_ip else { return };
+            if truth.victim_devices.is_empty() {
+                return;
+            }
             let victim =
                 truth.victim_devices[rng.range(0, truth.victim_devices.len() as u64 - 1) as usize];
             for _ in 0..rng.range(1, 3) {

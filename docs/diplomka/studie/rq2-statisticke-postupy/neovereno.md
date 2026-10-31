@@ -47,3 +47,7 @@ Tyto položky se **nesmějí** použít v závěrech. Důvod uvádí poslední s
 
 - Youssef, CALIBURN (arXiv 2605.24696 v1), arXiv 2510.09619 v2 a arXiv 2605.24696 v3 (RQ2-034 až 037): autor sám v pozdějších verzích uvádí, že popis skóre neodpovídá kódu a hodnocené proudy jsou sestavené konstrukce. Číselné výsledky v1 (RQ2-034, 035) nejsou důkaz; v závěrech jen Z11 s jistotou velmi nízká.
 - Beach & Modaff (RQ2-020): studentská zpráva bez metrik.
+
+## Revize po nezávislé kontrole (2026-10-31)
+
+Žádný řádek nebyl z extrakce přesunut: u všech 53 řádků byla hodnota nebo citace dohledána ve zdroji (kontrola 37 řádků, revize zbylých 16). Nepodložené, ale ponechané závěry: Z5b („ladění na štítcích je nutné“, extrapolace) a Z1b (jednoduchý práh srovnatelný, nízká jistota, jediné měření 021). Podrobnosti v `revize-RQ2.md`.

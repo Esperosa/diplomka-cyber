@@ -160,6 +160,30 @@ fn key_ips(truth: &Truth, ips: &[String], rogue: &Option<(String, String)>) -> V
     keys.into_iter().collect()
 }
 
+/// Presny vyskyt IPv4 adresy v textu: "10.0.0.1" nesmi sedet v "10.0.0.15" ani v "110.0.0.1".
+fn mentions_ip(text: &str, ip: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut start = 0;
+    while let Some(found) = text[start..].find(ip) {
+        let at = start + found;
+        let end = at + ip.len();
+        let before_ok = at == 0 || {
+            let prev = bytes[at - 1];
+            !(prev.is_ascii_digit() || (prev == b'.' && at >= 2 && bytes[at - 2].is_ascii_digit()))
+        };
+        let after_ok = end >= bytes.len() || {
+            let next = bytes[end];
+            !(next.is_ascii_digit()
+                || (next == b'.' && end + 1 < bytes.len() && bytes[end + 1].is_ascii_digit()))
+        };
+        if before_ok && after_ok {
+            return true;
+        }
+        start = at + 1;
+    }
+    false
+}
+
 fn finding_mentions(finding: &Finding, keys: &[String]) -> bool {
     if let Some(host) = &finding.host_key {
         if keys.iter().any(|k| k == host) {
@@ -167,9 +191,9 @@ fn finding_mentions(finding: &Finding, keys: &[String]) -> bool {
         }
     }
     keys.iter().any(|k| {
-        finding.title.contains(k.as_str())
-            || finding.rationale.contains(k.as_str())
-            || finding.evidence.iter().any(|e| e.contains(k.as_str()))
+        mentions_ip(&finding.title, k)
+            || mentions_ip(&finding.rationale, k)
+            || finding.evidence.iter().any(|e| mentions_ip(e, k))
     })
 }
 
@@ -713,7 +737,7 @@ fn run_episode_inner(
                     if let Kind::Benign(look) = truth.kind {
                         if look.window_scoped()
                             && cycle >= truth.start_cycle
-                            && cycle <= truth.end_cycle + ATTRIBUTION_LATENCY
+                            && cycle <= truth.end_cycle
                         {
                             attributed = true;
                             *attributed_to_lookalike.entry(index).or_default() += 1;
@@ -1261,6 +1285,74 @@ mod tests {
             "{:?}",
             result.agg.violation_samples
         );
+    }
+
+    /// Rucni profil: `cargo test --release --lib profile_big -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn profile_big_networks_per_stage() {
+        for want in [
+            Archetype::Enterprise,
+            Archetype::Metro,
+            Archetype::Hospital,
+            Archetype::Cloud,
+        ] {
+            let id = (0..4000)
+                .find(|id| NetworkModel::generate(20260131, *id).archetype == want)
+                .unwrap();
+            let model = NetworkModel::generate(20260131, id);
+            let started = Instant::now();
+            let result = run_episode(&EpisodeConfig {
+                hours: 24,
+                ..cfg(id)
+            });
+            let secs = started.elapsed().as_secs_f64();
+            println!(
+                "{:?} id={id} devices={} subnets={} 24h/48 cykl: {:.1} s ({:.0} ms/cyklus)",
+                want,
+                model.devices.len(),
+                model.prefixes.len(),
+                secs,
+                secs * 1000.0 / 48.0
+            );
+            for (stage, hist) in &result.agg.perf {
+                println!(
+                    "    {stage:<22} prumer {:.1} ms  p95 {:.1} ms",
+                    hist.mean() * 1000.0,
+                    hist.percentile(0.95) * 1000.0
+                );
+            }
+        }
+    }
+
+    /// Regrese: site, ktere ve v2 spadly na prazdnem seznamu obet (soak seed 20261031).
+    #[test]
+    #[ignore]
+    fn regression_empty_victim_networks_do_not_panic() {
+        for id in [114u64, 264, 486] {
+            let result = std::panic::catch_unwind(|| {
+                run_episode(&EpisodeConfig {
+                    run_seed: 20261031,
+                    network_id: id,
+                    hours: 0,
+                    scratch: std::env::temp_dir().join(format!("bakula-soak-regr-{id}")),
+                })
+            });
+            assert!(result.is_ok(), "sit {id} spadla");
+            assert!(result.unwrap().agg.invariant_violations.is_empty());
+        }
+    }
+
+    #[test]
+    fn ip_matching_is_exact_not_substring() {
+        assert!(mentions_ip("host 10.0.0.1 je pomaly", "10.0.0.1"));
+        assert!(mentions_ip("10.0.0.1.", "10.0.0.1"));
+        assert!(mentions_ip("a=10.0.0.1/tcp/22", "10.0.0.1"));
+        assert!(!mentions_ip("host 10.0.0.15", "10.0.0.1"));
+        assert!(!mentions_ip("host 110.0.0.1", "10.0.0.1"));
+        assert!(!mentions_ip("1.10.0.0.1", "10.0.0.1"));
+        assert!(!mentions_ip("10.0.0.1.5", "10.0.0.1"));
+        assert!(mentions_ip("10.0.0.15 a pak 10.0.0.1", "10.0.0.1"));
     }
 
     #[test]

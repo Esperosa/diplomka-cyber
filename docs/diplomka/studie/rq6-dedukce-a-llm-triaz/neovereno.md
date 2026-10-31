@@ -44,3 +44,13 @@ Nic z tohoto seznamu se nepoužívá v Závěrech studie. Čísla uvedená níž
 | NeuralTrust blog (říjen 2026) | agent se shell nástroji spustil kód z cloudových logů u 6 z 8 modelů; Azure Prompt Shield zachytil 1 z 32 payloadů v logu; Sygnia: injekce v PowerShellu přiměla MDR souhrn popsat Mimikatz jako údržbu | agregace, nic z toho nebylo ověřeno v primárních zdrojích |
 | Semgrep: AppSec AI, 96% shoda s výzkumníky | záměrně minimalizují FN, triáž je konzervativnější než experti | blog výrobce |
 | Orca Security 2022, ESG 2023 (citováno v CORTEX) | 40–45 % alertů v podnicích jsou FP | průzkumy, ne měření |
+
+## Neověřená tvrzení o publikačním místě (doplněno při revizi 2026-10-31)
+
+Hodnoty z těchto řádků zůstávají v extrakci (ověřeny z plného textu), ale tvrzení o venue se nepodařilo potvrdit a bylo z extrakce odstraněno. Nic z toho se nepoužívá v Závěrech.
+
+| řádek | původní tvrzení | stav |
+|---|---|---|
+| RQ6-001 | zkrácená verze NeurIPS 2026 WS Agents in the Wild, recenzovaná WS verze | v PDF arXiv:2610.10608 neuvedeno, venue nelze potvrdit (vedeno jako arXiv preprint) |
+| RQ6-009 | workshop | v PDF arXiv:2604.25846 neuvedeno (vedeno jako arXiv preprint) |
+| RQ6-034 | KDD WS / VizSec | v PDF arXiv:2107.02783 neuvedeno, VizSec se v textu objevuje jen v odkazech na literaturu (vedeno jako arXiv preprint) |
