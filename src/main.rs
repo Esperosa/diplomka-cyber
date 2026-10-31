@@ -8,7 +8,7 @@ use std::{
 };
 
 use bakula_program::{
-    ai, automation, broker, config, evaluation, external_sql,
+    ai, automation, broker, config, evaluation,
     model::{AppConfig, RunReport},
     pipeline::{
         BehArgs, promote_autopilot_args, promote_monitor_args, resolve_simulation_profile,
@@ -55,8 +55,6 @@ enum Command {
     Platform(PlatformCommand),
     #[command(subcommand)]
     Broker(BrokerCommand),
-    #[command(subcommand)]
-    ExternalSql(ExternalSqlCommand),
     #[command(subcommand)]
     Demo(DemoCommand),
 }
@@ -254,20 +252,6 @@ enum BrokerCommand {
 }
 
 #[derive(Subcommand, Debug)]
-enum ExternalSqlCommand {
-    Init(ExternalSqlInitArgs),
-    #[command(subcommand)]
-    User(ExternalSqlUserCommand),
-    #[command(subcommand)]
-    Token(ExternalSqlTokenCommand),
-    #[command(subcommand)]
-    Ha(ExternalSqlHaCommand),
-    #[command(subcommand)]
-    Job(ExternalSqlJobCommand),
-    Status(ExternalSqlDbArgs),
-}
-
-#[derive(Subcommand, Debug)]
 enum PlatformCommand {
     Init(PlatformInitArgs),
     #[command(subcommand)]
@@ -457,98 +441,6 @@ struct BrokerWorkerArgs {
     /// Viz `BrokerPublishArgs::stream_key`.
     #[arg(long, default_value = "bakula.jobs")]
     stream_key: String,
-}
-
-#[derive(Args, Debug)]
-struct ExternalSqlInitArgs {
-    #[arg(long)]
-    db_uri: String,
-}
-
-#[derive(Subcommand, Debug)]
-enum ExternalSqlUserCommand {
-    Add(ExternalSqlUserAddArgs),
-    List(ExternalSqlDbArgs),
-}
-
-#[derive(Args, Debug)]
-struct ExternalSqlUserAddArgs {
-    #[arg(long)]
-    db_uri: String,
-    #[arg(long)]
-    username: String,
-    #[arg(long)]
-    role: String,
-}
-
-#[derive(Subcommand, Debug)]
-enum ExternalSqlTokenCommand {
-    Issue(ExternalSqlTokenIssueArgs),
-}
-
-#[derive(Args, Debug)]
-struct ExternalSqlTokenIssueArgs {
-    #[arg(long)]
-    db_uri: String,
-    #[arg(long)]
-    username: String,
-    #[arg(long)]
-    name: String,
-}
-
-#[derive(Subcommand, Debug)]
-enum ExternalSqlHaCommand {
-    SetPolicy(ExternalSqlHaPolicyArgs),
-    RegisterNode(ExternalSqlHaRegisterNodeArgs),
-    Plan(ExternalSqlDbArgs),
-}
-
-#[derive(Args, Debug)]
-struct ExternalSqlHaPolicyArgs {
-    #[arg(long)]
-    db_uri: String,
-    #[arg(long)]
-    quorum: i64,
-    #[arg(long)]
-    min_ready: i64,
-    #[arg(long, default_value_t = 1)]
-    batch_size: i64,
-    #[arg(long)]
-    target_version: Option<String>,
-}
-
-#[derive(Args, Debug)]
-struct ExternalSqlHaRegisterNodeArgs {
-    #[arg(long)]
-    db_uri: String,
-    #[arg(long)]
-    node_id: String,
-    #[arg(long)]
-    display_name: Option<String>,
-    #[arg(long)]
-    version: String,
-    #[arg(long, default_value_t = true)]
-    ready: bool,
-}
-
-#[derive(Subcommand, Debug)]
-enum ExternalSqlJobCommand {
-    Enqueue(ExternalSqlJobEnqueueArgs),
-    List(ExternalSqlDbArgs),
-}
-
-#[derive(Args, Debug)]
-struct ExternalSqlJobEnqueueArgs {
-    #[arg(long)]
-    db_uri: String,
-    #[arg(long)]
-    name: String,
-}
-
-#[derive(Args, Debug)]
-struct ExternalSqlDbArgs {
-    #[arg(long)]
-    db_uri: String,
 }
 
 #[derive(Args, Debug)]
@@ -933,76 +825,6 @@ fn main() -> anyhow::Result<()> {
             let min_idle_ms = (args.lease_s.max(0) as usize).saturating_mul(1000);
             let message = broker::claim_one(&config, &args.node_id, 500, min_idle_ms)?;
             println!("{}", serde_json::to_string_pretty(&message)?);
-        }
-        Command::ExternalSql(ExternalSqlCommand::Init(args)) => {
-            external_sql::init_database(&args.db_uri)?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "db_uri": args.db_uri,
-                    "initialized": true
-                }))?
-            );
-        }
-        Command::ExternalSql(ExternalSqlCommand::User(ExternalSqlUserCommand::Add(args))) => {
-            let role = platform::Role::parse(&args.role)?;
-            let user = external_sql::create_or_update_user(&args.db_uri, &args.username, role)?;
-            println!("{}", serde_json::to_string_pretty(&user)?);
-        }
-        Command::ExternalSql(ExternalSqlCommand::User(ExternalSqlUserCommand::List(args))) => {
-            let users = external_sql::list_users(&args.db_uri)?;
-            println!("{}", serde_json::to_string_pretty(&users)?);
-        }
-        Command::ExternalSql(ExternalSqlCommand::Token(ExternalSqlTokenCommand::Issue(args))) => {
-            let token = external_sql::issue_token(&args.db_uri, &args.username, &args.name)?;
-            println!("{}", serde_json::to_string_pretty(&token)?);
-        }
-        Command::ExternalSql(ExternalSqlCommand::Ha(ExternalSqlHaCommand::SetPolicy(args))) => {
-            let policy = external_sql::set_ha_policy(
-                &args.db_uri,
-                args.quorum,
-                args.min_ready,
-                args.batch_size,
-                args.target_version.as_deref(),
-            )?;
-            println!("{}", serde_json::to_string_pretty(&policy)?);
-        }
-        Command::ExternalSql(ExternalSqlCommand::Ha(ExternalSqlHaCommand::RegisterNode(args))) => {
-            let display_name = args
-                .display_name
-                .clone()
-                .unwrap_or_else(|| args.node_id.clone());
-            let node = external_sql::register_managed_node(
-                &args.db_uri,
-                &args.node_id,
-                &display_name,
-                &["scheduler".to_string(), "worker".to_string()],
-                &args.version,
-                args.ready,
-            )?;
-            println!("{}", serde_json::to_string_pretty(&node)?);
-        }
-        Command::ExternalSql(ExternalSqlCommand::Ha(ExternalSqlHaCommand::Plan(args))) => {
-            let status = external_sql::ha_status(&args.db_uri, None)?;
-            println!("{}", serde_json::to_string_pretty(&status)?);
-        }
-        Command::ExternalSql(ExternalSqlCommand::Job(ExternalSqlJobCommand::Enqueue(args))) => {
-            let job_id = external_sql::enqueue_job(&args.db_uri, &args.name)?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "job_id": job_id,
-                    "name": args.name,
-                }))?
-            );
-        }
-        Command::ExternalSql(ExternalSqlCommand::Job(ExternalSqlJobCommand::List(args))) => {
-            let jobs = external_sql::list_jobs(&args.db_uri)?;
-            println!("{}", serde_json::to_string_pretty(&jobs)?);
-        }
-        Command::ExternalSql(ExternalSqlCommand::Status(args)) => {
-            let snapshot = external_sql::snapshot(&args.db_uri)?;
-            println!("{}", serde_json::to_string_pretty(&snapshot)?);
         }
         Command::Demo(DemoCommand::E2e(args)) => {
             let sim_dir = args.workspace.join("simulace");

@@ -1,40 +1,30 @@
 # Enterprise backend vrstva
 
-Tato dokumentace shrnuje tri klicove doplňky nad puvodni platformni vrstvu:
+Tato dokumentace shrnuje klicove doplnky nad puvodni platformni vrstvu:
 
-- PostgreSQL external SQL backend
 - Redis Streams durable queue broker
 - quorum-aware rolling upgrade management
 
-## PostgreSQL
+## PostgreSQL vrstva: odstranena (31.10.2026)
 
-Implementace je v [external_sql.rs](../src/external_sql.rs).
+`external_sql.rs` (452 radku Postgres CRUD pro users/tokens/jobs/nodes/
+ha_policy, plus vlastni `bakula-program external-sql ...` CLI podstrom)
+byl **smazan**, ne opraven/otestovan. Rozhodnuto po 2-kolove 3-agentni
+debate (`docs/diplomka/produkcni-plan.md`, "Druhe kolo zmeny ramce"):
+modul mel 0 testu, 0 CI coverage, nebyl volan z `server.rs` ani
+`broker.rs`, a `jobs` tabulka nemela `spec_json`/`claimed_by`/
+`claim_until`/`attempts` sloupce ani claim/mark funkce - nebyla to
+nahradni implementace `platform.rs`'s SQLite store, jen oddelena
+administrativni vrstva, co nikdo nevyuzival a nikdy nemohla spoustet
+workery bez reimplementace poloviny `platform.rs`. Testovat kod, ktery
+nemuze nikdy fungovat, by byl ztraceny cas - smazani bylo shoda vsech 3
+agentu (Opus comprehensive, pragmatik, skeptik) v obou kolech debaty.
 
-Pouziva tabulky:
-
-- `users`
-- `api_tokens`
-- `jobs`
-- `nodes`
-- `ha_policy`
-
-Smysl:
-
-- oddelit control-plane metadata od lokalniho workspace
-- ziskat externi SQL backend vhodny pro centralnejsi nasazeni
-
-**Stav (produkcni gap audit, 30.10.2026): nezapojeny prototyp, 0 testu.**
-`external_sql.rs` dnes neni volan z `server.rs` ani `broker.rs` - dosazitelny
-je jen pres vlastni `bakula-program external-sql ...` CLI podstrom. Modul
-nema jediny `#[test]`. `.github/workflows/ci.yml` nema Postgres service,
-takze se tahle vrstva v CI nemuze ani zkompilovat-a-spustit. `jobs` tabulka
-navic nema `spec_json`/`claimed_by`/`claim_until`/`attempts` sloupce ani
-claim/mark funkce - neni to nahradni implementace `platform.rs`'s SQLite
-store, je to oddelena administrativni vrstva (users/tokens/nodes/ha_policy),
-co dnes nikdo nevyuziva. Pred jakymkoliv tvrzenim o produkcni pripravenosti
-teto casti potrebuje bud minimalni test + Postgres CI service, nebo ji
-zretelne oznacit jako neintegrovany prototyp pro budouci Faze 2 (viz
-`docs/diplomka/produkcni-plan.md`).
+Skutecna Postgres migrace (pro realny multi-host H5, viz
+`docs/diplomka/produkcni-plan.md`) zustava odlozena na konkretni trigger
+(2. realny control-plane uzel) - az se stane aktualni, postavi se znovu
+jako soucast `PlatformRepository` traitu nad `platform.rs`'s existujicim
+schema, ne jako samostatna paralelni vrstva.
 
 ## Redis Streams
 
@@ -93,14 +83,15 @@ Tohle je vyrazne silnejsi nez puvodni prototyp, ale stale to neni kompletní ná
 - cloud load balancer orchestration
 - multi-AZ failover stack
 
-**Oprava (produkcni gap audit, 30.10.2026):** predchozi veta tady tvrdila, ze
-celá tahle vrstva je "realny, auditovatelny a otestovany krok" - to byla
-nepravda pro 2 ze 3 casti. Presne podle toho, co je skutecne overeno:
+**Oprava (produkcni gap audit, 30.10.2026, upraveno 31.10.2026 po smazani
+PostgreSQL vrstvy):** predchozi veta tady tvrdila, ze celá tahle vrstva je
+"realny, auditovatelny a otestovany krok" - to byla nepravda pro 2 ze 3
+casti. Presne podle toho, co je skutecne overeno:
 
 - **Redis Streams broker**: skutecne testovano (5 unit testu + 2-proces test
   proti zivemu Redisu).
-- **PostgreSQL vrstva**: 0 testu, 0 CI coverage, nezapojena do server/broker
-  - nezintegrovany prototyp, ne produkcni krok.
+- **PostgreSQL vrstva**: odstranena (viz vyse) - nebyla produkcni krok,
+  byla netestovany, nezapojeny kod, ktery nikdy nemohl fungovat.
 - **HA/rolling upgrades**: 0 dedikovanych testu, zapis jen pres CLI, zadny
   HTTP write endpoint - funguje (overeno v e2e testu), ale netestovano
   izolovane a nedosazitelne z API.
