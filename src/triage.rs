@@ -291,6 +291,7 @@ mod tests {
             findings,
             triage_actions: Vec::new(),
             hypotheses: Vec::new(),
+            verification_plans: Vec::new(),
             diff: None,
         }
     }

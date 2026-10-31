@@ -444,21 +444,8 @@ fn filter_targets_in_scope(
     targets: Vec<FollowupTarget>,
     scope: &[IpNet],
 ) -> (Vec<FollowupTarget>, Vec<String>) {
-    let mut kept = Vec::with_capacity(targets.len());
-    let mut excluded = Vec::new();
-    for target in targets {
-        let in_scope = target
-            .ip
-            .parse::<std::net::IpAddr>()
-            .map(|addr| scope.iter().any(|net| net.contains(&addr)))
-            .unwrap_or(false);
-        if in_scope {
-            kept.push(target);
-        } else {
-            excluded.push(target.ip);
-        }
-    }
-    (kept, excluded)
+    crate::scope_policy::ScopePolicy::new(scope.to_vec())
+        .partition(targets, |target| target.ip.as_str())
 }
 
 fn collect_followup_targets(inventory: &ParsedInventory) -> Vec<FollowupTarget> {

@@ -105,6 +105,13 @@ pub struct RunReport {
     /// `findings`, zadny vliv na `decision.rs`/`triage.rs` skorovani.
     #[serde(default)]
     pub hypotheses: Vec<crate::hypothesis::SecurityHypothesis>,
+    /// Produkcni plan (Faze B, 31.10.2026): stinove/aditivni vystup
+    /// `verification_planner::plan_for_hypothesis`, jeden zaznam za hypotezu s
+    /// alespon 1 assetem v `--scope`. ZADNA aktivni kontrola se tady nevykonava -
+    /// to je navazujici, samostatny krok (vyzaduje jeste rozpoctove/rate-limit
+    /// mantinely). `decision.rs`/`triage.rs` skorovani beze zmeny.
+    #[serde(default)]
+    pub verification_plans: Vec<crate::verification_planner::HypothesisVerificationPlan>,
     pub diff: Option<DiffReport>,
 }
 

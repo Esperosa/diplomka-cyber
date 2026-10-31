@@ -29,9 +29,9 @@ use crate::{
     automation, config, context, correlation, cpe, decision, diff, findings, hypothesis, identity,
     intel, lanes,
     model::{MonitoringLane, NormalizedEvent, RunReport, Severity, TriageAction},
-    nmap, passive, paths, pentest, report, simulation,
+    nmap, passive, paths, pentest, report, scope_policy, simulation,
     storage::{RunArtifacts, Workspace},
-    triage, validation, vuln, webscan,
+    triage, validation, verification_planner, vuln, webscan,
 };
 
 /// `Default` je jen pro testy nize (`..Default::default()` konstrukce bez
@@ -1340,6 +1340,19 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
         &report.hosts,
         &identity_by_host_key,
     );
+    // Faze B (produkcni-plan.md, 31.10.2026): stinove planovani - zadna aktivni
+    // kontrola se tady nevykonava, jen se zapisuje, co by `verification_planner`
+    // doporucil. `ScopePolicy` vyradi hypotezy, kde zadny `affected_assets` neni
+    // v `args.scope` (stejna A9 disciplina jako oprava nmap followup/forenzni
+    // scope-kontroly vyse).
+    let verification_scope = scope_policy::ScopePolicy::new(args.scope.clone());
+    report.verification_plans = report
+        .hypotheses
+        .iter()
+        .filter_map(|hypothesis| {
+            verification_planner::plan_for_hypothesis(hypothesis, &verification_scope)
+        })
+        .collect();
     report.summary.findings_total = report.findings.len();
     report.summary.audit_findings_total = report
         .findings

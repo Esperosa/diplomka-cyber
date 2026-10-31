@@ -31,6 +31,7 @@ pub mod pipeline;
 pub mod platform;
 pub mod readiness;
 pub mod report;
+pub mod scope_policy;
 pub mod server;
 pub mod simulation;
 pub mod storage;

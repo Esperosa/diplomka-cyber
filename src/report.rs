@@ -614,6 +614,7 @@ pub fn build_report(
         findings: Vec::new(),
         triage_actions: Vec::new(),
         hypotheses: Vec::new(),
+        verification_plans: Vec::new(),
         diff: None,
     }
 }

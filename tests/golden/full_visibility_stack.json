@@ -3477,5 +3477,711 @@
       "title": "Vytvořit agenta pro ověření identity služby"
     }
   ],
-  "unmappedEvents": []
+  "unmappedEvents": [],
+  "verification_plans": [
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "connection_timeout_burst",
+      "in_scope_assets": [
+        "192.168.56.30"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.1
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "correlation_uncertainty",
+      "in_scope_assets": [
+        "192.168.56.30"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.04000000000000001
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.04000000000000001
+          },
+          {
+            "candidate": {
+              "disruption_risk": 0.3,
+              "estimated_information_gain": 0.6,
+              "estimated_network_cost": 0.05,
+              "estimated_runtime_ms": 20000,
+              "method": "nmap_targeted_followup",
+              "requires_approval": true
+            },
+            "utility": -0.43
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "greenbone_finding",
+      "in_scope_assets": [
+        "192.168.56.20"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.18000000000000002
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.18000000000000002
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "high_risk_cve_exposure",
+      "in_scope_assets": [
+        "192.168.56.10"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.4,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 500,
+            "method": "cve_intel_relookup",
+            "requires_approval": false
+          },
+          "utility": 0.35500000000000004
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.4,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 500,
+              "method": "cve_intel_relookup",
+              "requires_approval": false
+            },
+            "utility": 0.35500000000000004
+          },
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.18000000000000002
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "high_risk_cve_exposure",
+      "in_scope_assets": [
+        "192.168.56.10"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.4,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 500,
+            "method": "cve_intel_relookup",
+            "requires_approval": false
+          },
+          "utility": 0.35500000000000004
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.4,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 500,
+              "method": "cve_intel_relookup",
+              "requires_approval": false
+            },
+            "utility": 0.35500000000000004
+          },
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.18000000000000002
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "high_risk_cve_exposure",
+      "in_scope_assets": [
+        "192.168.56.30"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.4,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 500,
+            "method": "cve_intel_relookup",
+            "requires_approval": false
+          },
+          "utility": 0.195
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.4,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 500,
+              "method": "cve_intel_relookup",
+              "requires_approval": false
+            },
+            "utility": 0.195
+          },
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "http_basic_without_tls",
+      "in_scope_assets": [
+        "192.168.56.10"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.05,
+            "estimated_information_gain": 0.5,
+            "estimated_network_cost": 0.01,
+            "estimated_runtime_ms": 1500,
+            "method": "read_only_content_inspection",
+            "requires_approval": false
+          },
+          "utility": 0.375
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.05,
+              "estimated_information_gain": 0.5,
+              "estimated_network_cost": 0.01,
+              "estimated_runtime_ms": 1500,
+              "method": "read_only_content_inspection",
+              "requires_approval": false
+            },
+            "utility": 0.375
+          },
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.18000000000000002
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "napalm_config_issue",
+      "in_scope_assets": [
+        "192.168.56.1"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.1
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "external_flow_observed",
+      "in_scope_assets": [
+        "192.168.56.30"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.04000000000000001
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.04000000000000001
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "netmiko_config_issue",
+      "in_scope_assets": [
+        "192.168.56.254"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.18000000000000002
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.18000000000000002
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "external_flow_observed",
+      "in_scope_assets": [
+        "192.168.56.10"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.04000000000000001
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.04000000000000001
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "external_flow_observed",
+      "in_scope_assets": [
+        "192.168.56.20"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.04000000000000001
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.04000000000000001
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "packet_rate_spike",
+      "in_scope_assets": [
+        "192.168.56.30"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.1
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "plaintext_management_protocol",
+      "in_scope_assets": [
+        "192.168.56.20"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.05,
+            "estimated_information_gain": 0.5,
+            "estimated_network_cost": 0.01,
+            "estimated_runtime_ms": 1500,
+            "method": "read_only_content_inspection",
+            "requires_approval": false
+          },
+          "utility": 0.175
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.05,
+              "estimated_information_gain": 0.5,
+              "estimated_network_cost": 0.01,
+              "estimated_runtime_ms": 1500,
+              "method": "read_only_content_inspection",
+              "requires_approval": false
+            },
+            "utility": 0.175
+          },
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "plaintext_management_protocol",
+      "in_scope_assets": [
+        "192.168.56.20"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.05,
+            "estimated_information_gain": 0.5,
+            "estimated_network_cost": 0.01,
+            "estimated_runtime_ms": 1500,
+            "method": "read_only_content_inspection",
+            "requires_approval": false
+          },
+          "utility": 0.375
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.05,
+              "estimated_information_gain": 0.5,
+              "estimated_network_cost": 0.01,
+              "estimated_runtime_ms": 1500,
+              "method": "read_only_content_inspection",
+              "requires_approval": false
+            },
+            "utility": 0.375
+          },
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.18000000000000002
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "scrapli_config_issue",
+      "in_scope_assets": [
+        "192.168.56.3"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.04000000000000001
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.04000000000000001
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "service_overload_risk",
+      "in_scope_assets": [
+        "192.168.56.30"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.18000000000000002
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.18000000000000002
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "unexpected_traffic",
+      "in_scope_assets": [
+        "192.168.56.30"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.04000000000000001
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.04000000000000001
+          }
+        ]
+      }
+    },
+    {
+      "excluded_out_of_scope": [],
+      "hypothesis_type": "wazuh_alert",
+      "in_scope_assets": [
+        "192.168.56.20"
+      ],
+      "plan": {
+        "chosen": {
+          "candidate": {
+            "disruption_risk": 0.0,
+            "estimated_information_gain": 0.2,
+            "estimated_network_cost": 0.0,
+            "estimated_runtime_ms": 0,
+            "method": "passive_extended_observation",
+            "requires_approval": false
+          },
+          "utility": 0.1
+        },
+        "ranked": [
+          {
+            "candidate": {
+              "disruption_risk": 0.0,
+              "estimated_information_gain": 0.2,
+              "estimated_network_cost": 0.0,
+              "estimated_runtime_ms": 0,
+              "method": "passive_extended_observation",
+              "requires_approval": false
+            },
+            "utility": 0.1
+          }
+        ]
+      }
+    }
+  ]
 }

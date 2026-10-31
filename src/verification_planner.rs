@@ -23,10 +23,12 @@
 //! je vstup od volajiciho (napr. z Deliverable 4+ navazujici logiky), ne automaticky
 //! odvozene z `uncertainty`.
 
+use serde::{Deserialize, Serialize};
+
 use crate::hypothesis::SecurityHypothesis;
 
 /// Kandidat na dalsi overovaci kontrolu - jeste NEVYBRANA/nevykonana akce.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationCandidate {
     pub method: String,
     pub estimated_information_gain: f64,
@@ -56,13 +58,13 @@ pub fn utility(hypothesis: &SecurityHypothesis, candidate: &VerificationCandidat
         - delay_penalty
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RankedCandidate {
     pub candidate: VerificationCandidate,
     pub utility: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationPlan {
     /// Nejlepsi kandidat podle utility. `None` pokud `candidates` bylo prazdne.
     pub chosen: Option<RankedCandidate>,
@@ -101,6 +103,121 @@ pub fn plan_verification(
     let chosen = ranked.first().cloned();
 
     VerificationPlan { chosen, ranked }
+}
+
+/// Vzdy dostupny kandidat (passive/read-only, nikdy nevyzaduje schvaleni) - sirsi
+/// pasivni pozorovaci okno, ne nova aktivni kontrola, jen vic casu pozorovat uz
+/// probihajici tok. Nejlevnejsi a nejbezpecnejsi "baseline" alternativa, pritomna
+/// pro kazdou hypotezu, aby `plan_verification` mela i bez aktivnich kontrol s
+/// cim porovnavat.
+fn passive_extended_observation_candidate() -> VerificationCandidate {
+    VerificationCandidate {
+        method: "passive_extended_observation".to_string(),
+        estimated_information_gain: 0.2,
+        estimated_network_cost: 0.0,
+        estimated_runtime_ms: 0,
+        disruption_risk: 0.0,
+        requires_approval: false,
+    }
+}
+
+/// A9 guardrail, krok 2 (`docs/diplomka/produkcni-plan.md`, Faze B): katalog
+/// REALNYCH kandidatu na dalsi overovaci kontrolu, odvozeny z `hypothesis_type`
+/// (= `Finding::finding_type`, viz `hypothesis.rs`). Mapuje na metody, ktere uz
+/// v produkci existuji (`nmap::run_targeted_followup_nmap`, webscan/lab obsahova
+/// inspekce, `intel.rs` CVE lookup) - ne na vymyslene nazvy. Tohle je JEN katalog
+/// (co by se mohlo udelat); samotna exekuce je navazujici, samostatny krok (A9
+/// pozaduje i rozpoctove/rate-limit mantinely pred tim, nez se cokoliv skutecne
+/// zavola).
+///
+/// Neznamy `hypothesis_type` dostane jen baseline kandidata - fail-safe (zadna
+/// aktivni kontrola neni lepsi nez vymyslena pro typ, ktery katalog nezna), ne
+/// chyba.
+pub fn candidates_for_hypothesis_type(hypothesis_type: &str) -> Vec<VerificationCandidate> {
+    let mut candidates = vec![passive_extended_observation_candidate()];
+    match hypothesis_type {
+        "identification_gap" | "correlation_uncertainty" => {
+            // nmap::run_targeted_followup_nmap - aktivni skriptovany sken (-sV -sC),
+            // nad uroven "read-only" - vyzaduje schvaleni.
+            candidates.push(VerificationCandidate {
+                method: "nmap_targeted_followup".to_string(),
+                estimated_information_gain: 0.6,
+                estimated_network_cost: 0.05,
+                estimated_runtime_ms: 20_000,
+                disruption_risk: 0.3,
+                requires_approval: true,
+            });
+        }
+        "management_surface_exposure"
+        | "new_exposed_service"
+        | "plaintext_management_protocol"
+        | "http_basic_without_tls"
+        | "insecure_auth_possible" => {
+            // Obsahova inspekce stylu lab::execute_inspect_metrics_content - jeden
+            // read-only HTTP GET, ne destruktivni zapis - nevyzaduje schvaleni.
+            candidates.push(VerificationCandidate {
+                method: "read_only_content_inspection".to_string(),
+                estimated_information_gain: 0.5,
+                estimated_network_cost: 0.01,
+                estimated_runtime_ms: 1_500,
+                disruption_risk: 0.05,
+                requires_approval: false,
+            });
+        }
+        "high_risk_cve_exposure"
+        | "known_exploited_vulnerability"
+        | "probable_exploitation_interest" => {
+            // intel.rs re-lookup proti uz stazene CVE/KEV cache - cisty read, zadny
+            // dotek cileove site.
+            candidates.push(VerificationCandidate {
+                method: "cve_intel_relookup".to_string(),
+                estimated_information_gain: 0.4,
+                estimated_network_cost: 0.0,
+                estimated_runtime_ms: 500,
+                disruption_risk: 0.0,
+                requires_approval: false,
+            });
+        }
+        _ => {}
+    }
+    candidates
+}
+
+/// Vysledek planovani pro JEDNU hypotezu - stinovy/aditivni vystup (viz
+/// `RunReport.verification_plans`). `excluded_out_of_scope` jsou assety z
+/// `hypothesis.affected_assets`, ktere `ScopePolicy` vyradila PRED planovanim -
+/// reportovano, ne tise zahozeno (stejna disciplina jako `nmap.rs`'s
+/// `filter_targets_in_scope`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HypothesisVerificationPlan {
+    pub hypothesis_type: String,
+    pub in_scope_assets: Vec<String>,
+    pub excluded_out_of_scope: Vec<String>,
+    pub plan: VerificationPlan,
+}
+
+/// Spojuje katalog + `ScopePolicy` + `plan_verification` do jednoho kroku pro
+/// jednu hypotezu. `None` pokud VSECHNY `affected_assets` jsou mimo `scope` -
+/// takova hypoteza se vubec neplanuje (nic k overeni neni autorizovano skenovat).
+pub fn plan_for_hypothesis(
+    hypothesis: &SecurityHypothesis,
+    scope: &crate::scope_policy::ScopePolicy,
+) -> Option<HypothesisVerificationPlan> {
+    let (in_scope_assets, excluded_out_of_scope) = scope.partition(
+        hypothesis.affected_assets.clone(),
+        std::string::String::as_str,
+    );
+    if in_scope_assets.is_empty() {
+        return None;
+    }
+    let candidates = candidates_for_hypothesis_type(&hypothesis.hypothesis_type);
+    let plan = plan_verification(hypothesis, candidates);
+    Some(HypothesisVerificationPlan {
+        hypothesis_type: hypothesis.hypothesis_type.clone(),
+        in_scope_assets,
+        excluded_out_of_scope,
+        plan,
+    })
 }
 
 #[cfg(test)]
@@ -197,6 +314,89 @@ mod tests {
         assert!(
             high_impact > low_impact,
             "stejna kontrola musi mit vyssi utilitu pro hypotezu s vyssim potential_impact"
+        );
+    }
+
+    fn hypothesis_with_assets(assets: &[&str]) -> SecurityHypothesis {
+        let mut h = hypothesis(0.6);
+        h.affected_assets = assets.iter().map(|ip| ip.to_string()).collect();
+        h
+    }
+
+    #[test]
+    fn candidates_for_unknown_hypothesis_type_returns_only_baseline() {
+        let candidates = candidates_for_hypothesis_type("nejaky_neznamy_typ");
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].method, "passive_extended_observation");
+        assert!(!candidates[0].requires_approval);
+    }
+
+    #[test]
+    fn candidates_for_identification_gap_add_approval_gated_active_check() {
+        let candidates = candidates_for_hypothesis_type("identification_gap");
+        assert_eq!(candidates.len(), 2);
+        let active = candidates
+            .iter()
+            .find(|c| c.method == "nmap_targeted_followup")
+            .expect("aktivni kandidat musi byt v katalogu pro identification_gap");
+        assert!(
+            active.requires_approval,
+            "aktivni skenovaci kontrola musi vyzadovat schvaleni (A9)"
+        );
+    }
+
+    #[test]
+    fn candidates_for_management_surface_exposure_are_read_only_no_approval() {
+        let candidates = candidates_for_hypothesis_type("management_surface_exposure");
+        let read_only = candidates
+            .iter()
+            .find(|c| c.method == "read_only_content_inspection")
+            .expect("read-only kandidat musi byt v katalogu");
+        assert!(
+            !read_only.requires_approval,
+            "read-only kontrola nesmi vyzadovat schvaleni"
+        );
+    }
+
+    #[test]
+    fn plan_for_hypothesis_returns_none_when_all_assets_out_of_scope() {
+        let h = hypothesis_with_assets(&["203.0.113.50"]);
+        let scope = crate::scope_policy::ScopePolicy::new(vec![
+            "192.168.1.0/24".parse().expect("valid cidr"),
+        ]);
+
+        assert!(
+            plan_for_hypothesis(&h, &scope).is_none(),
+            "hypoteza bez jedineho assetu v rozsahu se nesmi planovat"
+        );
+    }
+
+    #[test]
+    fn plan_for_hypothesis_builds_plan_when_asset_in_scope() {
+        let h = hypothesis_with_assets(&["192.168.1.10"]);
+        let scope = crate::scope_policy::ScopePolicy::new(vec![
+            "192.168.1.0/24".parse().expect("valid cidr"),
+        ]);
+
+        let result =
+            plan_for_hypothesis(&h, &scope).expect("asset je v rozsahu, plan se musi postavit");
+        assert_eq!(result.in_scope_assets, vec!["192.168.1.10".to_string()]);
+        assert!(result.excluded_out_of_scope.is_empty());
+        assert!(result.plan.chosen.is_some());
+    }
+
+    #[test]
+    fn plan_for_hypothesis_reports_mixed_scope_assets_without_dropping_silently() {
+        let h = hypothesis_with_assets(&["192.168.1.10", "203.0.113.50"]);
+        let scope = crate::scope_policy::ScopePolicy::new(vec![
+            "192.168.1.0/24".parse().expect("valid cidr"),
+        ]);
+
+        let result = plan_for_hypothesis(&h, &scope).expect("alespon 1 asset je v rozsahu");
+        assert_eq!(result.in_scope_assets, vec!["192.168.1.10".to_string()]);
+        assert_eq!(
+            result.excluded_out_of_scope,
+            vec!["203.0.113.50".to_string()]
         );
     }
 }

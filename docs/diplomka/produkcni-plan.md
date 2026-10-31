@@ -249,15 +249,61 @@ Vsichni 3 nezavisle konvergovali ke stejnemu zaveru po videni druhych dvou zprav
 
 | Polozka | Rozhodnuti | Trigger pro navrat do rozsahu |
 |---|---|---|
-| Scope-revalidace na followup/forenzni nmap | **HOTOVO v tomhle tahu** | - |
-| `verification_planner.rs` produkcni vstupni bod | **Dalsi krok** - A9 katalog + mantinely, pak shadow mode, pak jen passive/read-only auto-exekuce | - |
+| Scope-revalidace na followup/forenzni nmap | **HOTOVO** (31.10.2026) | - |
+| `external_sql.rs` smazani | **HOTOVO** (31.10.2026) | - |
+| Constant-time static token comparison | **HOTOVO** (31.10.2026) | - |
+| `ScopePolicy` (A9 krok 1, sdileny modul) | **HOTOVO** (31.10.2026, `src/scope_policy.rs`) | - |
+| `verification_planner.rs` produkcni vstupni bod, shadow mode | **HOTOVO** (31.10.2026) - viz nize | - |
+| `verification_planner.rs` automaticka exekuce passive/read-only kontrol | **Dalsi krok** - vyzaduje A9 rozpoctove/rate-limit mantinely pred prvnim skutecnym volanim | - |
 | `enforce.block_ip` broker job (orchestrace existujiciho `nftables`) | **Dalsi krok po planneru** - propose-only nejdriv, realne vykonani jen s lidskym schvalenim | - |
-| Structured logging (`tracing`), `external_sql.rs` smazani, FindingKindSpec/mas_* dedup, supply-chain blocking+SBOM, continuous ingest offsety, token expiry | **Dalsi krok, levne, bez kontroverze** | - |
+| Structured logging (`tracing`), FindingKindSpec/mas_* dedup, supply-chain blocking+SBOM, continuous ingest offsety, token expiry (platform.rs) | **Dalsi krok, levne, bez kontroverze** | - |
 | Vlastni nftables/eBPF/XDP gateway-agent, DNS RPZ, inline Suricata IPS | Odlozeno (orchestrace existujicich nastroju staci) | realna tap-vs-inline topologie u skutecneho nasazeni |
 | Postgres migrace pro H5 multi-host | Odlozeno | 2. realny control-plane uzel |
 | Multi-tenant (`tenant_id`) | Odlozeno, jen 1-stranovy design dokument tvaru - **hotovo**, `docs/diplomka/eval/multi-tenant-schema-design.md` | 2. realny tenant |
 | mTLS mezi uzly | Odlozeno | enforcement na jinem hostu nez control plane |
 | OIDC | Odlozeno | SSO / 2. operatorska organizace |
 | HA/DR, Kubernetes | Odlozeno | realne SLA / ops tym si vyzada |
+
+### `verification_planner.rs` produkcni vstupni bod, shadow mode (31.10.2026)
+
+Reakce na vyslovny pozadavek "stavet a tvorit, ne jen opravovat" - prvni NOVA
+schopnost v tomhle kole, ne dalsi audit/fix. Druha (po `identity.rs`/
+`hypothesis.rs`) z puvodnich 2 "core neni hotovy" mezer skeptika uzavrena.
+
+- **`src/scope_policy.rs`** (novy, sdileny modul) - `ScopePolicy::contains`/
+  `partition`, fail-closed (neparsovatelna IP neni nikdy v rozsahu). `nmap.rs`'s
+  `filter_targets_in_scope` (oprava vyse) prerefaktorovano na tenhle sdileny
+  kod, beze zmeny chovani (vsech 8 existujicich testu projde beze zmeny).
+- **`verification_planner::candidates_for_hypothesis_type`** - REALNY katalog,
+  ne vymyslene nazvy: `identification_gap`/`correlation_uncertainty` →
+  `nmap_targeted_followup` (aktivni, `requires_approval=true`);
+  `management_surface_exposure`/`new_exposed_service`/
+  `plaintext_management_protocol`/`http_basic_without_tls`/
+  `insecure_auth_possible` → `read_only_content_inspection` (read-only GET,
+  `requires_approval=false`); `high_risk_cve_exposure`/
+  `known_exploited_vulnerability`/`probable_exploitation_interest` →
+  `cve_intel_relookup` (cisty read, `requires_approval=false`). Neznamy typ
+  dostane jen `passive_extended_observation` baseline - fail-safe, ne chyba.
+- **`verification_planner::plan_for_hypothesis`** - spojuje katalog +
+  `ScopePolicy` + existujici `plan_verification` do jednoho kroku. Hypoteza
+  bez jedineho `affected_assets` v `args.scope` se VUBEC neplanuje (`None`,
+  reportovano v `excluded_out_of_scope`, ne tise zahozeno) - stejna A9
+  disciplina jako nmap scope-oprava vyse.
+- **Zapojeno do `pipeline::run_pipeline` v SHADOW MODU** - novy
+  `RunReport.verification_plans` (`#[serde(default)]`, stinove/aditivni jako
+  `hypotheses`), zadna aktivni kontrola se tady NEVYKONAVA, jen se zapisuje,
+  co by planner doporucil. `decision.rs`/`triage.rs` skorovani beze zmeny.
+- **Overeno end-to-end na realne golden-snapshot fixture** (ne jen unit
+  testy): 45 verification_plans zaznamu, `correlation_uncertainty` hypoteza
+  spravne zvazila `nmap_targeted_followup` (utility -0.43, prohrava s baseline
+  0.04 diky vysokemu nakladu/disruption) vs. `high_risk_cve_exposure` spravne
+  zvolilo `cve_intel_relookup` (utility 0.355, vyhrava). Stabilni pres 4
+  opakovane behy. 11 novych testu ve `verification_planner.rs` + 4 v
+  `scope_policy.rs`, rozbij→spadne→vrat→projde overeno na klicove `None`
+  vetvi (scope exclusion).
+- **Vedome NEprovedeno** (navazujici, samostatny krok): skutecna exekuce
+  (dnes jen plan, nikdy se nic nezavola), rozpoctove/rate-limit mantinely pro
+  tu exekuci, presun `inspect_metrics_content` z `lab.rs` do produkcniho kodu
+  jako skutecny executor za `read_only_content_inspection` kandidatem.
 
 Fazovani (po scope-revalidacni oprave): **Faze A** (3-4 tydny) - `ScopePolicy` generalizace (A9 prvni cast, vola se PRI VYKONANI kazdeho aktivniho executoru, ne jen pri planovani), audit log + schvalovaci tabulka v SQLite, structured logging, supply-chain blocking+SBOM, `external_sql.rs` smazani, mas_*/FindingKindSpec dedup, continuous ingest offsety, token expiry + constant-time compare, 1-stranovy tenant design dokument. **Faze B** (3-4 tydny) - `verification_planner.rs` katalog kandidatu (reuse nmap/webscan/pentest/`inspect_metrics_content` executoru) + shadow mode, pak automaticka exekuce jen passive/read-only kontrol. **Faze C** (2-3 tydny) - `enforce.block_ip` broker job s 3 mantinely z kola 2, propose-only → schvaleni-gated realne vykonani. Vse ostatni zustava na trigger, ne na kalendari.
