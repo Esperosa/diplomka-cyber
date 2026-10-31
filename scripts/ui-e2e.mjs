@@ -110,7 +110,7 @@ try {
     assert(/převzato z dřívější kontroly/.test(resultsText ?? ""), "stav 'reused' neni zobrazen");
     await context.close();
     const empty = await open(emptyUrl + "#/overovani");
-    assert(/Není načtený žádný běh/.test((await empty.page.locator("#stage").textContent()) ?? ""), "prazdny server: chybi poctivy prazdny stav");
+    assert(/Zatím žádný běh/.test((await empty.page.locator("#stage").textContent()) ?? ""), "prazdny server: chybi poctivy prazdny stav (a dalsi krok)");
     await empty.context.close();
   });
 
@@ -149,7 +149,7 @@ try {
     assert((await page.locator(".mode-banner.is-enforce").count()) === 1, "chybi ostry banner");
     await page.locator('[data-action="enf-approve"]').first().click();
     await page.waitForSelector("dialog.modal[open]");
-    assert(/zablokována na bráně/.test((await page.locator("dialog.modal p").textContent()) ?? ""), "dialog nevaruje");
+    assert(/zablokována na bráně/.test((await page.locator("dialog.modal p").first().textContent()) ?? ""), "dialog nevaruje");
     await page.click('dialog.modal button[value="cancel"]');
     await context.close();
   });
@@ -258,6 +258,166 @@ try {
     }
     assert((await page.locator('.dock-item[aria-current="page"]').count()) === 1, "dok nema aktivni polozku");
     await context.close();
+  });
+
+  // ---------- UX audit: bezpecnostne citlive toky a stavy ----------
+  await test("Zasahy (ostry rezim): schvaleni bez potvrzeni neprojde, dialog ukaze co presne, vychozi fokus je Zrusit, Esc nic neprovede", async () => {
+    const { page, context } = await open(enforceUrl + "#/zasahy");
+    const posts = [];
+    page.on("request", (r) => { if (r.method() === "POST" && /enforcement\/\d+\/(approve|reject)/.test(r.url())) posts.push(r.url()); });
+    const before = await page.locator(".action").first().textContent();
+    await page.locator('[data-action="enf-approve"]').first().click();
+    await page.waitForSelector("dialog.modal[open]");
+    const dialog = (await page.locator("dialog.modal").textContent()) ?? "";
+    assert(/Adresa/.test(dialog) && /Platnost/.test(dialog) && /Důvod/.test(dialog), "dialog neukazuje adresu, platnost a duvod");
+    assert(/předčasně zrušit nejde/.test(dialog), "dialog nerika, ze blok nejde predcasne zrusit");
+    const focused = await page.evaluate(() => document.activeElement?.getAttribute("value"));
+    assert(focused === "cancel", `vychozi fokus u ostreho zasahu neni Zrusit (je ${focused})`);
+    await page.keyboard.press("Enter"); // nahodny Enter = zruseni
+    await page.waitForFunction(() => !document.querySelector("dialog.modal"));
+    await page.locator('[data-action="enf-approve"]').first().click();
+    await page.waitForSelector("dialog.modal[open]");
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector("dialog.modal"));
+    assert(posts.length === 0, `po zruseni odesel pozadavek: ${posts.join(",")}`);
+    assert((await page.locator(".action").first().textContent()) === before, "stav zasahu se po zruseni zmenil");
+    assert(await page.locator('[data-action="enf-approve"]').first().isEnabled(), "tlacitko Schvalit zustalo zamcene");
+    await context.close();
+  });
+
+  await test("Zasahy (ostry rezim): po potvrzeni se zasah provede prave jednou a ohlasi se ctecce (aria-live) i viditelne", async () => {
+    const { page, context } = await open(enforceUrl + "#/zasahy");
+    const posts = [];
+    page.on("request", (r) => { if (r.method() === "POST" && /enforcement\/\d+\/approve/.test(r.url())) posts.push(r.url()); });
+    await page.locator('[data-action="enf-approve"]').first().click();
+    await page.waitForSelector("dialog.modal[open]");
+    await page.click('dialog.modal button[value="yes"]');
+    await page.waitForFunction(() => /zablokovaná na bráně/.test(document.getElementById("announcer")?.textContent ?? ""));
+    assert(/zablokovaná na bráně/.test((await page.locator("#toast").textContent()) ?? ""), "chybi viditelne potvrzeni");
+    assert((await page.locator("#announcer").getAttribute("aria-live")) === "polite", "announcer neni aria-live");
+    assert(posts.length === 1, `schvaleni odeslo ${posts.length}x`);
+    await page.waitForFunction(() => /blok aktivní/.test(document.querySelector(".actions")?.textContent ?? ""));
+    assert(/Blok sám skončí/.test((await page.locator(".actions").textContent()) ?? ""), "u aktivniho bloku chybi vysvetleni, ze nejde predcasne zrusit");
+    await context.close();
+  });
+
+  await test("Zasahy: zjevne chranena IP se odmitne hned v prohlizeci (bez dotazu na server), s vysvetlenim a bez zmeny seznamu", async () => {
+    const { page, context } = await open(base + "#/zasahy");
+    const posts = [];
+    page.on("request", (r) => { if (r.method() === "POST" && /enforcement\/propose/.test(r.url())) posts.push(r.url()); });
+    const countBefore = await page.locator(".action").count();
+    for (const ip of ["127.0.0.1", "169.254.10.4", "224.0.0.5", "::1", "300.1.1.1"]) {
+      await page.fill('input[name="ip"]', ip);
+      const hint = (await page.locator("#ip-hint").textContent()) ?? "";
+      assert(hint.length > 10, `${ip}: zivy popisek se neukazal`);
+      assert((await page.locator('input[name="ip"]').getAttribute("aria-invalid")) === "true", `${ip}: pole neni aria-invalid`);
+      await page.fill('input[name="reason"]', "test");
+      await page.click('form.propose button[type="submit"]');
+      await page.waitForSelector(".form-error");
+      assert((await page.locator('.form-error[role="alert"]').count()) === 1, `${ip}: chyba neni role=alert`);
+    }
+    assert(posts.length === 0, `chranena IP se poslala na server (${posts.length}x)`);
+    assert((await page.locator(".action").count()) === countBefore, "seznam zasahu se zmenil");
+    // adresa vlastni stanice: varovani, ale server rozhoduje
+    const own = await page.evaluate(async () => {
+      const runs = await (await fetch("/api/runs")).json();
+      const run = await (await fetch(`/api/runs/${runs[0].run_id}`)).json();
+      return run.hosts[0].ip;
+    });
+    await page.fill('input[name="ip"]', own);
+    assert(/patří stanici/.test((await page.locator("#ip-hint").textContent()) ?? ""), "adresa vlastni stanice nema varovani");
+    await context.close();
+  });
+
+  await test("Zasahy: navrh z nalezu je oznacen jako blok vlastni stanice a ukaze varovani pred odeslanim", async () => {
+    const { page, context } = await open(base + "#/nalezy");
+    await page.locator(".row").first().click();
+    const btn = page.locator('[data-action="propose-block"]');
+    assert(/blok této stanice/.test((await btn.textContent()) ?? ""), "tlacitko nerika, ze blokuje vlastni stanici");
+    await btn.click();
+    await page.waitForSelector("form.propose");
+    assert(/patří stanici/.test((await page.locator("#ip-hint").textContent()) ?? ""), "predvyplnena adresa vlastni stanice nema varovani");
+    await context.close();
+  });
+
+  await test("Overovani: cekajici schvaleni je vysvetleno (co se provede, riziko, schvaleni), schvalit v UI nejde a UI to rika", async () => {
+    const { page, context } = await open(base + "#/overovani");
+    assert(/nikdy nespustí samy/.test((await page.locator(".approval-note").textContent()) ?? ""), "chybi upozorneni na cekajici schvaleni");
+    await page.locator("details.plan summary").first().click();
+    const box = (await page.locator(".chosen-box").first().textContent()) ?? "";
+    assert(/Co se provede/.test(box) && /riziko narušení/.test(box) && /schválení/.test(box), "chybi popis kontroly, riziko nebo schvaleni");
+    assert(/schvalovat nejde/.test((await page.locator(".approval-note").textContent()) ?? ""), "UI nerika, ze se tu schvalovat neda");
+    assert((await page.locator('[data-action*="approve"]').count()) === 0, "v Overovani nesmi byt falesne schvalovaci tlacitko");
+    await context.close();
+  });
+
+  await test("Automat: bezici autopilot jde zastavit s vysvetlenim dopadu; druhy se nespusti; pentest je vychozi vypnuty", async () => {
+    const runningUrl = await startMock(8807, { MOCK_RUNNING: "1" });
+    const { page, context } = await open(runningUrl + "#/automat");
+    assert(await page.locator('[data-action="auto-stop"]').isVisible(), "chybi tlacitko Zastavit autopilota");
+    assert(await page.locator('[data-action="auto-restart"]').isDisabled(), "novy beh jde spustit pri bezicim autopilotu");
+    await page.click('[data-action="auto-stop"]');
+    await page.waitForSelector("dialog.modal[open]");
+    assert(/ukončí běžící proces/.test((await page.locator("dialog.modal").textContent()) ?? ""), "dialog nevysvetluje dopad zastaveni");
+    await page.click('dialog.modal button[value="cancel"]');
+    assert(await page.locator('[data-action="auto-stop"]').isVisible(), "zruseni zastavilo autopilota");
+    await page.click('[data-action="auto-stop"]');
+    await page.waitForSelector("dialog.modal[open]");
+    await page.click('dialog.modal button[value="yes"]');
+    await page.waitForFunction(() => /Autopilot zastaven/.test(document.getElementById("announcer")?.textContent ?? ""));
+    await page.waitForFunction(() => !document.querySelector('[data-action="auto-stop"]'), null, { timeout: 8000 });
+    await context.close();
+    const fresh = await open(base + "#/automat");
+    assert((await fresh.page.locator('select[data-action="pentest-mode"]').inputValue()) === "off", "vychozi rezim pentestu neni vypnuty");
+    await fresh.context.close();
+  });
+
+  await test("Mapa: jedno tabulatorove zastaveni, sipky chodi mezi stanicemi, krok skoku vybere stanici", async () => {
+    const { page, context } = await open(base);
+    assert((await page.locator('.node[tabindex="0"]').count()) === 1, "mapa ma vic nez jedno tabulatorove zastaveni");
+    const hop = page.locator("button.hop-btn").first();
+    if (await hop.count()) {
+      const host = await hop.getAttribute("data-host");
+      await hop.click();
+      assert((await page.locator(`.node[data-host="${host}"]`).getAttribute("aria-pressed")) === "true", "klik na skok nevybral stanici");
+    }
+    await page.locator('.node[tabindex="0"]').focus();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowLeft");
+    assert((await page.locator('.node[tabindex="0"]').count()) === 1, "po sipkach neni prave jedno tabulatorove zastaveni");
+    await context.close();
+  });
+
+  await test("Chybovy stav: server nedostupny -> srozumitelna hlaska a Zkusit znovu (cerstvy start i vypadek za behu)", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const p2 = await ctx.newPage();
+    await p2.route("**/api/**", (route) => route.abort());
+    await p2.goto(base);
+    await p2.waitForSelector(".dock-item");
+    await p2.waitForFunction(() => /Server neodpovídá/.test(document.querySelector("#stage")?.textContent ?? ""), null, { timeout: 8000 });
+    assert(!/Zatím žádný běh/.test((await p2.locator("#stage").textContent()) ?? ""), "vypadek serveru se tvari jako prazdny server");
+    assert(await p2.locator('#stage [data-global="retry"]').isVisible(), "chybi tlacitko Zkusit znovu na prazdne obrazovce");
+    await p2.unroute("**/api/**");
+    await p2.click('#stage [data-global="retry"]');
+    await p2.waitForSelector(".node", { timeout: 8000 });
+    // vypadek za behu: stranka s daty zustane, ale chybova lista nabidne opakovani
+    await p2.route("**/api/**", (route) => route.abort());
+    await p2.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await p2.waitForSelector('#errorbar [data-global="retry"]', { timeout: 8000 });
+    assert(/bez spojení/.test((await p2.locator(".status-text").textContent()) ?? ""), "stav spojeni neni videt v liste");
+    await ctx.close();
+  });
+
+  await test("Audit: akce maji srozumitelny popis, narusene retezec upozorni (role=alert) s dalsim krokem", async () => {
+    const ok = await open(base + "#/audit");
+    await ok.page.waitForSelector("table.data tbody tr");
+    const text = (await ok.page.locator("table.data").textContent()) ?? "";
+    assert(/Zásah navržen/.test(text) && /Zásah schválen/.test(text), "kody akci nejsou prelozene");
+    await ok.context.close();
+    const bad = await open(brokenChainUrl + "#/audit");
+    await bad.page.waitForSelector("table.data tbody tr");
+    assert(/nespoléhej/.test((await bad.page.locator('.approval-note[role="alert"]').textContent()) ?? ""), "chybi vysvetleni a dalsi krok pri narusenem retezci");
+    await bad.context.close();
   });
 
   await test("Pohyb: pri prefers-reduced-motion se tecka skoku nehybe", async () => {

@@ -5,6 +5,7 @@
 //   node scripts/mock-server.mjs [port]     (vychozi port 8787)
 //   MOCK_ROLE=analyst   -> approve/reject vraci 403 (test oprávnění)
 //   MOCK_AUTH=1         -> vyzaduje Authorization: Bearer test
+//   MOCK_RUNNING=1      -> autopilot behi (test tlacitka Zastavit)
 //   MOCK_EMPTY=1        -> server bez bezu a bez novych endpointu (404)
 
 import { createServer } from "node:http";
@@ -197,11 +198,11 @@ const actions = [
   { id: 3, ip: "198.51.100.99", ttl_seconds: 600, reason: "Zkušební návrh", finding_id: null, status: "rejected", nft_command: ["add", "element", "inet", "bakula", "blocked_ips", "{ 198.51.100.99 timeout 600s }"], proposed_at: new Date(Date.now() - 90 * 60000).toISOString(), decided_by: "operator", decided_at: new Date(Date.now() - 85 * 60000).toISOString(), applied_at: null },
 ];
 const audit = [
-  { id: 1, at: new Date(Date.now() - 95 * 60000).toISOString(), actor: "analyst", action: "enforcement.propose", subject: "198.51.100.99", detail: "ttl=600s" },
-  { id: 2, at: new Date(Date.now() - 85 * 60000).toISOString(), actor: "operator", action: "enforcement.reject", subject: "#3", detail: "zamítnuto" },
-  { id: 3, at: new Date(Date.now() - 22 * 60000).toISOString(), actor: "analyst", action: "enforcement.propose", subject: "203.0.113.50", detail: "ttl=3600s" },
-  { id: 4, at: new Date(Date.now() - 20 * 60000).toISOString(), actor: "operator", action: "enforcement.approve", subject: "#1", detail: "schváleno" },
-  { id: 5, at: new Date(Date.now() - 3 * 60000).toISOString(), actor: "analyst", action: "enforcement.propose", subject: "198.51.100.7", detail: "ttl=900s" },
+  { id: 1, at: new Date(Date.now() - 95 * 60000).toISOString(), actor: "analyst", action: "enforcement.proposed", subject: "198.51.100.99", detail: "ttl=600s" },
+  { id: 2, at: new Date(Date.now() - 85 * 60000).toISOString(), actor: "operator", action: "enforcement.rejected_by_operator", subject: "#3", detail: "zamítnuto" },
+  { id: 3, at: new Date(Date.now() - 22 * 60000).toISOString(), actor: "analyst", action: "enforcement.proposed", subject: "203.0.113.50", detail: "ttl=3600s" },
+  { id: 4, at: new Date(Date.now() - 20 * 60000).toISOString(), actor: "operator", action: "enforcement.approved", subject: "#1", detail: "schváleno" },
+  { id: 5, at: new Date(Date.now() - 3 * 60000).toISOString(), actor: "analyst", action: "enforcement.proposed", subject: "198.51.100.7", detail: "ttl=900s" },
 ].reverse();
 
 const PROTECTED = [/^127\./, /^169\.254\./, /^22[4-9]\.|^23\d\./, /^192\.168\.56\.1$/];
@@ -276,7 +277,15 @@ async function api(req, res, url, path) {
     summary: { cycles_total: 3, tooling_coverage_ratio: 0.8, service_identity_coverage_ratio: 1, automation_agents_total: 22, automation_rounds_total: 3, forensic_targets_total: 3, mas_consensus_score: 0.65, mas_consensus_state: "review", run_ids: [RUNS[0].id] },
     agents: [], capabilities: [{ capability_id: "nmap", label: "Nmap inventář", available: true, activated: true }, { capability_id: "zeek", label: "Zeek pasivní senzor", available: true, activated: true }, { capability_id: "suricata", label: "Suricata alerty", available: true, activated: false }, { capability_id: "nuclei", label: "Nuclei šablony", available: false, activated: false }],
   });
-  if (path === "/api/automation/restart" || path === "/api/automation/reset") return send(res, 200, { ok: true });
+  if (path === "/api/automation/restart") {
+    if (automationStatus.process_running) return send(res, 409, "Autopilot už běží. Použij reset nebo počkej na dokončení.");
+    automationStatus.process_running = true;
+    return send(res, 200, { ok: true });
+  }
+  if (path === "/api/automation/reset") {
+    automationStatus.process_running = false;
+    return send(res, 200, { ok: true });
+  }
   if (path === "/api/readiness") return send(res, 200, EMPTY ? null : { status: "partial", grade: "B", score: 78, blockers: ["Chybí produkční Zeek sensor"], next_steps: ["Připojit Zeek log adresář", "Zapnout API token"], checks: [{ check_id: "auth", label: "Autentizace API", status: "ok", score: 100, evidence: ["require_api_token=true"], next_step: "" }, { check_id: "passive", label: "Pasivní telemetrie", status: "warn", score: 40, evidence: ["zeek: nenalezeno"], next_step: "Připojit Zeek log adresář" }] });
   if (path === "/api/ai/status") return send(res, 200, { mode: "mock" });
 
@@ -293,7 +302,7 @@ async function api(req, res, url, path) {
     if (actions.some((a) => a.ip === ip && ["proposed", "approved", "applied"].includes(a.status))) return send(res, 422, { error: "AlreadyActive" });
     const action = { id: nextId++, ip, ttl_seconds: body.ttl_seconds, reason: body.reason ?? "", finding_id: body.finding_id ?? null, status: "proposed", nft_command: ["add", "element", "inet", "bakula", "blocked_ips", `{ ${ip} timeout ${body.ttl_seconds}s }`], proposed_at: nowIso(), decided_by: null, decided_at: null, applied_at: null };
     actions.push(action);
-    audit.unshift({ id: audit.length + 1, at: nowIso(), actor: ROLE, action: "enforcement.propose", subject: ip, detail: `ttl=${body.ttl_seconds}s` });
+    audit.unshift({ id: audit.length + 1, at: nowIso(), actor: ROLE, action: "enforcement.proposed", subject: ip, detail: `ttl=${body.ttl_seconds}s` });
     return send(res, 200, action);
   }
   const decide = path.match(/^\/api\/enforcement\/(\d+)\/(approve|reject)$/);
@@ -305,7 +314,7 @@ async function api(req, res, url, path) {
     action.decided_by = ROLE;
     action.decided_at = nowIso();
     if (action.status === "applied") action.applied_at = nowIso();
-    audit.unshift({ id: audit.length + 1, at: nowIso(), actor: ROLE, action: `enforcement.${decide[2]}`, subject: `#${action.id}`, detail: decide[2] === "approve" ? "schváleno" : "zamítnuto" });
+    audit.unshift({ id: audit.length + 1, at: nowIso(), actor: ROLE, action: (decide[2] === "approve" ? "enforcement.approved" : "enforcement.rejected_by_operator"), subject: `#${action.id}`, detail: decide[2] === "approve" ? "schváleno" : "zamítnuto" });
     return send(res, 200, action);
   }
   if (path === "/api/audit") return send(res, 200, audit.slice(0, Number(url.searchParams.get("limit") ?? 100)));

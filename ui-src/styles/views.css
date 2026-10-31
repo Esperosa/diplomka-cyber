@@ -13,10 +13,53 @@
   min-width: 0;
 }
 .netmap {
+  --u: 1; /* 1 / meritko mapy: pismo a znacky maji stejnou velikost na obrazovce pri kazdem priblizeni */
   width: 100%;
   height: 100%;
   display: block;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
 }
+.netmap.is-far .zone-count {
+  display: none;
+}
+.netmap.is-dragging {
+  cursor: grabbing;
+}
+.map-tools {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.map-btn {
+  width: var(--tap);
+  height: var(--tap);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  color: var(--ink);
+  transition: background 0.18s;
+}
+.map-btn:disabled {
+  opacity: 1;
+  color: color-mix(in srgb, var(--ink) 35%, transparent);
+  border-color: var(--line);
+}
+.map-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.map-legend-btn {
+  display: none;
+}
+
 
 /* zony (podsite): jemny organicky obrys */
 .zone-outline {
@@ -27,18 +70,26 @@
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
+.zone-label,
+.zone-count,
+.net-label,
+.out-ip {
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: calc(3px * var(--u));
+  stroke-linejoin: round;
+}
 .zone-label {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: calc(12px * var(--u));
   fill: var(--ink-2);
   text-anchor: middle;
 }
 .zone-count {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: calc(11px * var(--u));
   fill: var(--ink-2);
   text-anchor: middle;
-  opacity: 0.75;
 }
 
 /* goo vrstva: bubliny a mosty splyvaji do jedne organicke hmoty */
@@ -89,7 +140,7 @@
 }
 .net-label {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(12px * var(--u));
   fill: var(--ink-2);
   text-anchor: middle;
 }
@@ -102,7 +153,7 @@
 }
 .out-ip {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(11px * var(--u));
   fill: var(--ink-2);
   text-anchor: middle;
 }
@@ -114,6 +165,11 @@
 }
 .node:focus-visible {
   outline: none;
+}
+.node:focus-visible .hit {
+  stroke: var(--ink);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
 }
 .node:focus-visible .node-edge,
 .node:hover .node-edge {
@@ -172,6 +228,9 @@
   stroke: var(--ink);
   stroke-width: 1.2;
 }
+.hop-mark {
+  transform: scale(var(--um, 1));
+}
 .hop-mark circle {
   fill: var(--hot);
   stroke: var(--ink);
@@ -180,7 +239,7 @@
 }
 .hop-mark text {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   fill: var(--on-hot);
   text-anchor: middle;
@@ -216,7 +275,8 @@
   padding: 0;
   margin: 0;
   display: grid;
-  gap: 0.3rem;
+  gap: 0.35rem;
+  pointer-events: none;
   font-family: var(--mono);
   font-size: var(--fs-xs);
   color: var(--ink-2);
@@ -277,10 +337,14 @@
 .host-card {
   padding: 1rem 1.2rem;
   border: 1px solid var(--line-2);
-  border-radius: 2.2rem 1.4rem 2rem 1.6rem;
+  border-radius: var(--r-card);
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+.host-card.is-empty {
+  padding: 0 0.2rem;
+  border-color: transparent;
 }
 .host-card .btn {
   align-self: flex-start;
@@ -320,7 +384,7 @@
   background: var(--hot);
   color: var(--on-hot);
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   font-weight: 500;
   display: grid;
   place-items: center;
@@ -382,7 +446,7 @@
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 1.5rem;
+  border-radius: var(--r-soft);
 }
 .row:hover {
   background: var(--surface-2);
@@ -401,6 +465,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.row-main > span:first-child:not(.mono) {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  line-height: 1.3;
 }
 .row > .sev:first-child {
   margin-left: 0.2rem;
@@ -427,7 +499,7 @@
   margin-bottom: 1.4rem;
 }
 .detail-head h2 {
-  font-size: 1.45rem;
+  font-size: var(--fs-xl);
   font-weight: 500;
   line-height: 1.25;
   margin: 0.4rem 0 0.4rem;
@@ -477,7 +549,7 @@
 }
 .service > summary {
   display: grid;
-  grid-template-columns: 5.5rem 7rem minmax(0, 1fr) 4rem 3rem 7rem;
+  grid-template-columns: 5.5rem 7rem minmax(0, 1fr) 5.2rem 3rem 7rem;
   gap: 0.8rem;
   align-items: center;
   min-height: var(--tap);
@@ -559,9 +631,14 @@
   min-width: 0;
 }
 .plan-type {
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.plan-pick .mono {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
 }
 .plan-body {
   padding: 0.4rem 0 1.2rem;
@@ -675,7 +752,7 @@
 .propose {
   padding: 1.3rem 1.5rem 1.4rem;
   border: 1px solid var(--line);
-  border-radius: 2.4rem 1.6rem 2.2rem 1.8rem;
+  border-radius: var(--r-card);
 }
 .form-grid {
   display: grid;
@@ -860,16 +937,21 @@
   padding: 0.5rem 0 1rem;
 }
 
-/* ---------- Uzsi obrazovky ---------- */
-@media (max-width: 64rem) {
+/* ---------- Stredni obrazovky: uzsi panel, vic mista pro mapu ---------- */
+@media (max-width: 80rem) {
   .overview {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(16rem, 1fr) auto;
-    overflow: auto;
-    padding: 0 1rem 1rem;
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    gap: 1rem;
+    padding-right: 1.4rem;
   }
-  .side {
-    overflow: visible;
+}
+
+/* ---------- Uzsi obrazovky ---------- */
+@media (max-width: 64.06rem) {
+  .overview {
+    grid-template-columns: minmax(0, 1fr) 17rem;
+    gap: 1rem;
+    padding: 0 1rem 1rem;
   }
   .split {
     grid-template-columns: 17rem minmax(0, 1fr);
@@ -878,29 +960,34 @@
     padding: 0.3rem 1.2rem 2rem 1rem;
   }
   .service > summary {
-    grid-template-columns: 4.5rem 5rem minmax(0, 1fr) 3rem;
+    grid-template-columns: 4.5rem 5rem minmax(0, 1fr) 5.2rem;
   }
   .service > summary > :nth-child(5),
   .service > summary > :nth-child(6) {
     display: none;
   }
   .plan > summary {
-    grid-template-columns: minmax(0, 1fr) 3.5rem;
-  }
-  .plan > summary > :nth-child(2) {
-    display: none;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "type num" "asset num" "pick num";
+    gap: 0.1rem 1rem;
+    padding: 0.55rem 0;
   }
   .plan > summary > .plan-type {
-    grid-column: 1;
+    grid-area: type;
+  }
+  .plan > summary > :nth-child(2) {
+    grid-area: asset;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .plan > summary > .plan-pick {
-    grid-column: 1;
-    grid-row: 2;
+    grid-area: pick;
+    flex-wrap: wrap;
   }
   .plan > summary > :last-child {
-    grid-column: 2;
-    grid-row: 1;
-    align-self: start;
+    grid-area: num;
+    align-self: center;
     text-align: right;
   }
   .auto {
@@ -921,7 +1008,7 @@
   }
 }
 
-@media (max-width: 48rem) {
+@media (max-width: 48.06rem) {
   .split {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -948,18 +1035,70 @@
     grid-template-columns: 6.5rem auto 1fr;
     gap: 0.6rem;
   }
-  .auto-status {
-    flex-direction: column;
-    align-items: flex-start;
+  .service > summary {
+    grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+    gap: 0 0.8rem;
+    padding: 0.4rem 0;
+  }
+  .service > summary > :nth-child(1) {
+    grid-area: 1 / 1;
+  }
+  .service > summary > :nth-child(2) {
+    grid-area: 1 / 2;
+  }
+  .service > summary > :nth-child(4) {
+    grid-area: 1 / 3;
+  }
+  .service > summary > :nth-child(3) {
+    grid-area: 2 / 2 / 3 / 4;
+  }
+  .ring-wrap {
+    width: 5.5rem;
+    height: 5.5rem;
+  }
+  .ring-dm .dm {
+    height: 0.9rem;
+  }
+  .readouts-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .readout {
+    padding: 0.7rem 1rem 0.65rem;
+  }
+  .readout-num {
+    font-size: var(--fs-xl);
   }
   .assistant {
     inset: 0;
     width: auto;
     border-radius: 0;
   }
+  .overview {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(15rem, 54%) minmax(0, 1fr);
+    gap: 0.8rem;
+    padding: 0 0.9rem 0.8rem;
+  }
+  .map-legend-btn {
+    display: grid;
+  }
+  .map-tools {
+    top: auto;
+    bottom: 0;
+    flex-direction: row;
+  }
   .legend {
-    position: static;
-    padding: 0.4rem 0.4rem 0;
+    display: none;
+    left: 0;
+    bottom: calc(var(--tap) + 0.5rem);
+    padding: 0.7rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-soft);
+    pointer-events: auto;
+  }
+  .field-wrap.legend-open .legend {
+    display: grid;
   }
   .field-wrap {
     display: flex;
@@ -970,6 +1109,67 @@
     min-height: 0;
   }
   .readouts {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   }
+}
+
+/* Overovani: co se provede + upozorneni na cekajici schvaleni */
+.approval-note {
+  margin: 0 0 1.2rem;
+  padding: 0.8rem 1.1rem;
+  border: 1.5px solid var(--signal);
+  border-radius: var(--r-soft);
+  font-size: var(--fs-sm);
+}
+.approval-note p {
+  margin: 0 0 0.3rem;
+}
+.approval-note p:last-child {
+  margin: 0;
+}
+.chosen-box {
+  margin: 0 0 1rem;
+  padding: 0.8rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-soft);
+}
+.chosen-box .eyebrow {
+  margin: 0 0 0.3rem;
+}
+.plan-type {
+  font-weight: 500;
+}
+
+/* Cesta skoku: klikatelna polozka */
+.hop-list li:has(> .hop-btn) {
+  display: block;
+  padding: 0;
+}
+.hop-btn {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: start;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0.45rem 0.4rem;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-soft);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.hop-btn {
+  cursor: pointer;
+}
+button.hop-btn:hover,
+button.hop-btn[aria-pressed="true"] {
+  background: var(--surface-2);
+}
+.sev-text {
+  font-weight: 500;
+}
+.detail-actions {
+  margin: 0.4rem 0 1.2rem;
 }

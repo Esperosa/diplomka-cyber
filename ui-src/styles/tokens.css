@@ -90,10 +90,15 @@
   --fs-sm: 0.82rem;
   --fs-md: 0.95rem;
   --fs-lg: 1.25rem;
+  --fs-xl: 1.5rem;
+  --fs-num: 2rem;
 
   --tap: 2.75rem;
   /* Organicke, zamerne nesymetricke rohy hlavni plochy. */
   --r-pane: 2.6rem 3.8rem 2.2rem 3.1rem / 2.8rem 2.2rem 3.6rem 2.5rem;
+  --r-pane-sm: 2rem 2.6rem 1.8rem 2.2rem / 2rem 1.8rem 2.6rem 2rem;
+  --r-card: 2.2rem 1.5rem 2rem 1.7rem;
+  --r-card-2: 1.5rem 2.2rem 1.7rem 2rem;
   --r-soft: 1.4rem;
   --r-pill: 999px;
 }

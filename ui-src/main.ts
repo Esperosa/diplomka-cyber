@@ -107,7 +107,7 @@ function renderChrome() {
   const bar = app.querySelector<HTMLElement>("#errorbar")!;
   bar.hidden = !state.error;
   bar.innerHTML = state.error
-    ? `<span>${esc(state.error)}</span><button type="button" class="btn btn-ghost" data-global="dismiss-error">Skrýt</button>`
+    ? `<span>${esc(state.error)}</span><span class="errorbar-actions">${state.authNeeded ? `<button type="button" class="btn btn-ghost" data-global="token-open">Zadat token</button>` : state.connection === "error" ? `<button type="button" class="btn btn-ghost" data-global="retry">Zkusit znovu</button>` : ""}<button type="button" class="btn btn-ghost" data-global="dismiss-error">Skrýt</button></span>`
     : "";
 
   // token
@@ -256,7 +256,13 @@ app.addEventListener("keydown", (event) => {
     event.preventDefault();
     void runAction(target, event);
   }
-  if (event.key === "Escape" && state.assistantOpen) setAssistantOpen(false);
+  if (event.key === "Escape") {
+    const menu = app.querySelector<HTMLDetailsElement>("details.menu[open]");
+    if (menu) {
+      menu.removeAttribute("open");
+      menu.querySelector<HTMLElement>("summary")?.focus();
+    } else if (state.assistantOpen) setAssistantOpen(false);
+  }
 });
 
 app.addEventListener("change", (event) => {
@@ -313,6 +319,10 @@ async function runGlobal(el: HTMLElement) {
       app.querySelector("[data-global='assistant-toggle']")?.setAttribute("aria-expanded", "false");
       (app.querySelector("[data-global='assistant-toggle']") as HTMLElement | null)?.focus();
       break;
+    case "retry":
+      await refreshAll(false);
+      break;
+    case "token-open":
     case "token": {
       const token = await tokenDialog();
       if (token) {

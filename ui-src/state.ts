@@ -44,6 +44,8 @@ export const state = {
   /** Role se uci z odpovedi serveru: po 403 se tlacitka vypnou s vysvetlenim. */
   denied: { approve: false, propose: false },
 
+  /** Server odpověděl 401 a token chybí nebo je špatný. */
+  authNeeded: false,
   loading: true,
   error: null as string | null,
   connection: "ok" as "ok" | "error",
@@ -67,8 +69,9 @@ export const state = {
   },
   proposeError: null as string | null,
   proposeBusy: false,
+  enfBusy: null as number | null,
 
-  pentestMode: "smart" as PentestMode,
+  pentestMode: "off" as PentestMode,
   assistantOpen: false,
   chat: [] as ChatMessage[],
   chatBusy: false,

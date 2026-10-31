@@ -1,3 +1,4 @@
+import { state } from "../state";
 import { esc } from "../ui";
 
 export function paneHead(title: string, tools = ""): string {
@@ -18,4 +19,20 @@ export function backButton(label = "Zpět na seznam"): string {
 
 export function chip(text: string, tone: "" | "hot" | "ink" | "mute" = ""): string {
   return `<span class="chip${tone ? ` chip-${tone}` : ""}">${esc(text)}</span>`;
+}
+
+/**
+ * Stav obrazovky, která potřebuje načtený běh. Rozlišuje načítání, výpadek serveru, chybějící token
+ * a skutečně prázdný server, aby uživatel vždy věděl, co dál.
+ */
+export function noDataState(title: string): string {
+  const head = paneHead(title);
+  if (state.authNeeded) {
+    return `${head}${emptyState("Server vyžaduje token", "Bez API tokenu server data nevydá. Zadej token a načtení se zopakuje.", `<button type="button" class="btn" data-global="token-open">Zadat token</button>`)}`;
+  }
+  if (state.connection === "error") {
+    return `${head}${emptyState("Server neodpovídá", "Nepodařilo se načíst data. Zkontroluj, že server běží a že jsi ve správné síti. Obnovení se zkouší samo, nebo to zkus hned.", `<button type="button" class="btn" data-global="retry">Zkusit znovu</button>`)}`;
+  }
+  if (state.loading) return `${head}${emptyState("Načítám…", "Čekám na odpověď serveru.")}`;
+  return `${head}${emptyState("Zatím žádný běh", "Server zatím nemá žádný uložený běh. Spusť autopilota v sekci Automat, po dokončení se tady objeví data.", `<button type="button" class="btn" data-action="goto" data-key="automat">Otevřít Automat</button>`)}`;
 }

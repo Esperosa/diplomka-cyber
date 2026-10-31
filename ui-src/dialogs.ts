@@ -16,13 +16,38 @@ function openDialog(html: string): { dialog: HTMLDialogElement; done: Promise<st
   return { dialog, done };
 }
 
-export async function confirmDialog(title: string, text: string, confirmLabel: string, hot = false): Promise<boolean> {
+export type ConfirmOptions = {
+  /** Dvojice popisek / hodnota: co přesně se stane. */
+  details?: Array<[string, string]>;
+  /** Varování zvýrazněná v dialogu (např. adresa patří vlastní stanici). */
+  warnings?: string[];
+  /** Poznámka o dopadu a vrácení (jedna věta až dvě). */
+  impact?: string;
+};
+
+/**
+ * Potvrzení nevratné nebo citlivé akce. U nebezpečných akcí (`hot`) je výchozí fokus na „Zrušit“,
+ * aby náhodný Enter nic neprovedl.
+ */
+export async function confirmDialog(
+  title: string,
+  text: string,
+  confirmLabel: string,
+  hot = false,
+  options: ConfirmOptions = {},
+): Promise<boolean> {
+  const details = options.details?.length
+    ? `<dl class="modal-kv">${options.details.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`
+    : "";
+  const warnings = (options.warnings ?? []).map((w) => `<p class="modal-warn" role="note"><strong>Pozor.</strong> ${esc(w)}</p>`).join("");
+  const impact = options.impact ? `<p class="modal-impact small muted">${esc(options.impact)}</p>` : "";
   const { dialog, done } = openDialog(`<form method="dialog">
     <h2>${esc(title)}</h2>
     <p>${esc(text)}</p>
+    ${details}${warnings}${impact}
     <div class="modal-actions">
-      <button type="submit" value="cancel" class="btn btn-ghost">Zrušit</button>
-      <button type="submit" value="yes" class="btn${hot ? " btn-hot" : ""}" autofocus>${esc(confirmLabel)}</button>
+      <button type="submit" value="cancel" class="btn btn-ghost"${hot ? " autofocus" : ""}>Zrušit</button>
+      <button type="submit" value="yes" class="btn${hot ? " btn-hot" : ""}"${hot ? "" : " autofocus"}>${esc(confirmLabel)}</button>
     </div>
   </form>`);
   dialog.querySelector<HTMLButtonElement>("button[autofocus]")?.focus();

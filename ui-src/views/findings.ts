@@ -10,7 +10,8 @@ import {
   SEVERITY_LABEL,
   UNCERTAINTY_AXES,
 } from "../ui";
-import { backButton, chip, emptyState, paneHead } from "./common";
+import { hypothesisLabel, methodLabel } from "../glossary";
+import { backButton, chip, emptyState, noDataState, paneHead } from "./common";
 
 function filtered(): Finding[] {
   const all = state.report?.findings ?? [];
@@ -63,7 +64,7 @@ function planBlock(finding: Finding): string {
   return `<section><h3 class="eyebrow">Další ověření</h3>
     ${
       chosen
-        ? `<p><span class="mono">${esc(chosen.candidate.method)}</span> ${chosen.candidate.requires_approval ? chip("vyžaduje schválení", "hot") : chip("bez schválení", "mute")}</p>
+        ? `<p><span title="${esc(chosen.candidate.method)}">${esc(methodLabel(chosen.candidate.method))}</span> ${chosen.candidate.requires_approval ? chip("vyžaduje schválení", "hot") : chip("bez schválení", "mute")}</p>
            <p class="small muted">užitečnost <span class="mono">${chosen.utility.toFixed(2)}</span> · riziko narušení ${pct(chosen.candidate.disruption_risk)}</p>`
         : `<p class="muted small">Žádný kandidát.</p>`
     }
@@ -77,23 +78,23 @@ function detail(finding: Finding): string {
   <div class="detail-head">
     <p class="eyebrow">${severityMarker(finding.severity)} ${esc(SEVERITY_LABEL[finding.severity])} závažnost · jistota ${esc(finding.confidence)}</p>
     <h2>${esc(finding.title)}</h2>
-    <p class="small muted mono">${esc(finding.finding_type)}${finding.host_key ? ` · ${esc(finding.host_key)}` : ""}${finding.service_key ? ` · ${esc(finding.service_key)}` : ""}</p>
+    <p class="small muted"><span>${esc(hypothesisLabel(finding.finding_type))}</span> <span class="mono">${esc(finding.finding_type)}${finding.host_key ? ` · ${esc(finding.host_key)}` : ""}${finding.service_key ? ` · ${esc(finding.service_key)}` : ""}</span></p>
+  </div>
+  <div class="actions-row detail-actions">
+    ${host ? `<button type="button" class="btn btn-ghost" data-action="open-host" data-key="${esc(host.host_key)}">Stanice ${esc(host.ip)}</button>` : ""}
+    ${host ? `<button type="button" class="btn btn-ghost" data-action="propose-block" data-key="${esc(finding.finding_id)}" data-ip="${esc(host.ip)}" title="Připraví návrh bloku adresy této stanice. Nic se neblokuje, dokud ho nepotvrdíš v Zásahách.">Navrhnout blok této stanice…</button>` : ""}
+    <button type="button" class="btn btn-ghost" data-action="ask" data-key="${esc(finding.finding_id)}">Zeptat se asistenta</button>
   </div>
   <section><h3 class="eyebrow">Proč</h3><p>${esc(finding.rationale)}</p></section>
   <section><h3 class="eyebrow">Doporučení</h3><p>${esc(finding.recommendation)}</p></section>
   <section><h3 class="eyebrow">Důkazy (${finding.evidence.length})</h3><ul class="plain evidence">${finding.evidence.map((e) => `<li class="mono small">${esc(e)}</li>`).join("")}</ul></section>
   ${hypothesisBlock(hypothesisForFinding(report, finding))}
-  ${planBlock(finding)}
-  <div class="actions-row">
-    ${host ? `<button type="button" class="btn btn-ghost" data-action="open-host" data-key="${esc(host.host_key)}">Stanice ${esc(host.ip)}</button>` : ""}
-    ${host ? `<button type="button" class="btn btn-ghost" data-action="propose-block" data-key="${esc(finding.finding_id)}" data-ip="${esc(host.ip)}">Navrhnout zásah…</button>` : ""}
-    <button type="button" class="btn btn-ghost" data-action="ask" data-key="${esc(finding.finding_id)}">Zeptat se asistenta</button>
-  </div>`;
+  ${planBlock(finding)}`;
 }
 
 function render(): string {
   const report = state.report;
-  if (!report) return `${paneHead("Nálezy")}${emptyState("Bez dat", "Není načtený žádný běh.")}`;
+  if (!report) return noDataState("Nálezy");
   const list = filtered();
   const selected = report.findings.find((f) => f.finding_id === state.selectedFinding) ?? null;
   return `${paneHead("Nálezy a hypotézy", filters())}
@@ -105,7 +106,7 @@ function render(): string {
               const sel = f.finding_id === state.selectedFinding;
               return `<button type="button" class="row${sel ? " is-selected" : ""}" data-action="select-finding" data-key="${esc(f.finding_id)}" aria-current="${sel}">
                 ${severityMarker(f.severity)}
-                <span class="row-main"><span>${esc(f.title)}</span><span class="small muted mono">${esc(f.host_key ?? "bez stanice")} · ${esc(f.finding_type)}</span></span>
+                <span class="row-main"><span>${esc(f.title)}</span><span class="small muted"><span class="sev-text">${esc(SEVERITY_LABEL[f.severity])}</span> · <span class="mono">${esc(f.host_key ?? "bez stanice")}</span> · <span title="${esc(f.finding_type)}">${esc(hypothesisLabel(f.finding_type))}</span></span></span>
               </button>`;
             })
             .join("")

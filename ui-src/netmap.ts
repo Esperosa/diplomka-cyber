@@ -254,18 +254,20 @@ export function renderNetMap(report: Report, selected: string | null): string {
     }
     const dashed = node.uncertainty !== null && node.uncertainty >= 0.5;
     const octet = node.host.ip.includes(".") ? `.${node.host.ip.split(".").pop()}` : node.host.ip.slice(-4);
-    const showLabel = node.r >= 11 || isSel;
+    // pismo se vejde do bubliny; ukaze se, az je na obrazovce aspon 9,5 px (rozhoduje priblizeni, viz mapview.ts)
+    const labelSize = Math.max(4, Math.min(17, (node.r * 2 * 0.82) / (0.62 * octet.length)));
+    const need = 9.5 / labelSize;
     const risk = node.sev === 3 ? "vysoké" : node.sev === 2 ? "střední" : node.sev === 1 ? "nízké" : "bez nálezů";
     const unc = node.uncertainty === null ? "neznámá" : `${Math.round(node.uncertainty * 100)} %`;
     const label = `${node.host.ip}${node.host.hostname ? `, ${node.host.hostname}` : ""}. Riziko ${risk}. Nejistota ${unc}.`;
     const drift = random();
     return `<g transform="translate(${node.x.toFixed(1)} ${node.y.toFixed(1)})">
-      <g class="node${isSel ? " is-selected" : ""}" tabindex="0" role="button" aria-pressed="${isSel}" aria-label="${esc(label)}" data-action="select-pebble" data-host="${esc(node.host.host_key)}" style="--wob:${(drift * 1.4).toFixed(2)}px">
+      <g class="node${isSel ? " is-selected" : ""}" data-x="${node.x.toFixed(1)}" data-y="${node.y.toFixed(1)}" data-r="${node.r.toFixed(1)}" tabindex="0" role="button" aria-pressed="${isSel}" aria-label="${esc(label)}" data-action="select-pebble" data-host="${esc(node.host.host_key)}" style="--wob:${(drift * 1.4).toFixed(2)}px">
         <title>${esc(label)}</title>
         <circle class="hit" r="${(node.r + 8).toFixed(1)}"/>
         ${dots}
         <circle class="node-edge${dashed ? " is-dashed" : ""}" r="${node.r.toFixed(1)}"/>
-        ${showLabel ? `<text class="node-ip s${node.sev}" y="1" font-size="${Math.max(12, Math.min(17, node.r * 0.8)).toFixed(1)}">${esc(octet)}</text>` : ""}
+        <text class="node-ip s${node.sev}" y="1" data-need="${need.toFixed(2)}" font-size="${labelSize.toFixed(1)}"${isSel ? ' data-sel="1"' : ""}>${esc(octet)}</text>
         ${isSel ? `<circle class="sel-ring" r="${(node.r + 11).toFixed(1)}"/>` : ""}
       </g></g>`;
   };
@@ -307,7 +309,7 @@ export function renderNetMap(report: Report, selected: string | null): string {
     .filter((h) => positions.has(h.asset))
     .map((hop) => {
       const p = positions.get(hop.asset)!;
-      return `<g class="hop-mark st-${hop.status}" transform="translate(${(p.x + 16).toFixed(1)} ${(p.y - 18).toFixed(1)})"><circle r="12"/><text y="0.5">${hop.index}</text></g>`;
+      return `<g transform="translate(${(p.x + 16).toFixed(1)} ${(p.y - 18).toFixed(1)})"><g class="hop-mark st-${hop.status}"><circle r="11"/><text y="0.5">${hop.index}</text></g></g>`;
     })
     .join("");
   const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -319,7 +321,7 @@ export function renderNetMap(report: Report, selected: string | null): string {
   const allNodes = zones.flatMap((z) => z.nodes);
   const overlay = allNodes.map(nodeOverlay).join("");
 
-  return `<svg class="netmap" viewBox="${vb}" role="group" aria-label="Mapa sítě" preserveAspectRatio="xMidYMid meet">
+  return `<svg class="netmap" viewBox="${vb}" data-vb="${vb}" data-run="${esc(report.run.run_id)}" role="group" aria-label="Mapa sítě. Tabulátor vstoupí na mapu, šipky přeskakují mezi stanicemi, plus a mínus přibližují, nula zobrazí celou mapu." preserveAspectRatio="xMidYMid meet">
     <g class="zones">${zoneOutlines}</g>
     <g class="goo">${goo.join("")}</g>
     <g class="hops">${hopArcs}${hopper}</g>

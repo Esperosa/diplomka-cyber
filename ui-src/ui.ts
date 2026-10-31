@@ -131,3 +131,33 @@ export function pct(value: number | null | undefined): string {
 export function num(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
+
+/**
+ * Zjevně nezablokovatelná adresa, ještě než se ptáme serveru. Server zůstává autoritou
+ * (chráněné rozsahy může doplnit operátor); tady jen zachytíme to, co je jasné na první pohled.
+ */
+export function obviousProblemWithIp(raw: string): string | null {
+  const ip = raw.trim().toLowerCase();
+  if (!ip) return null;
+  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const o = v4.slice(1).map(Number);
+    if (o.some((n) => n > 255)) return "Zadaná hodnota není platná IPv4 adresa (každé číslo musí být 0 až 255).";
+    if (o[0] === 127) return "Adresa 127.x.x.x je loopback (tento počítač) a patří do chráněného rozsahu. Nelze ji zablokovat.";
+    if (o[0] === 169 && o[1] === 254) return "Adresa 169.254.x.x je link-local (automatická místní adresa). Je v chráněném rozsahu a nelze ji zablokovat.";
+    if (o[0] >= 224 && o[0] <= 239) return "Adresa 224 až 239 je multicast. Je v chráněném rozsahu a nelze ji zablokovat.";
+    if (o.every((n) => n === 0)) return "Adresa 0.0.0.0 neoznačuje konkrétní zařízení. Nelze ji zablokovat.";
+    if (o.every((n) => n === 255)) return "Adresa 255.255.255.255 je broadcast. Nelze ji zablokovat.";
+    return null;
+  }
+  if (ip === "::1") return "Adresa ::1 je loopback (tento počítač) a patří do chráněného rozsahu. Nelze ji zablokovat.";
+  if (ip.startsWith("fe80:")) return "Adresa fe80:: je link-local. Je v chráněném rozsahu a nelze ji zablokovat.";
+  if (ip.startsWith("ff")) return ip.includes(":") ? "Adresa ff.. je multicast. Je v chráněném rozsahu a nelze ji zablokovat." : null;
+  if (!/^[0-9a-f:.]+$/.test(ip) || (!ip.includes(":") && !v4)) return "Zadaná hodnota není platná IPv4 ani IPv6 adresa.";
+  return null;
+}
+
+/** Stanice ve vlastní síti (z aktuálního běhu), jejíž adresa se shoduje. */
+export function ownStationByIp(report: Report | null, ip: string): Host | null {
+  return report?.hosts.find((h) => h.ip === ip.trim()) ?? null;
+}

@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import { state, update } from "./state";
 
 let inFlight = false;
@@ -46,6 +46,7 @@ export async function refreshAll(silent = false) {
         activeRunId,
         report,
         error: null,
+        authNeeded: false,
         connection: "ok",
         loading: false,
         lastUpdated: new Date().toISOString(),
@@ -53,9 +54,11 @@ export async function refreshAll(silent = false) {
       !silent,
     );
   } catch (error) {
+    const unauthorized = error instanceof ApiError && error.status === 401;
     update(
       {
-        error: error instanceof Error ? error.message : String(error),
+        error: unauthorized ? "Server vyžaduje API token. Zadej ho v nabídce Více." : error instanceof Error ? error.message : String(error),
+        authNeeded: unauthorized,
         connection: "error",
         loading: false,
       },
