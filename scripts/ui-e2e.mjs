@@ -6,6 +6,8 @@ import { spawn } from "node:child_process";
 const EDGE = process.env.EDGE_PATH ?? "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const results = [];
 const servers = [];
+// vice behu testu naraz (ruzni vyvojari) si nesmi brat porty: E2E_PORT_BASE=8850 posune vsechny
+const PORT_BASE = Number(process.env.E2E_PORT_BASE ?? 8800);
 
 async function startMock(port, env = {}) {
   const child = spawn("node", ["scripts/mock-server.mjs", String(port)], { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, ...env } });
@@ -44,12 +46,13 @@ async function open(url, viewport = { width: 1440, height: 900 }, options = {}, 
 }
 
 try {
-  const base = await startMock(8801);
-  const analystUrl = await startMock(8802, { MOCK_ROLE: "analyst" });
-  const brokenChainUrl = await startMock(8803, { MOCK_CHAIN_BAD: "1" });
-  const emptyUrl = await startMock(8804, { MOCK_EMPTY: "1" });
-  const enforceUrl = await startMock(8805, { MOCK_MODE: "enforce" });
-  const authUrl = await startMock(8806, { MOCK_AUTH: "1" });
+  const base = await startMock(PORT_BASE + 1);
+  const analystUrl = await startMock(PORT_BASE + 2, { MOCK_ROLE: "analyst" });
+  const brokenChainUrl = await startMock(PORT_BASE + 3, { MOCK_CHAIN_BAD: "1" });
+  const emptyUrl = await startMock(PORT_BASE + 4, { MOCK_EMPTY: "1" });
+  const enforceUrl = await startMock(PORT_BASE + 5, { MOCK_MODE: "enforce" });
+  const authUrl = await startMock(PORT_BASE + 6, { MOCK_AUTH: "1" });
+  const showUrl = await startMock(PORT_BASE + 9, { MOCK_SHOWCASE: "1" });
 
   console.log("UI e2e (Edge headless + maketa API)");
 
@@ -76,7 +79,8 @@ try {
   await test("Prehled: pole ma oblazek pro kazdou stanici, klik i klavesnice vybere stanici", async () => {
     const { page, context } = await open(base);
     const count = await page.locator(".node").count();
-    assert(count === 3, `ocekavany 3 oblazky, nalezeno ${count}`);
+    // 3 skenovane stanice + 13 sitovych prvku znamych jen z inventare (networkAssets); male site se otevrou rovnou do zarizeni
+    assert(count === 16, `ocekavano 16 uzlu, nalezeno ${count}`);
     await page.locator(".node").first().click({ force: true });
     assert((await page.locator(".host-card .host-ip").count()) === 1, "po kliku se nezobrazila karta stanice");
     await page.locator(".node").nth(1).focus();
@@ -414,7 +418,7 @@ try {
   });
 
   await test("Automat: bezici autopilot jde zastavit s vysvetlenim dopadu; druhy se nespusti; pentest je vychozi vypnuty", async () => {
-    const runningUrl = await startMock(8807, { MOCK_RUNNING: "1" });
+    const runningUrl = await startMock(PORT_BASE + 7, { MOCK_RUNNING: "1" });
     const { page, context } = await open(runningUrl + "#/automat");
     assert(await page.locator('[data-action="auto-stop"]').isVisible(), "chybi tlacitko Zastavit autopilota");
     assert(await page.locator('[data-action="auto-restart"]').isDisabled(), "novy beh jde spustit pri bezicim autopilotu");
@@ -447,6 +451,137 @@ try {
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowLeft");
     assert((await page.locator('.node[tabindex="0"]').count()) === 1, "po sipkach neni prave jedno tabulatorove zastaveni");
+    await context.close();
+  });
+
+
+  // ---------- mapa: semanticky zoom, filtry, profil ----------
+  const settle = (page, ms = 1100) => page.waitForTimeout(ms);
+
+  await test("Mapa (prehled): vychozi pohled jsou zony s popiskem, ne stovky bublin; klik zonu rozkvete, Esc vrati zpet", async () => {
+    const { page, context, problems } = await open(showUrl);
+    await settle(page);
+    assert((await page.locator(".zone").count()) === 4, "ocekavany 4 zony (VLAN 10, 20, 30, 40)");
+    assert((await page.locator(".zone.is-open").count()) === 0, "v prehledu nema byt zadna zona rozbalena");
+    const label = await page.locator(".zbub").first().getAttribute("aria-label");
+    assert(/VLAN \d+.*zařízení.*nálezů/.test(label ?? ""), `zona nema popisek: ${label}`);
+    assert(/Celá síť/.test((await page.locator(".crumbs").textContent()) ?? ""), "chybi drobeckova navigace");
+    await page.locator('.zbub[data-zone="vlan:30"]').click({ force: true });
+    await settle(page);
+    assert((await page.locator(".zone.is-open").count()) === 1, "klik nerozbalil prave jednu zonu");
+    assert(/VLAN 30/.test((await page.locator(".crumbs").textContent()) ?? ""), "drobecek nerika, kde jsem");
+    assert(/#\/prehled\?v=vlan%3A30/.test(await page.evaluate(() => location.hash)), "stav filtru neni v adrese");
+    assert(/Podsíť/.test((await page.locator(".stats .eyebrow").first().textContent()) ?? ""), "panel nerika Podsit");
+    await page.keyboard.press("Escape");
+    await settle(page, 900);
+    assert((await page.locator(".zone.is-open").count()) === 0, "Esc nevratil prehled");
+    assert(!/\?v=/.test(await page.evaluate(() => location.hash)), "adresa si pamatuje zrusenou zonu");
+    assert(problems.length === 0, `chyby: ${problems.join(" | ")}`);
+    await context.close();
+  });
+
+  await test("Mapa (filtry): jen AP, hledani, 'Zobrazeno N z M', zruseni filtru a sdileny odkaz", async () => {
+    const { page, context } = await open(showUrl);
+    await settle(page, 600);
+    await page.locator('.mchip[data-kind="ap"]').click();
+    await settle(page);
+    assert(/Zobrazeno 4 z 100/.test((await page.locator(".mb-shown").textContent()) ?? ""), "filtr AP nehlasi Zobrazeno 4 z 100");
+    assert(/Zobrazeno 4 z 100/.test((await page.locator("#mapLive").textContent()) ?? ""), "zmenu nehlasi ctecka (aria-live)");
+    assert((await page.locator(".node:not(.is-off)").count()) === 4, "viditelna maji zustat jen 4 AP");
+    assert((await page.locator('.mchip[data-kind="ap"]').getAttribute("aria-pressed")) === "true", "cip nema aria-pressed");
+    assert(/t=ap/.test(await page.evaluate(() => location.hash)), "filtr neni v adrese");
+    await page.locator('[data-action="clear-filter"]').click();
+    await settle(page, 700);
+    assert((await page.locator(".node.is-off").count()) === 0, "zruseni filtru nevratilo vse");
+    await page.locator("#mapSearch").fill("hikvision");
+    await settle(page, 900);
+    const shown = (await page.locator(".mb-shown").textContent()) ?? "";
+    assert(/Zobrazeno \d+ z 100/.test(shown) && !/Zobrazeno 100/.test(shown), `hledani vyrobce nefiltruje: ${shown}`);
+    const hash = await page.evaluate(() => location.hash);
+    const second = await open(showUrl + hash);
+    await second.page.waitForTimeout(900);
+    assert(/Zobrazeno \d+ z 100/.test((await second.page.locator(".mb-shown").textContent()) ?? ""), "odkaz s filtrem filtr neobnovil");
+    assert((await second.page.locator("#mapSearch").inputValue()) === "hikvision", "hledany text se z adresy nenacetl");
+    await second.context.close();
+    await context.close();
+  });
+
+  await test("Mapa (profil): duvody rozpoznani, sluzby srozumitelne, chovani, kontroly agenta; nerozpoznane rika 'neznamé, protoze'", async () => {
+    const { page, context } = await open(showUrl + "#/prehled?v=vlan%3A30");
+    await settle(page);
+    await page.locator('.node[data-host="10.20.3.31"]').click({ force: true });
+    const text = (await page.locator(".profile").textContent()) ?? "";
+    assert(/Proč si to myslíme/.test(text) && /Jistota rozpoznání/.test(text), "chybi duvody a jistota rozpoznani");
+    assert(/RTSP: video proud z kamery/.test(text), "port neni vysvetlen lidsky");
+    assert(/Chování v síti/.test(text) && /6×/.test(text), "chybi chovani s pocty z udalosti");
+    assert(/provedeno/.test(text) && /krok 1 cesty skoků/.test(text), "chybi kontrola agenta s krokem cesty skoku");
+    assert(/Připojeno přes/.test(text) && /gw-brana/.test(text), "chybi retez pripojeni z topologie");
+    assert((await page.locator('.node[data-host="10.20.3.31"] .agent').count()) === 1, "uzel nema indikator agenta");
+    await page.evaluate(() => { location.hash = "#/prehled?v=vlan%3A10&h=10.20.1.30"; });
+    await settle(page, 800);
+    const unk = (await page.locator(".profile").textContent()) ?? "";
+    assert(/Neznámé zařízení, protože/.test(unk) && /aktivním skenem/.test(unk), `nerozpoznane zarizeni nema uprimne vysvetleni: ${unk.slice(0, 200)}`);
+    await context.close();
+  });
+
+  await test("Mapa (statistika): panel Podsit a cela sit maji cisla z dat (typy, nalezy, pokryti identity)", async () => {
+    const { page, context } = await open(showUrl);
+    await settle(page, 600);
+    const all = (await page.locator(".stats").textContent()) ?? "";
+    assert(/Celá síť/.test(all) && /Pokrytí identity/.test(all) && /Nálezy podle závažnosti/.test(all), "statistika cele site neni uplna");
+    await page.locator('.mchip[data-zone="vlan:30"]').click();
+    await settle(page);
+    const vlan = (await page.locator(".stats").textContent()) ?? "";
+    assert(/VLAN 30/.test(vlan) && /Kamera/.test(vlan) && /Tiskárna/.test(vlan), "statistika podsite nema typy zarizeni");
+    await context.close();
+  });
+
+  await test("Mapa (mobil 390): filtry jako vodorovne cipy za tlacitkem, profil jako spodni panel, cile >= 44 px, bez stranky scrollu", async () => {
+    const { page, context } = await open(showUrl, { width: 390, height: 844 });
+    await settle(page);
+    await page.locator('[data-action="toggle-bar"]').click();
+    const small = await page.evaluate(() =>
+      [...document.querySelectorAll(".mapbar button, .mapbar input")]
+        .filter((e) => e.getBoundingClientRect().width > 0 && e.getBoundingClientRect().height < 43)
+        .map((e) => `${e.className} ${Math.round(e.getBoundingClientRect().height)}`),
+    );
+    assert(small.length === 0, `male dotykove cile ve filtrech: ${small.join(", ")}`);
+    assert(await page.evaluate(() => document.querySelector(".chiprow").scrollWidth > document.querySelector(".chiprow").clientWidth), "cipy se nescrolluji vodorovne");
+    await page.locator('[data-action="toggle-bar"]').click();
+    await page.evaluate(() => { location.hash = "#/prehled?v=vlan%3A30&h=10.20.3.31"; });
+    await settle(page, 900);
+    const box = await page.locator(".profile").boundingBox();
+    assert(box && box.y > 250 && box.y + box.height <= 845, `profil neni spodni panel: ${JSON.stringify(box)}`);
+    assert((await page.evaluate(() => document.documentElement.scrollHeight - innerHeight)) <= 1, "stranka scrolluje");
+    await context.close();
+  });
+
+  await test("Mapa (vykon): 100 zarizeni se rozkvete a filtruje bez dlouhych snimku", async () => {
+    const { page, context } = await open(showUrl);
+    await settle(page, 600);
+    const r = await page.evaluate(async () => {
+      const raf = () => new Promise((res) => requestAnimationFrame(res));
+      const frames = [];
+      let last = performance.now();
+      let go = true;
+      void (async () => {
+        while (go) {
+          await raf();
+          const t = performance.now();
+          frames.push(t - last);
+          last = t;
+        }
+      })();
+      document.querySelector('.zbub[data-zone="vlan:40"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((res) => setTimeout(res, 1200));
+      document.querySelector('.mchip[data-kind="ap"]').click();
+      await new Promise((res) => setTimeout(res, 1200));
+      go = false;
+      frames.sort((a, b) => a - b);
+      return { n: frames.length, p50: frames[Math.floor(frames.length / 2)], p95: frames[Math.floor(frames.length * 0.95)], max: frames[frames.length - 1] };
+    });
+    console.log(`       (info) snimky: n=${r.n}, p50=${r.p50.toFixed(1)} ms, p95=${r.p95.toFixed(1)} ms, max=${r.max.toFixed(1)} ms`);
+    assert(r.p95 < 60, `p95 snimku ${r.p95.toFixed(1)} ms je moc`);
     await context.close();
   });
 

@@ -107,58 +107,117 @@ function largeReport(id, nazev, minutesAgo) {
   return r;
 }
 
-// Ukazkova sit pro prohlidku mapy: 4 podsite, ~90 stanic, brana a cesta skoku agenta.
+// Ukazkova sit pro prohlidku mapy: 4 VLAN (10 sprava, 20 servery, 30 IoT, 40 uzivatele), ~100 zarizeni,
+// switche, AP, tiskarny, kamery, wifi klienti, topologyEdges (LLDP, klient-AP, ARP) a cesta skoku agenta.
 function showcaseReport(id, nazev, minutesAgo) {
   const r = baseReport(id, nazev, minutesAgo);
   const templates = r.hosts;
-  const subnets = [
-    { prefix: "10.20.1", n: 16, names: ["web", "mail", "proxy", "dns", "vpn", "git", "ci", "wiki"], label: "dmz" },
-    { prefix: "10.20.2", n: 12, names: ["db", "files", "bak", "erp", "ldap"], label: "srv" },
-    { prefix: "10.20.3", n: 26, names: ["cam", "iot", "ap", "print", "hvac"], label: "iot" },
-    { prefix: "10.20.4", n: 38, names: ["ws", "nb", "voip"], label: "usr" },
-  ];
+  const baseSvc = templates[0].services[0];
+  const cveA = baseSvc.cves[0];
+  const cveB = baseSvc.cves[1];
+  const svc = (ip, port, name, product = null, version = null, o = {}) => {
+    const s = structuredClone(baseSvc);
+    Object.assign(s, { service_id: `svc:${ip}/tcp/${port}`, service_key: `${ip}/tcp/${port}`, port, proto: "tcp", port_state: "open", cpe: [], cves: o.cves ?? [], events: o.events ?? [], score: o.score ?? 1.2, priorita: o.prio ?? "nizka" });
+    s.inventory = { ...s.inventory, service_name: name, product, version };
+    return s;
+  };
+  const ev = (ip, port, type, message, severity, count, source) => ({
+    correlation: { confidence: "high", host_id: `host:${ip}`, method: "ip+port", service_id: `svc:${ip}/tcp/${port}`, time_window_s: 3600 },
+    event: { count, dst_ip: ip, dst_port: port, event_type: type, message, severity, source },
+  });
+
+  const A = { gw: "a:gw", core: "a:sw-core", s1: "a:sw-pat1", s2: "a:sw-pat2", ap1: "a:ap1", ap2: "a:ap2", ap3: "a:ap3", ap4: "a:ap4" };
+  const defs = [];
+  const add = (d) => defs.push(d);
+  // ---- VLAN 10 sprava ----
+  add({ ip: "10.20.1.1", name: "gw-brana", vlan: 10, vend: "Fortinet", asset: ["router", "FortiGate 60F", "librenms", A.gw], svcs: [[443, "https", "FortiOS"], [22, "ssh", "OpenSSH"]] });
+  add({ ip: "10.20.1.2", name: "sw-core", vlan: 10, vend: "Cisco", mac: "00:1b:54:aa:00:02", asset: ["switch", "Catalyst 9300-24T", "librenms", A.core], svcs: [[22, "ssh", "Cisco SSH"], [161, "snmp"]] });
+  add({ ip: "10.20.1.3", name: "sw-patro1", vlan: 10, vend: "Cisco", mac: "00:1b:54:aa:00:03", asset: ["switch", "Catalyst 1000-48P", "librenms", A.s1], svcs: [[22, "ssh", "Cisco SSH"]] });
+  add({ ip: "10.20.1.4", name: "sw-patro2", vlan: 10, vend: "Cisco", mac: "00:1b:54:aa:00:04", asset: ["switch", "Catalyst 1000-48P", "librenms", A.s2], svcs: [[22, "ssh", "Cisco SSH"]] });
+  [["10.20.1.11", "ap-kancelar-1", "Aruba", "AP-515", A.ap1], ["10.20.1.12", "ap-kancelar-2", "Aruba", "AP-515", A.ap2], ["10.20.1.13", "ap-sklad", "Ubiquiti", "U6-Pro", A.ap3], ["10.20.1.14", "ap-recepce", "Ubiquiti", "U6-Lite", A.ap4]].forEach(([ip, name, vend, model, aid], i) =>
+    add({ ip, name, vlan: 10, vend, mac: `22:33:44:55:66:0${i + 1}`, asset: ["access-point", model, vend === "Aruba" ? "aruba" : "unifi", aid], svcs: [[22, "ssh", "Dropbear sshd"], [443, "https"]] }),
+  );
+  add({ ip: "10.20.1.20", name: "ntp-sprava", vlan: 10, svcs: [[22, "ssh", "OpenSSH", "8.9"], [123, "ntp"]], via: "core" });
+  add({ ip: "10.20.1.22", name: "mon-zabbix", vlan: 10, svcs: [[443, "https", "nginx", "1.22"], [80, "http", "nginx", "1.22"], [10050, "zabbix-agent"]], via: "core", flag: "medium" });
+  add({ ip: "10.20.1.30", name: null, vlan: 10, vend: "Dell", mac: "f8:bc:12:00:30:30", svcs: [[1812, "radius"]], via: "core" });
+  // ---- VLAN 20 servery ----
+  [["10.20.2.10", "srv-web01", [[443, "https", "nginx", "1.18.0"], [80, "http", "nginx", "1.18.0"]], "medium"], ["10.20.2.11", "srv-web02", [[443, "https", "nginx", "1.24.0"]]], ["10.20.2.12", "srv-mail", [[25, "smtp", "Postfix"], [587, "submission", "Postfix"], [993, "imaps", "Dovecot"]]], ["10.20.2.13", "srv-db01", [[5432, "postgresql", "PostgreSQL", "14.9"]]], ["10.20.2.14", "srv-db02", [[3306, "mysql", "MySQL", "5.7.33"]], "medium"], ["10.20.2.16", "srv-files", [[445, "microsoft-ds", "Samba", "4.13"], [139, "netbios-ssn", "Samba"], [2049, "nfs"]], "medium"], ["10.20.2.17", "srv-bak", [[445, "microsoft-ds", "Samba"], [22, "ssh", "OpenSSH"]]], ["10.20.2.18", "srv-dns", [[53, "domain", "dnsmasq", "2.89"]]], ["10.20.2.19", "srv-erp", [[8443, "https-alt", "Tomcat", "9.0.31"], [5432, "postgresql", "PostgreSQL"]], "high"], ["10.20.2.21", "srv-git", [[22, "ssh", "OpenSSH"], [8080, "http-proxy", "Gitea"]]], ["10.20.2.22", "srv-ci", [[8080, "http", "Jenkins", "2.346"]], "medium"], ["10.20.2.23", "srv-ldap", [[389, "ldap", "OpenLDAP"], [636, "ldaps"]]], ["10.20.2.24", "srv-vpn", [[1194, "openvpn", "OpenVPN", "2.5"]]], ["10.20.2.25", "srv-wiki", [[443, "https", "nginx"]]]].forEach(([ip, name, s, flag]) => add({ ip, name, vlan: 20, svcs: s, via: "core", flag }));
+  // ---- VLAN 30 IoT ----
+  ["vchod", "sklad", "parkoviste", "dvur", "chodba-1", "chodba-2", "dilna", "vrata"].forEach((n, i) =>
+    add({ ip: `10.20.3.${21 + i}`, name: `cam-${n}`, vlan: 30, vend: i % 2 ? "Axis" : "Hikvision", mac: `bc:ad:28:00:00:${10 + i}`, svcs: [[554, "rtsp", i % 2 ? "Axis RTSP" : "Hikvision live555"], [80, "http", "GoAhead-Webs"]], via: i < 4 ? "s1" : "s2", asset: i % 3 === 0 ? ["camera", i % 2 ? "P3265-LVE" : "DS-2CD2143", "librenms", `a:cam${i}`] : null }),
+  );
+  add({ ip: "10.20.3.30", name: "nvr-01", vlan: 30, vend: "Hikvision", svcs: [[554, "rtsp", "Hikvision live555"], [8000, "http", "Hikvision NVR"]], via: "s1" });
+  add({ ip: "10.20.3.31", name: "cam-sklad-2", vlan: 30, vend: "Hikvision", mac: "bc:ad:28:00:00:31", svcs: [[554, "rtsp", "Hikvision live555"], [80, "http", "GoAhead-Webs"]], via: "s2", flag: "high", suspicious: true });
+  add({ ip: "10.20.3.40", name: "iot-brana-1", vlan: 30, vend: "Espressif", svcs: [[1883, "mqtt", "Mosquitto", "1.6.9"]], via: "s2", flag: "high" });
+  ["recepce", "kancelar", "sklad", "obchod", "ucetni", null].forEach((n, i) =>
+    add({ ip: `10.20.3.${50 + i}`, name: n ? `tisk-${n}` : null, vlan: 30, vend: ["HP", "Brother", "Canon", "Xerox", "Ricoh", "Epson"][i], mac: `3c:2a:f4:00:00:${50 + i}`, svcs: i % 2 ? [[9100, "jetdirect"]] : [[9100, "jetdirect", "HP JetDirect"], [631, "ipp", "CUPS"], [80, "http"]], via: i < 3 ? "s1" : "s2", asset: i === 0 ? ["printer", "LaserJet M507", "librenms", "a:pr0"] : null, flag: i === 2 ? "medium" : null }),
+  );
+  ["hvac-1", "hvac-2", "plc-vzduchotechnika", "hmi-vyroba"].forEach((n, i) =>
+    add({ ip: `10.20.3.${60 + i}`, name: n, vlan: 30, svcs: i === 2 ? [[502, "modbus"]] : i === 3 ? [[80, "http"], [502, "modbus"]] : [[1883, "mqtt"], [80, "http", "Boa"]], via: "s2" }),
+  );
+  add({ ip: "10.20.3.70", name: null, vlan: 30, vend: "Espressif", mac: "24:6f:28:00:70:70", svcs: [], via: "s1" });
+  add({ ip: "10.20.3.71", name: null, vlan: 30, mac: "ac:cf:23:00:71:71", svcs: [], via: "s2" });
+  [["10.20.3.80", "senzor-sklad-1", 3], ["10.20.3.81", "senzor-sklad-2", 3], ["10.20.3.82", "senzor-dilna", 4]].forEach(([ip, name, ap]) => add({ ip, name, vlan: 30, vend: "Espressif", asset: ["wireless-client", null, "unifi", `a:wi${ip}`], wifi: { ap: A[`ap${ap}`], ssid: "IoT-WiFi" }, svcs: [] }));
+  // ---- VLAN 40 uzivatele ----
+  for (let i = 0; i < 16; i += 1) add({ ip: `10.20.4.${101 + i}`, name: `ws-${String(i + 1).padStart(2, "0")}`, vlan: 40, vend: ["Dell", "HP", "Lenovo"][i % 3], svcs: i % 4 === 0 ? [[3389, "ms-wbt-server"], [445, "microsoft-ds"]] : [[445, "microsoft-ds"]], via: i < 8 ? "s1" : "s2", flag: i === 5 ? "medium" : null });
+  for (let i = 0; i < 8; i += 1) add({ ip: `10.20.4.${131 + i}`, name: `nb-${String(i + 1).padStart(2, "0")}`, vlan: 40, vend: ["Lenovo", "Apple", "Dell"][i % 3], svcs: [], wifi: { ap: A[`ap${(i % 2) + 1}`], ssid: "Firma-WiFi" }, asset: ["wireless-client", null, "aruba", `a:nb${i}`] });
+  for (let i = 0; i < 8; i += 1) add({ ip: `10.20.4.${151 + i}`, name: `tel-${i + 1}`, vlan: 40, vend: i % 2 ? "Yealink" : "Cisco", svcs: [[5060, "sip"]], via: i < 4 ? "s1" : "s2" });
+  for (let i = 0; i < 14; i += 1) add({ ip: `10.20.4.${171 + i}`, name: `${["iphone", "galaxy", "pixel", "ipad"][i % 4]}-${i + 1}`, vlan: 40, vend: ["Apple", "Samsung", "Google", "Apple"][i % 4], mac: `aa:00:bb:11:cc:${(10 + i).toString(16)}`, asset: ["wireless-client", null, "aruba", `a:wc${i}`], wifi: { ap: A[`ap${(i % 4) + 1}`], ssid: "Firma-WiFi" }, svcs: [] });
+  [190, 191, 192].forEach((o, i) => add({ ip: `10.20.4.${o}`, name: null, vlan: 40, mac: `d8:00:00:00:${o.toString(16)}:01`, svcs: i === 2 ? [[22, "ssh", "OpenSSH"]] : [], via: "s1" }));
+
+  const swOf = { core: A.core, s1: A.s1, s2: A.s2 };
   const hosts = [];
   const findings = [];
   const hypotheses = [];
-  let counter = 0;
-  const mkHost = (ip, hostname, i) => {
-    const t = structuredClone(templates[i % templates.length]);
-    t.ip = ip;
-    t.host_key = ip;
-    t.host_id = `host:${ip}`;
-    t.asset_id = `asset:${100 + counter}`;
-    t.hostname = hostname;
-    t.services = t.services.slice(0, 1 + (i % 3)).map((sv) => ({ ...sv, service_key: `${ip}/${sv.proto}/${sv.port}`, service_id: `svc:${ip}/${sv.proto}/${sv.port}`, cves: i % 4 === 0 ? sv.cves : i % 4 === 1 ? sv.cves.slice(0, 1) : [] }));
-    hosts.push(t);
-    const source = r.findings.filter((f) => f.host_key === templates[i % templates.length].host_key);
-    const flagged = counter % 7 === 3 || ["10.20.3.31", "10.20.3.40", "10.20.2.16", "10.20.2.19", "10.20.1.22"].includes(ip);
-    if (flagged) {
-      source.forEach((f, k) => {
-        if (k > 1) return;
+  const assets = [];
+  const edges = [];
+  const mkEdge = (rel, a, b, details, source = "librenms") => edges.push({ edge_id: `edge:${source}:${rel}:${a}:${b}`, relation: rel, source, source_asset_id: a, target_asset_id: b, confidence: "high", details });
+  const vlanName = { 10: "Správa", 20: "Servery", 30: "IoT", 40: "Uživatelé" };
+  let port = 1;
+  defs.forEach((d, counter) => {
+    const ip = d.ip;
+    const t = structuredClone(templates[counter % templates.length]);
+    const sev = d.flag;
+    const services = d.svcs.map(([p, name, product, version], k) => {
+      const withCve = sev === "high" && k === 0;
+      const events = d.suspicious && k === 0 ? [ev(ip, p, "unexpected_traffic", "Odchozí spojení na 198.51.100.7:4444 z kamery, která jinak komunikuje jen s NVR.", "high", 6, "suricata+zeek")] : sev && k === 0 ? [ev(ip, p, "connection_timeout_burst", "Spojení vykazuje timeout/retry tlak.", sev === "high" ? "high" : "medium", 4 + (counter % 5), "zeek")] : [];
+      return svc(ip, p, name, product ?? null, version ?? null, { cves: withCve ? [cveA, cveB] : sev === "medium" && k === 0 && counter % 2 ? [cveA] : [], events, score: withCve ? 11.2 : 1.2, prio: withCve ? "vysoka" : "nizka" });
+    });
+    hosts.push({ ...t, asset_id: `asset:${100 + counter}`, host_id: `host:${ip}`, host_key: ip, ip, hostname: d.name, mac: d.mac ?? null, vendor: d.vend ?? null, identity_note: null, services });
+    if (sev) {
+      const source = r.findings.filter((f) => f.host_key === templates[counter % templates.length].host_key);
+      (source.length ? source : r.findings.slice(0, 1)).slice(0, 2).forEach((f, k) => {
         const nf = structuredClone(f);
         nf.host_key = ip;
-        nf.finding_id = `${f.finding_id}:${counter}`;
-        nf.severity = ["10.20.3.31", "10.20.3.40"].includes(ip) ? "high" : counter % 3 === 0 ? "medium" : f.severity;
+        nf.finding_id = `${f.finding_id}:${counter}:${k}`;
+        nf.severity = k === 0 ? sev : "low";
         findings.push(nf);
-        const hyp = r.hypotheses.find((h) => h.hypothesis_type === f.finding_type) ?? r.hypotheses[0];
-        const nh = structuredClone(hyp);
-        nh.affected_assets = [ip];
-        hypotheses.push(nh);
+        const hyp = structuredClone(r.hypotheses.find((h) => h.hypothesis_type === f.finding_type) ?? r.hypotheses[0]);
+        hyp.affected_assets = [ip];
+        hypotheses.push(hyp);
       });
     }
-    counter += 1;
-  };
-  mkHost("10.20.1.1", "gw-brana", 0);
-  subnets.forEach((net) => {
-    for (let i = 0; i < net.n; i += 1) {
-      if (net.prefix === "10.20.1" && i === 0) continue;
-      mkHost(`${net.prefix}.${10 + i * 3}`, `${net.names[i % net.names.length]}-${net.label}${i + 1}`, counter);
-    }
+    // aktivum + vazby
+    const aid = d.asset ? d.asset[3] : `a:${ip}`;
+    const type = d.asset ? d.asset[0] : d.svcs.length || d.name ? "endpoint" : "unknown";
+    assets.push({ asset_id: aid, asset_type: type, name: d.name ?? `neznámé ${ip}`, source: d.asset ? d.asset[2] : "librenms", confidence: "high", ip, mac: d.mac ?? null, vendor: d.vend ?? null, model: d.asset ? d.asset[1] : null, status: "up", location: d.wifi ? d.wifi.ssid : null, linked_host_key: ip, observations: [], serial: null });
+    const vd = [`vlan=${d.vlan}`, `vlan_name=${vlanName[d.vlan]}`];
+    if (d.wifi) mkEdge("client_of", aid, d.wifi.ap, [`ssid=${d.wifi.ssid}`, ...vd], "aruba");
+    else if (d.via) mkEdge("arp_seen", swOf[d.via], aid, [`port=Gi1/0/${port++}`, ...vd]);
   });
+  const L = (a, b, pa, pb) => mkEdge("lldp", a, b, [`local_port=${pa}`, `remote_port=${pb}`, "protocol=lldp"]);
+  L(A.gw, A.core, "Gi0/0/1", "Gi1/0/48");
+  L(A.core, A.s1, "Gi1/0/1", "Gi1/0/52");
+  L(A.core, A.s2, "Gi1/0/2", "Gi1/0/52");
+  L(A.s1, A.ap1, "Gi1/0/3", "eth0");
+  L(A.s1, A.ap2, "Gi1/0/4", "eth0");
+  L(A.s2, A.ap3, "Gi1/0/3", "eth0");
+  L(A.s2, A.ap4, "Gi1/0/4", "eth0");
   r.hosts = hosts;
   r.findings = findings;
   r.hypotheses = hypotheses;
-  r.networkAssets = [{ asset_id: "a-gw", asset_type: "router", name: "Brána", source: "nmap", confidence: "High", ip: "10.20.1.1", linked_host_key: "10.20.1.1" }];
+  r.networkAssets = assets;
+  r.topologyEdges = edges;
   r.verification_plans = hypotheses.slice(0, 12).map((h, i) => {
     const base = structuredClone(r.verification_plans[i % r.verification_plans.length]);
     base.in_scope_assets = h.affected_assets;
@@ -178,19 +237,43 @@ function showcaseReport(id, nazev, minutesAgo) {
   r.summary.services_total = hosts.reduce((n, h) => n + h.services.length, 0);
   r.summary.events_total = 1284;
   r.summary.realtime_sources_total = 3;
-  r.summary.wireless_clients_total = 14;
-  r.summary.topology_edges_total = 37;
+  r.summary.wireless_clients_total = assets.filter((a) => a.asset_type === "wireless-client").length;
+  r.summary.topology_edges_total = edges.length;
+  return r;
+}
+
+
+// Velka sit (jen MOCK_BIG=1): ukazkova sit 3x zkopirovana do dalsich rozsahu, ~300 zarizeni, pro mereni vykonu mapy.
+function bigReport(id, nazev, minutesAgo) {
+  const r = showcaseReport(id, nazev, minutesAgo);
+  const hosts = [...r.hosts];
+  const findings = [...r.findings];
+  for (const copy of [1, 2]) {
+    for (const h of r.hosts) {
+      const ip = h.ip.replace(/^10\.20\./, `10.2${copy}.`);
+      const c = structuredClone(h);
+      Object.assign(c, { ip, host_key: ip, host_id: `host:${ip}`, asset_id: `${h.asset_id}:${copy}`, hostname: h.hostname ? `${h.hostname}-${copy}` : null });
+      c.services = c.services.map((sv) => ({ ...sv, service_id: sv.service_id.replace("10.20.", `10.2${copy}.`), service_key: sv.service_key.replace("10.20.", `10.2${copy}.`), events: [] }));
+      hosts.push(c);
+    }
+    for (const f of r.findings.slice(0, 6)) findings.push({ ...structuredClone(f), finding_id: `${f.finding_id}:c${copy}`, host_key: f.host_key.replace(/^10\.20\./, `10.2${copy}.`) });
+  }
+  r.hosts = hosts;
+  r.findings = findings;
+  r.networkAssets = r.networkAssets.slice(0, 20);
+  r.summary.hosts_total = hosts.length;
   return r;
 }
 
 const ALL_RUNS = [
-  { id: "run-20261031130000-1-sit", nazev: "Ukázková síť: 4 podsítě, cesta skoků", build: () => showcaseReport("run-20261031130000-1-sit", "Ukázková síť: 4 podsítě, cesta skoků", 2) },
+  { id: "run-20261031130000-1-sit", nazev: "Ukázková síť: 4 VLAN, switche, AP, cesta skoků", build: () => showcaseReport("run-20261031130000-1-sit", "Ukázková síť: 4 VLAN, switche, AP, cesta skoků", 2) },
   { id: "run-20261031120000-1-demo", nazev: "Full visibility stack", build: () => baseReport("run-20261031120000-1-demo", "Full visibility stack", 6) },
   { id: "run-20261031090000-1-large", nazev: "Rozsáhlá síť (ukázka, 14 stanic)", build: () => largeReport("run-20261031090000-1-large", "Rozsáhlá síť (ukázka, 14 stanic)", 190) },
 ];
 
 // Ukazkova sit je nejnovejsi jen s MOCK_SHOWCASE=1; testy pocitaji s malym demo behem jako vychozim.
-const RUNS = process.env.MOCK_SHOWCASE === "1" ? ALL_RUNS : [...ALL_RUNS.slice(1), ALL_RUNS[0]];
+if (process.env.MOCK_BIG === "1") ALL_RUNS.unshift({ id: "run-20261031140000-1-big", nazev: "Velká síť (ukázka, ~300 zařízení)", build: () => bigReport("run-20261031140000-1-big", "Velká síť (ukázka, ~300 zařízení)", 1) });
+const RUNS = process.env.MOCK_SHOWCASE === "1" || process.env.MOCK_BIG === "1" ? ALL_RUNS : [...ALL_RUNS.slice(1), ALL_RUNS[0]];
 
 // ---------- stav zasahu ----------
 const nowIso = () => new Date().toISOString();

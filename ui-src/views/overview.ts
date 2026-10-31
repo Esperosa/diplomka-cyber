@@ -1,108 +1,83 @@
-import { bindNetMap, centerMapOn, netMapTools } from "../mapview";
-import { hopsOf, renderNetMap, statusLabel } from "../netmap";
+import { actions as map, barHtml, currentScope, ctxModel, loadFromHash, mapFrameHtml, modelFor, mountMap, selectedItem } from "../mapctl";
+import { statusLabel } from "../netmodel";
+import { profileHtml, statsHtml } from "../panels";
 import { navigate } from "../router";
-import { activeHost, state, update, type View } from "../state";
+import { sendPrompt, setAssistantOpen } from "../assistant";
+import { state, type View } from "../state";
 import { methodLabel } from "../glossary";
-import { esc, fmtDate, hostFindings, maxSeverityLevel, meanUncertainty, hypothesesForHost, pct, num, SEVERITY_LABEL } from "../ui";
-import { emptyState, noDataState, paneHead, readout } from "./common";
+import { esc, fmtDate, num } from "../ui";
+import type { DeviceKind } from "../devices";
+import type { NetModel } from "../netmodel";
+import { noDataState, paneHead, readout } from "./common";
 
-function render(): string {
-  const report = state.report;
-  if (!report) return noDataState("Mapa sítě");
+function sideHtml(): string {
+  const report = state.report!;
+  const model = ctxModel()!;
+  const sel = selectedItem();
   const high = report.findings.filter((f) => f.severity === "high").length;
   const plans = report.verification_plans ?? [];
   const pending = state.enforcement ? state.enforcement.actions.filter((a) => a.status === "proposed").length : null;
   const consensus = String(report.summary.mas_consensus_state ?? "");
-  const selected = activeHost();
+  const hops = model.hops;
+  return `${sel ? `<div class="host-card profile" role="region" aria-label="Profil zařízení ${esc(sel.ip)}">${profileHtml(model, report, sel)}</div>` : ""}
+    ${statsHtml(model, report, currentScope())}
+    ${sel ? "" : `<p class="small muted side-hint">Klepnutím na podsíť ji rozbalíš, klepnutím na zařízení uvidíš jeho profil. Esc se vrací o úroveň zpět.</p>`}
+    ${hops.length ? hopList(hops) : ""}
+    <div class="run-meta">
+      <p class="eyebrow">Běh</p>
+      <p class="run-name">${esc(report.run.nazev)}</p>
+      <p class="mono small muted">${esc(fmtDate(report.run.finished_at))}</p>
+      <p class="mono small muted">rozsah ${esc(report.run.scope.join(", "))} · ${esc(report.run.profile)}</p>
+      ${consensus ? `<p class="consensus"><span class="eyebrow">Shoda agentů</span><span class="mono">${esc(consensus)}</span></p>` : ""}
+    </div>
+    <div class="readouts">
+      ${readout(report.hosts.length, "stanice")}
+      ${readout(num(report.summary.services_total) || report.hosts.reduce((n, h) => n + h.services.length, 0), "služby")}
+      ${readout(report.findings.length, "nálezy")}
+      ${readout(high, "vysoké", high ? "hot" : "")}
+      ${readout(num(report.summary.cves_total), "CVE")}
+      ${readout(plans.length, "plány ověření")}
+    </div>
+    <p class="pending-line">${
+      pending === null
+        ? `<span class="muted small">Zásahy: server je neposkytuje.</span>`
+        : pending > 0
+          ? `<button type="button" class="btn btn-hot" data-action="goto" data-key="zasahy">${pending} ${pending === 1 ? "zásah čeká" : "zásahy čekají"} na schválení</button>`
+          : `<span class="muted small">Žádný zásah nečeká na schválení.</span>`
+    }</p>`;
+}
 
-  const hostCard = selected ? hostSummary(selected) : `<p class="muted small">Vyber stanici na mapě, nebo se po ní pohybuj šipkami.</p>`;
-  const hops = hopsOf(report);
-
+function render(): string {
+  const report = state.report;
+  if (!report) return noDataState("Mapa sítě");
+  if (!report.hosts.length) return `${paneHead("Mapa sítě")}<div class="overview"><p class="muted">Běh neobsahuje žádné stanice.</p></div>`;
+  const model = modelFor(report);
+  loadFromHash(model);
+  if (state.selectedHost && !model.byKey.has(state.selectedHost)) state.selectedHost = null;
   return `${paneHead("Mapa sítě")}
-  <div class="overview">
+  <div class="overview${state.selectedHost ? " has-profile" : ""}">
     <section class="field-wrap" aria-label="Mapa sítě">
-      ${renderNetMap(report, state.selectedHost)}
-      ${netMapTools()}
-      <ul class="legend" id="mapLegend" aria-label="Legenda">
-        <li><i class="lg lg-size"></i>velikost: význam stanice</li>
-        <li><i class="lg lg-ring"></i>tečky kolem: riziko</li>
-        <li><i class="lg lg-dash"></i>přerušený obrys: nejistota</li>
-        <li><i class="lg lg-hop"></i>červená cesta: skoky agenta</li>
-      </ul>
+      ${barHtml(model)}
+      ${mapFrameHtml(model, report.run.run_id)}
     </section>
-    <aside class="side" aria-label="Souhrn běhu" data-keep="side">
-      <div class="run-meta">
-        <p class="eyebrow">Běh</p>
-        <p class="run-name">${esc(report.run.nazev)}</p>
-        <p class="mono small muted">${esc(fmtDate(report.run.finished_at))}</p>
-        <p class="mono small muted">rozsah ${esc(report.run.scope.join(", "))} · ${esc(report.run.profile)}</p>
-        ${consensus ? `<p class="consensus"><span class="eyebrow">Shoda agentů</span><span class="mono">${esc(consensus)}</span></p>` : ""}
-      </div>
-      <div class="readouts">
-        ${readout(report.hosts.length, "stanice")}
-        ${readout(num(report.summary.services_total) || report.hosts.reduce((n, h) => n + h.services.length, 0), "služby")}
-        ${readout(report.findings.length, "nálezy")}
-        ${readout(high, "vysoké", high ? "hot" : "")}
-        ${readout(num(report.summary.cves_total), "CVE")}
-        ${readout(plans.length, "plány ověření")}
-      </div>
-      <p class="pending-line">${
-        pending === null
-          ? `<span class="muted small">Zásahy: server je neposkytuje.</span>`
-          : pending > 0
-            ? `<button type="button" class="btn btn-hot" data-action="goto" data-key="zasahy">${pending} ${pending === 1 ? "zásah čeká" : "zásahy čekají"} na schválení</button>`
-            : `<span class="muted small">Žádný zásah nečeká na schválení.</span>`
-      }</p>
-      <div class="host-card${selected ? "" : " is-empty"}" aria-live="polite">${hostCard}</div>
-      ${hops.length ? hopList(hops) : ""}
-    </aside>
+    <aside class="side" aria-label="Statistika a profil zařízení" data-keep="side"><div id="sideBody"></div></aside>
   </div>`;
 }
 
-function hopList(hops: ReturnType<typeof hopsOf>): string {
+function hopList(hops: NetModel["hops"]): string {
   return `<div class="hops-card">
     <p class="eyebrow">Cesta skoků agenta</p>
-    <p class="small muted">Agent při ověřování podezřelého uzlu postupně zkontroloval tyto stanice. Klepnutím vybereš stanici na mapě.</p>
+    <p class="small muted">Agent při ověřování podezřelého uzlu postupně zkontroloval tyto stanice. Klepnutím doletíš na stanici na mapě.</p>
     <ol class="hop-list">${hops
       .map((hop) => {
-        const host = state.report?.hosts.find((h) => h.ip === hop.asset);
+        const host = ctxModel()?.byIp.get(hop.asset);
         const inner = `<span class="hop-no">${hop.index}</span><span class="hop-main"><span class="mono">${esc(hop.asset)}</span><span class="small muted">${esc(methodLabel(hop.method))} · ${esc(statusLabel(hop.status))}${hop.outcome ? ` · ${esc(hop.outcome)}` : ""}${host ? "" : " · mimo mapu (vnější adresa)"}</span></span>`;
         return host
-          ? `<li class="st-${hop.status}"><button type="button" class="hop-btn" data-action="select-hop" data-host="${esc(host.host_key)}" aria-pressed="${state.selectedHost === host.host_key}">${inner}</button></li>`
+          ? `<li class="st-${hop.status}"><button type="button" class="hop-btn" data-action="select-hop" data-host="${esc(host.key)}" aria-pressed="${state.selectedHost === host.key}">${inner}</button></li>`
           : `<li class="st-${hop.status}"><div class="hop-btn is-static">${inner}</div></li>`;
       })
       .join("")}</ol>
   </div>`;
-}
-
-function hostSummary(host: NonNullable<ReturnType<typeof activeHost>>): string {
-  const report = state.report!;
-  const findings = hostFindings(report, host);
-  const sev = maxSeverityLevel(findings);
-  const sevText = sev === 3 ? SEVERITY_LABEL.high : sev === 2 ? SEVERITY_LABEL.medium : sev === 1 ? SEVERITY_LABEL.low : "bez nálezů";
-  const unc = meanUncertainty(hypothesesForHost(report, host));
-  const rank: Record<string, number> = { high: 3, medium: 2, low: 1 };
-  const top = [...findings].sort((a, b) => (rank[b.severity] ?? 0) - (rank[a.severity] ?? 0))[0] ?? null;
-  return `<p class="eyebrow">Vybraná stanice</p>
-    <p class="host-ip mono">${esc(host.ip)}</p>
-    <p class="small muted">${esc(host.hostname ?? "bez jména")}</p>
-    <dl class="kv small">
-      <dt>služby</dt><dd>${host.services.length}</dd>
-      <dt>nálezy</dt><dd>${findings.length} · nejvyšší: ${esc(sevText)}</dd>
-      <dt>nejistota</dt><dd>${esc(pct(unc))}</dd>
-    </dl>
-    ${top ? `<p class="small"><span class="eyebrow">Nejzávažnější nález</span><br><button type="button" class="link" data-action="open-finding" data-key="${esc(top.finding_id)}">${esc(top.title.slice(0, 80))}</button></p>` : ""}
-    <div class="actions-row"><button type="button" class="btn" data-action="open-host" data-key="${esc(host.host_key)}">Detail stanice</button>${top ? `<button type="button" class="btn btn-ghost" data-action="open-finding" data-key="${esc(top.finding_id)}">Detail nálezu</button>` : ""}</div>`;
-}
-
-/** Karta stanice je v postranním panelu; po výběru ji dovedeme do výhledu (hlavně na telefonu). */
-function revealHostCard() {
-  const side = document.querySelector<HTMLElement>(".side");
-  const card = side?.querySelector<HTMLElement>(".host-card");
-  if (!side || !card) return;
-  const box = card.getBoundingClientRect();
-  const room = side.getBoundingClientRect();
-  if (box.bottom > room.bottom || box.top < room.top) side.scrollTop += box.top - room.top - 4;
 }
 
 export const overview: View = {
@@ -112,24 +87,38 @@ export const overview: View = {
   render,
   after: () => {
     const field = document.querySelector<HTMLElement>(".field-wrap");
-    if (field) bindNetMap(field);
+    if (field && state.report?.hosts.length) mountMap(field, state.report, sideHtml);
   },
   actions: {
-    "select-pebble": (el) => {
-      const key = el.dataset.host ?? null;
-      update({ selectedHost: state.selectedHost === key ? null : key });
-      if (key) revealHostCard();
-    },
+    "select-pebble": (el) => map.select(el.dataset.host ?? null),
     "select-hop": (el) => {
-      const key = el.dataset.host ?? null;
-      const node = key ? document.querySelector<SVGGElement>(`.node[data-host="${CSS.escape(key)}"]`) : null;
-      if (node) centerMapOn(Number(node.dataset.x), Number(node.dataset.y));
-      update({ selectedHost: key });
-      if (key) revealHostCard();
+      if (el.dataset.host) map.pick(el.dataset.host);
+    },
+    "pick-host": (el) => {
+      if (el.dataset.host) map.pick(el.dataset.host);
+    },
+    zone: (el) => {
+      if (el.dataset.zone) map.zone(el.dataset.zone);
+    },
+    "chip-zone": (el) => {
+      if (el.dataset.zone) map.chipZone(el.dataset.zone);
+    },
+    "chip-kind": (el) => {
+      if (el.dataset.kind) map.chipKind(el.dataset.kind as DeviceKind);
+    },
+    "chip-sev": (el) => map.chipSev(Number(el.dataset.sev)),
+    "clear-filter": () => map.clearFilter(),
+    crumb: (el) => map.crumb(el.dataset.level ?? "all"),
+    deselect: () => map.deselect(),
+    "toggle-bar": () => map.toggleBar(),
+    "ask-scan": (el) => {
+      const item = el.dataset.host ? ctxModel()?.byKey.get(el.dataset.host) : null;
+      setAssistantOpen(true);
+      void sendPrompt(`Zařízení ${item?.ip ?? ""} se nepodařilo rozpoznat. Jak ho bezpečně ověřit aktivním skenem a co před tím schválit?`);
     },
     "open-finding": (el) => navigate("nalezy", el.dataset.key ?? null),
     "open-host": (el) => {
-      update({ selectedHost: el.dataset.key ?? null }, false);
+      state.selectedHost = el.dataset.key ?? null;
       navigate("hostitele", el.dataset.key ?? null);
     },
     goto: (el) => navigate((el.dataset.key as never) ?? "prehled"),

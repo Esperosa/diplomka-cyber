@@ -139,7 +139,31 @@ export type NetworkAsset = {
   vendor?: string | null;
   model?: string | null;
   status?: string | null;
+  location?: string | null;
+  serial?: string | null;
   linked_host_key?: string | null;
+};
+
+/** Skutecna vazba mezi aktivy (LLDP, klient-AP, ARP ...). `details` jsou retezce "klic=hodnota"; "?" = neznamo. */
+export type TopologyEdge = {
+  edge_id: string;
+  relation: string;
+  source: string;
+  source_asset_id: string;
+  target_asset_id: string;
+  confidence?: string;
+  details?: string[];
+};
+
+export type MonitoringLane = {
+  lane_id: string;
+  lane_type: string;
+  source: string;
+  status: string;
+  title: string;
+  summary: string;
+  evidence?: string[];
+  recommended_tools?: string[];
 };
 
 export type Report = {
@@ -162,6 +186,8 @@ export type Report = {
   verification_results?: VerificationResult[];
   triageActions?: TriageAction[];
   networkAssets?: NetworkAsset[];
+  topologyEdges?: TopologyEdge[];
+  monitoringLanes?: MonitoringLane[];
   unmappedEvents?: unknown[];
   diff?: unknown;
 };

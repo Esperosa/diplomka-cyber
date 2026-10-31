@@ -92,7 +92,6 @@ const ASSET_KIND: Record<string, DeviceKind> = {
   switch: "switch",
   "access-point": "ap",
   "wireless-client": "mobile",
-  endpoint: "workstation",
   printer: "printer",
   camera: "camera",
   phone: "voip",
@@ -170,6 +169,7 @@ export function classifyHost(report: Report, host: Host): DeviceClass {
     entry.why.push(why);
     votes.set(kind, entry);
   };
+  if (asset?.asset_type === "endpoint") vote("workstation", 0.8, `zdroj ${asset.source} ho vede jen jako koncový bod`);
   const ports = new Set(host.services.filter((s) => s.port_state === "open" || !s.port_state).map((s) => s.port));
   for (const rule of PORT_RULES) {
     const hit = rule.ports.filter((p) => ports.has(p));
@@ -194,6 +194,8 @@ export function classifyHost(report: Report, host: Host): DeviceClass {
   }
   const ranked = [...votes.entries()].sort((a, b) => b[1].score - a[1].score);
   const [kind, best] = ranked[0];
+  // jediny slaby nazna nestaci k tvrzeni o typu: radsi poctive "neznamé"
+  if (best.score < 1.1 && ranked.length === 1) return { kind: "unknown", confidence: "low", reasons: [`jediný náznak je slabý (${best.why[0]})`] };
   const second = ranked[1]?.[1].score ?? 0;
   let finalKind: DeviceKind = kind;
   // web + databaze na jednom hostu = obecny server, ne cisty web
@@ -242,4 +244,59 @@ export function iconInner(kind: DeviceKind): string {
 
 export function kindLabel(kind: DeviceKind): string {
   return KIND_LABEL[kind];
+}
+
+// ---- srozumitelne porty ----
+const PORT_INFO: Record<number, string> = {
+  21: "FTP: přenos souborů, bez šifrování",
+  22: "SSH: šifrovaná vzdálená správa",
+  23: "Telnet: vzdálená správa bez šifrování",
+  25: "SMTP: odesílání pošty",
+  53: "DNS: překlad jmen na adresy",
+  67: "DHCP: přidělování adres",
+  80: "HTTP: web bez šifrování",
+  110: "POP3: stahování pošty",
+  123: "NTP: synchronizace času",
+  139: "NetBIOS: starší sdílení ve Windows",
+  143: "IMAP: čtení pošty",
+  161: "SNMP: správa a monitoring síťových prvků",
+  389: "LDAP: adresář uživatelů",
+  443: "HTTPS: šifrovaný web",
+  445: "SMB: sdílení souborů a tiskáren ve Windows",
+  502: "Modbus: řízení průmyslových zařízení",
+  515: "LPD: tisk",
+  554: "RTSP: video proud z kamery",
+  631: "IPP: tisk po síti",
+  993: "IMAPS: šifrované čtení pošty",
+  1433: "MS SQL: databáze",
+  1883: "MQTT: zprávy z IoT čidel",
+  1900: "UPnP: automatické objevování zařízení",
+  2049: "NFS: sdílení souborů v Linuxu",
+  2375: "Docker API: správa kontejnerů (bez TLS je to riziko)",
+  3306: "MySQL: databáze",
+  3389: "RDP: vzdálená plocha Windows",
+  5060: "SIP: IP telefonie",
+  5353: "mDNS: objevování zařízení v místní síti",
+  5432: "PostgreSQL: databáze",
+  5683: "CoAP: lehký protokol pro IoT",
+  5900: "VNC: vzdálená plocha",
+  6379: "Redis: rychlá databáze v paměti",
+  8080: "HTTP (alternativní port): webové rozhraní",
+  8443: "HTTPS (alternativní port): webové rozhraní",
+  8883: "MQTT přes TLS: zprávy z IoT čidel",
+  9100: "JetDirect: přímý tisk na tiskárnu",
+  27017: "MongoDB: databáze",
+};
+
+/** Co port znamena lidsky; neznamy port se nevysvetluje (zadne domysleni). */
+export function portMeaning(port: number): string | null {
+  return PORT_INFO[port] ?? null;
+}
+
+/** Jak jistou ma rozpoznani vahu, srozumitelne. */
+export const CONFIDENCE_LABEL: Record<DeviceClass["confidence"], string> = { high: "vysoká", medium: "střední", low: "nízká" };
+
+/** Kategorie pro prehledne zobrazeni typu (infrastruktura / koncova zarizeni ...). */
+export function isInfrastructure(kind: DeviceKind): boolean {
+  return kind === "router" || kind === "switch" || kind === "ap" || kind === "vpn";
 }

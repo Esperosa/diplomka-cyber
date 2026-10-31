@@ -1,16 +1,12 @@
-// Priblizeni a posun mapy site: kolecko, stipnuti, tazeni, dvojklik / dvojtap, tlacitka a klavesnice.
-// Stav pohledu preziva prekresleni (vyber stanice prekresluje celou plochu).
-const view = { run: "", k: 1, cx: 0, cy: 0, touched: false };
-const K_MAX = 10;
-const DRAG_PX = 8;
+// Pohled na mapu: priblizeni, posun (mys, kolecko, stipnuti, klavesnice) a plynule prelety kamery.
+// Pohled je (stred, meritko v px na jednotku) a viewBox vzdy presne odpovida prvku, takze nikde nevznikaji
+// okraje. Prelety pouzivaji sdilene tokeny pohybu (--dur-page, --ease-soft) z tokens.css.
+import { tokenMs } from "./motion";
 
-/** Posune pohled na souřadnice stanice (jen když je mapa přiblížená; celá mapa je vidět celá). */
-export function centerMapOn(x: number, y: number): void {
-  if (view.k <= 1 || !Number.isFinite(x) || !Number.isFinite(y)) return;
-  view.cx = x;
-  view.cy = y;
-  view.touched = true;
-}
+export type Cam = { cx: number; cy: number; s: number };
+export type Box = { x: number; y: number; w: number; h: number };
+
+const DRAG_PX = 8;
 
 export function netMapTools(): string {
   const icon = (d: string) =>
@@ -18,116 +14,198 @@ export function netMapTools(): string {
   return `<div class="map-tools" role="group" aria-label="Přiblížení mapy">
     <button type="button" class="map-btn" data-map="in" aria-label="Přiblížit">${icon("M12 5v14M5 12h14")}</button>
     <button type="button" class="map-btn" data-map="out" aria-label="Oddálit">${icon("M5 12h14")}</button>
-    <button type="button" class="map-btn" data-map="fit" aria-label="Celá mapa">${icon("M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5")}</button>
+    <button type="button" class="map-btn" data-map="fit" aria-label="Zobrazit vše">${icon("M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5")}</button>
     <button type="button" class="map-btn map-legend-btn" data-map="legend" aria-label="Legenda" aria-expanded="false" aria-controls="mapLegend">${icon("M12 11v6M12 7.5v.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z")}</button>
   </div>`;
 }
 
-/** Napoji ovladani na prave vykreslenou mapu (volat po kazdem vykresleni). */
-export function bindNetMap(host: HTMLElement): void {
-  const svg = host.querySelector<SVGSVGElement>("svg.netmap");
-  if (!svg || !svg.dataset.vb) return;
-  const [bx, by, bw, bh] = svg.dataset.vb.split(" ").map(Number);
-  const baseCx = bx + bw / 2;
-  const baseCy = by + bh / 2;
-  const run = svg.dataset.run ?? "";
-  if (view.run !== run) Object.assign(view, { run, k: 1, cx: baseCx, cy: baseCy, touched: false });
+function readEase(): (t: number) => number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--ease-soft");
+  const m = raw.match(/cubic-bezier\(([^)]+)\)/);
+  const [x1, y1, x2, y2] = m ? m[1].split(",").map(Number) : [0.3, 0.7, 0.2, 1];
+  const cx = 3 * x1;
+  const bx = 3 * (x2 - x1) - cx;
+  const ax = 1 - cx - bx;
+  const cy = 3 * y1;
+  const by = 3 * (y2 - y1) - cy;
+  const ay = 1 - cy - by;
+  const X = (t: number) => ((ax * t + bx) * t + cx) * t;
+  const Y = (t: number) => ((ay * t + by) * t + cy) * t;
+  return (x) => {
+    let lo = 0;
+    let hi = 1;
+    let t = x;
+    for (let i = 0; i < 20; i += 1) {
+      t = (lo + hi) / 2;
+      if (X(t) < x) lo = t;
+      else hi = t;
+    }
+    return Y(t);
+  };
+}
 
-  // jedno tabulatorove zastaveni na mape: vybrana stanice, jinak prvni vysoke riziko, jinak prvni.
-  // Mezi stanicemi se chodi sipkami (viz nize), takze Tab neprojde 90 bublin.
-  const nodes = [...svg.querySelectorAll<SVGGElement>(".node")];
-  const entry = nodes.find((n) => n.classList.contains("is-selected")) ?? nodes.find((n) => /Riziko vysoké/.test(n.getAttribute("aria-label") ?? "")) ?? nodes[0];
-  const setEntry = (target: SVGGElement | undefined) => nodes.forEach((n) => n.setAttribute("tabindex", n === target ? "0" : "-1"));
-  setEntry(entry);
-  const labels = [...svg.querySelectorAll<SVGTextElement>(".node-ip")];
-  const hits = [...svg.querySelectorAll<SVGCircleElement>(".node .hit")];
-  const hitBase = hits.map((c) => Number(c.getAttribute("r")));
+export type MapViewOptions = {
+  bounds: Box;
+  /** uzivatel priblizuje; controller muze zonu rozbalit */
+  onUserZoom?: (cam: Cam, fit: number, client: { x: number; y: number }, world: { x: number; y: number }) => void;
+  /** dvojklik/dvojtap na prazdne plose; vraci true, kdyz ho controller zpracoval */
+  onBackgroundDouble?: () => boolean;
+  /** po zmene meritka (prahy popisku) */
+  onScale?: (s: number) => void;
+  /** kamera se zmenila (ulozeni pohledu pres prekresleni) */
+  onCam?: (cam: Cam) => void;
+};
+
+export type MapView = {
+  cam: () => Cam;
+  fitScale: () => number;
+  animateTo: (cam: Cam, instant?: boolean) => void;
+  fitBox: (box: Box, pad?: number, instant?: boolean, maxS?: number) => void;
+  fitAll: (instant?: boolean) => void;
+  zoomBy: (factor: number, client?: { x: number; y: number }) => void;
+  /** po dobu ms ignoruje zoom koleckem (probiha prelet kamery) */
+  lock: (ms: number) => void;
+  refreshNav: (isActive: (el: SVGGElement) => boolean, prefer?: Element | null) => void;
+  destroy: () => void;
+};
+
+export function bindMapView(host: HTMLElement, svg: SVGSVGElement, opts: MapViewOptions, start?: Cam | null): MapView {
+  const { bounds } = opts;
+  const bx = bounds.x;
+  const by = bounds.y;
+  const bw = bounds.w;
+  const bh = bounds.h;
+  let rectW = 1;
+  let rectH = 1;
+  let cam: Cam = start ?? { cx: bx + bw / 2, cy: by + bh / 2, s: 1 };
+  let anim = 0;
+  let classes = "";
+  let lockUntil = 0;
   const btn = (name: string) => host.querySelector<HTMLButtonElement>(`[data-map="${name}"]`);
 
-  const scale = () => {
-    const rect = svg.getBoundingClientRect();
-    return Math.min(rect.width / (bw / view.k), rect.height / (bh / view.k)) || 1;
+  const measure = () => {
+    const r = svg.getBoundingClientRect();
+    rectW = r.width || 1;
+    rectH = r.height || 1;
+  };
+  const fitScale = () => Math.min(rectW / bw, rectH / bh);
+  const limits = () => {
+    const fit = fitScale();
+    return { min: fit * 0.8, max: Math.max(fit * 14, 5) };
+  };
+  const clamp = (c: Cam): Cam => {
+    const { min, max } = limits();
+    const s = Math.min(max, Math.max(min, c.s));
+    return { s, cx: Math.min(bx + bw, Math.max(bx, c.cx)), cy: Math.min(by + bh, Math.max(by, c.cy)) };
   };
 
   const apply = () => {
-    view.k = Math.min(K_MAX, Math.max(1, view.k));
-    view.cx = Math.min(bx + bw, Math.max(bx, view.cx));
-    view.cy = Math.min(by + bh, Math.max(by, view.cy));
-    const w = bw / view.k;
-    const h = bh / view.k;
-    svg.setAttribute("viewBox", `${(view.cx - w / 2).toFixed(2)} ${(view.cy - h / 2).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)}`);
-    const s = scale();
-    // pismo drzime kolem konstantni velikosti na obrazovce, ale pri velkem oddaleni nesmi zahltit mapu
-    svg.style.setProperty("--u", Math.min(1 / s, 3.2).toFixed(4));
-    svg.style.setProperty("--um", Math.min(1 / s, 2.2).toFixed(4));
-    svg.classList.toggle("is-far", s < 0.7);
-    // popisek stanice se ukaze, az se do bubliny vejde
-    for (const label of labels) label.style.display = label.dataset.sel || s >= Number(label.dataset.need) ? "" : "none";
-    // dotykova plocha roste s priblizenim, ale nepresahne rozestup stanic
-    hits.forEach((c, i) => c.setAttribute("r", Math.max(hitBase[i] - 2, Math.min(18, 22 / s)).toFixed(1)));
-    const zoomIn = btn("in");
-    const zoomOut = btn("out");
-    const fit = btn("fit");
-    if (zoomIn) zoomIn.disabled = view.k >= K_MAX;
-    if (zoomOut) zoomOut.disabled = view.k <= 1;
-    if (fit) fit.disabled = view.k <= 1 && !view.touched;
+    const w = rectW / cam.s;
+    const h = rectH / cam.s;
+    svg.setAttribute("viewBox", `${(cam.cx - w / 2).toFixed(2)} ${(cam.cy - h / 2).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)}`);
+    svg.style.setProperty("--u", Math.min(1 / cam.s, 3.2).toFixed(4));
+    svg.style.setProperty("--um", Math.min(1 / cam.s, 2.2).toFixed(4));
+    const next = [cam.s >= 0.95 ? "show-icons" : "", cam.s >= 1.9 ? "show-labels" : "", cam.s < 0.55 ? "is-far" : ""].filter(Boolean).join(" ");
+    if (next !== classes) {
+      for (const c of ["show-icons", "show-labels", "is-far"]) svg.classList.toggle(c, next.includes(c));
+      classes = next;
+    }
+    const fit = fitScale();
+    const zin = btn("in");
+    const zout = btn("out");
+    const fitBtn = btn("fit");
+    const { min, max } = limits();
+    if (zin) zin.disabled = cam.s >= max * 0.999;
+    if (zout) zout.disabled = cam.s <= min * 1.001;
+    if (fitBtn) fitBtn.disabled = false;
+    opts.onScale?.(cam.s / (fit || 1));
+    opts.onCam?.(cam);
   };
 
-  const zoomAt = (factor: number, clientX?: number, clientY?: number) => {
-    const rect = svg.getBoundingClientRect();
-    const px = (clientX ?? rect.left + rect.width / 2) - (rect.left + rect.width / 2);
-    const py = (clientY ?? rect.top + rect.height / 2) - (rect.top + rect.height / 2);
-    const before = scale();
-    const k = Math.min(K_MAX, Math.max(1, view.k * factor));
-    if (k === view.k) return;
-    const ux = view.cx + px / before;
-    const uy = view.cy + py / before;
-    view.k = k;
-    const after = scale();
-    view.cx = ux - px / after;
-    view.cy = uy - py / after;
-    view.touched = true;
-    apply();
+  const animateTo = (target: Cam, instant = false) => {
+    cancelAnimationFrame(anim);
+    const to = clamp(target);
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (instant || reduced) {
+      cam = to;
+      apply();
+      return;
+    }
+    const from = { ...cam };
+    const dur = tokenMs("--dur-page", 540) + 120;
+    const ease = readEase();
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / dur);
+      const e = ease(k);
+      cam = { s: from.s * Math.pow(to.s / from.s, e), cx: from.cx + (to.cx - from.cx) * e, cy: from.cy + (to.cy - from.cy) * e };
+      apply();
+      if (k < 1) anim = requestAnimationFrame(step);
+    };
+    anim = requestAnimationFrame(step);
   };
-  const panBy = (dxPx: number, dyPx: number) => {
-    const s = scale();
-    view.cx -= dxPx / s;
-    view.cy -= dyPx / s;
-    view.touched = true;
-    apply();
+
+  const fitBox = (box: Box, pad = 36, instant = false, maxS = Infinity) => {
+    measure();
+    const s = Math.min(rectW / (box.w + pad * 2), rectH / (box.h + pad * 2), maxS);
+    animateTo({ cx: box.x + box.w / 2, cy: box.y + box.h / 2, s }, instant);
   };
-  const reset = () => {
-    Object.assign(view, { k: 1, cx: baseCx, cy: baseCy, touched: false });
+  const fitAll = (instant = false) => fitBox(bounds, 0, instant);
+
+  const toWorld = (clientX: number, clientY: number) => {
+    const r = svg.getBoundingClientRect();
+    return { x: cam.cx + (clientX - (r.left + r.width / 2)) / cam.s, y: cam.cy + (clientY - (r.top + r.height / 2)) / cam.s };
+  };
+
+  const zoomBy = (factor: number, client?: { x: number; y: number }) => {
+    cancelAnimationFrame(anim);
+    const r = svg.getBoundingClientRect();
+    const px = (client?.x ?? r.left + r.width / 2) - (r.left + r.width / 2);
+    const py = (client?.y ?? r.top + r.height / 2) - (r.top + r.height / 2);
+    const { min, max } = limits();
+    const s = Math.min(max, Math.max(min, cam.s * factor));
+    if (s === cam.s) return;
+    const ux = cam.cx + px / cam.s;
+    const uy = cam.cy + py / cam.s;
+    cam = clamp({ s, cx: ux - px / s, cy: uy - py / s });
+    apply();
+    if (factor > 1) opts.onUserZoom?.(cam, fitScale(), { x: client?.x ?? r.left + r.width / 2, y: client?.y ?? r.top + r.height / 2 }, toWorld(client?.x ?? r.left + r.width / 2, client?.y ?? r.top + r.height / 2));
+  };
+  const panBy = (dx: number, dy: number) => {
+    cancelAnimationFrame(anim);
+    cam = clamp({ ...cam, cx: cam.cx - dx / cam.s, cy: cam.cy - dy / cam.s });
     apply();
   };
 
-  btn("in")?.addEventListener("click", () => zoomAt(1.6));
-  btn("out")?.addEventListener("click", () => zoomAt(1 / 1.6));
-  btn("fit")?.addEventListener("click", reset);
+  btn("in")?.addEventListener("click", () => zoomBy(1.6));
+  btn("out")?.addEventListener("click", () => zoomBy(1 / 1.6));
   btn("legend")?.addEventListener("click", (event) => {
     const open = !host.classList.contains("legend-open");
     host.classList.toggle("legend-open", open);
     (event.currentTarget as HTMLElement).setAttribute("aria-expanded", String(open));
   });
 
-  svg.addEventListener(
-    "wheel",
-    (event) => {
-      event.preventDefault();
-      zoomAt(Math.exp(-event.deltaY * (event.ctrlKey ? 0.01 : 0.0016)), event.clientX, event.clientY);
-    },
-    { passive: false },
-  );
-  svg.addEventListener("dblclick", (event) => {
-    if (!(event.target as Element).closest(".node")) zoomAt(2, event.clientX, event.clientY);
+  const controller = new AbortController();
+  const on = <K extends keyof SVGElementEventMap>(type: K, fn: (e: SVGElementEventMap[K]) => void, o?: AddEventListenerOptions) =>
+    svg.addEventListener(type, fn as EventListener, { signal: controller.signal, ...o });
+
+  on("wheel", (event) => {
+    event.preventDefault();
+    if (performance.now() < lockUntil) return;
+    zoomBy(Math.exp(-event.deltaY * (event.ctrlKey ? 0.01 : 0.0016)), { x: event.clientX, y: event.clientY });
+  }, { passive: false });
+
+  on("dblclick", (event) => {
+    if ((event.target as Element).closest(".node, .zbub")) return;
+    if (opts.onBackgroundDouble?.()) return;
+    zoomBy(2, { x: event.clientX, y: event.clientY });
   });
 
-  // jeden prst nebo mys = posun, dva prsty = stipnuti
   const pointers = new Map<number, { x: number; y: number }>();
   let travelled = 0;
   let pinch = 0;
   let lastTap = 0;
-  svg.addEventListener("pointerdown", (event) => {
+  on("pointerdown", (event) => {
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.size === 1) travelled = 0;
     if (pointers.size === 2) {
@@ -136,7 +214,7 @@ export function bindNetMap(host: HTMLElement): void {
       travelled = DRAG_PX + 1;
     }
   });
-  svg.addEventListener("pointermove", (event) => {
+  on("pointermove", (event) => {
     const prev = pointers.get(event.pointerId);
     if (!prev) return;
     const next = { x: event.clientX, y: event.clientY };
@@ -151,7 +229,7 @@ export function bindNetMap(host: HTMLElement): void {
     } else if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
-      if (pinch > 0) zoomAt(dist / pinch, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      if (pinch > 0) zoomBy(dist / pinch, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
       pinch = dist;
     }
   });
@@ -160,67 +238,104 @@ export function bindNetMap(host: HTMLElement): void {
     pointers.delete(event.pointerId);
     if (pointers.size < 2) pinch = 0;
     if (pointers.size === 0) window.setTimeout(() => svg.classList.remove("is-dragging"), 0);
-    if (event.type === "pointerup" && event.pointerType === "touch" && wasTap && !(event.target as Element).closest(".node")) {
-      if (event.timeStamp - lastTap < 320) zoomAt(2, event.clientX, event.clientY);
+    if (event.type === "pointerup" && event.pointerType === "touch" && wasTap && !(event.target as Element).closest(".node, .zbub")) {
+      if (event.timeStamp - lastTap < 320) {
+        if (!opts.onBackgroundDouble?.()) zoomBy(2, { x: event.clientX, y: event.clientY });
+      }
       lastTap = event.timeStamp;
     }
   };
-  svg.addEventListener("pointerup", release);
-  svg.addEventListener("pointercancel", release);
-  // po tazeni se nema vybrat stanice pod prstem
-  svg.addEventListener(
-    "click",
+  on("pointerup", release);
+  on("pointercancel", release);
+  on("click", (event) => {
+    if (travelled > DRAG_PX) {
+      event.stopPropagation();
+      event.preventDefault();
+      travelled = 0;
+    }
+  }, { capture: true });
+
+  host.addEventListener(
+    "keydown",
     (event) => {
-      if (travelled > DRAG_PX) {
-        event.stopPropagation();
-        event.preventDefault();
-        travelled = 0;
-      }
+      const key = event.key;
+      if ((event.target as Element).closest("input, select, textarea")) return;
+      if (key === "+" || key === "=") zoomBy(1.4);
+      else if (key === "-" || key === "_") zoomBy(1 / 1.4);
+      else if (key === "0") fitAll();
+      else if (key.startsWith("Arrow")) {
+        const current = (event.target as Element).closest<SVGGElement>(".node, .zbub");
+        if (!current) return;
+        nearestNav(svg, current, key)?.focus();
+      } else return;
+      event.preventDefault();
     },
-    true,
+    { signal: controller.signal },
   );
 
-  // klavesnice: +/- priblizeni, 0 cela mapa, sipky skoci na nejblizsi stanici ve smeru
-  host.addEventListener("keydown", (event) => {
-    const key = event.key;
-    if (key === "+" || key === "=") zoomAt(1.4);
-    else if (key === "-" || key === "_") zoomAt(1 / 1.4);
-    else if (key === "0") reset();
-    else if (key.startsWith("Arrow")) {
-      const current = (event.target as Element).closest<SVGGElement>(".node");
-      if (!current) return;
-      nearestNode(svg, current, key)?.focus();
-    } else return;
-    event.preventDefault();
-  });
-
-  // fokus na stanici mimo vyrez posune pohled
-  svg.addEventListener("focusin", (event) => {
-    const node = (event.target as Element).closest<SVGGElement>(".node");
-    if (!node) return;
-    setEntry(node);
+  on("focusin", (event) => {
+    const el = (event.target as Element).closest<SVGGElement>(".node, .zbub");
+    if (!el) return;
+    setEntry(el);
     const rect = svg.getBoundingClientRect();
-    const box = node.getBoundingClientRect();
-    const m = 24;
+    const box = el.getBoundingClientRect();
+    const m = 28;
     if (box.left < rect.left + m || box.right > rect.right - m || box.top < rect.top + m || box.bottom > rect.bottom - m) {
-      view.cx = Number(node.dataset.x);
-      view.cy = Number(node.dataset.y);
-      view.touched = true;
-      apply();
+      const world = { x: Number(el.dataset.x), y: Number(el.dataset.y) };
+      if (Number.isFinite(world.x)) animateTo({ ...cam, cx: world.x, cy: world.y });
     }
   });
 
+  const navItems = () => [...svg.querySelectorAll<SVGGElement>(".node, .zbub")];
+  const setEntry = (target: Element | null | undefined) => {
+    for (const n of navItems()) n.setAttribute("tabindex", n === target ? "0" : "-1");
+  };
+  const refreshNav = (isActive: (el: SVGGElement) => boolean, prefer?: Element | null) => {
+    const all = navItems();
+    for (const n of all) n.toggleAttribute("data-fx", isActive(n));
+    const active = all.filter((n) => n.hasAttribute("data-fx"));
+    const entry = (prefer && active.includes(prefer as SVGGElement) ? prefer : null) ?? active.find((n) => n.classList.contains("is-selected")) ?? active.find((n) => /Riziko vysoké|nejhorší závažnost vysoké/.test(n.getAttribute("aria-label") ?? "")) ?? active[0];
+    setEntry(entry);
+  };
+
+  const ro = new ResizeObserver(() => {
+    const keepFit = Math.abs(cam.s / (fitScale() || 1) - 1) < 0.001;
+    measure();
+    if (keepFit) cam = { ...cam, s: fitScale() };
+    apply();
+  });
+  ro.observe(svg);
+  measure();
+  if (!start) cam = { cx: bx + bw / 2, cy: by + bh / 2, s: fitScale() };
+  else cam = clamp(cam);
   apply();
-  new ResizeObserver(apply).observe(svg);
+
+  return {
+    cam: () => ({ ...cam }),
+    fitScale,
+    animateTo,
+    fitBox,
+    fitAll,
+    zoomBy,
+    lock: (ms) => {
+      lockUntil = performance.now() + ms;
+    },
+    refreshNav,
+    destroy: () => {
+      cancelAnimationFrame(anim);
+      ro.disconnect();
+      controller.abort();
+    },
+  };
 }
 
-function nearestNode(svg: SVGSVGElement, from: SVGGElement, key: string): SVGGElement | null {
+function nearestNav(svg: SVGSVGElement, from: SVGGElement, key: string): SVGGElement | null {
   const a = from.getBoundingClientRect();
   const ax = a.left + a.width / 2;
   const ay = a.top + a.height / 2;
   let best: SVGGElement | null = null;
   let bestScore = Infinity;
-  for (const node of svg.querySelectorAll<SVGGElement>(".node")) {
+  for (const node of svg.querySelectorAll<SVGGElement>("[data-fx]")) {
     if (node === from) continue;
     const b = node.getBoundingClientRect();
     const dx = b.left + b.width / 2 - ax;
