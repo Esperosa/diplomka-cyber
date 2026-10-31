@@ -326,11 +326,18 @@ pub fn render_markdown(state: &PersistedState, elapsed: f64, finished: bool) -> 
     let _ = writeln!(out, "\nBenigni lookalike udalosti (tvrde negativy):\n");
     let _ = writeln!(
         out,
-        "| udalost | vyskytu | nalezy pripsatelne jen jim |\n|---|---:|---:|"
+        "| udalost | vyskytu | z toho s falesnym nalezem | nalezy pripsatelne jen jim |\n|---|---:|---|---:|"
     );
     for (label, l) in &a.lookalikes {
-        let _ = writeln!(out, "| {label} | {} | {} |", l.occurrences, l.fp_findings);
+        let _ = writeln!(
+            out,
+            "| {label} | {} | {} | {} |",
+            l.occurrences,
+            ci(l.occurrences_with_fp, l.occurrences),
+            l.fp_findings
+        );
     }
+    coverage_section(&mut out, a);
 
     let _ = writeln!(out, "\n## Expozice z inventare\n");
     let _ = writeln!(
@@ -677,4 +684,149 @@ mod tests {
         assert_eq!(pct(1, 4), 25.0);
         assert_eq!(pct(1, 0), 0.0);
     }
+}
+
+const SIZE_ORDER: [&str; 5] = crate::soak::netmodel::SIZE_CLASSES;
+
+fn segment_table(out: &mut String, a: &Aggregate, prefix: &str, order: &[String]) {
+    let _ = writeln!(
+        out,
+        "| rez | siti | prum. zarizeni | prum. podsiti | virt. sit-dnu | utoku | detekovano | spravny typ | FP / sit-den | benigni udalosti | z toho s FP |\n|---|---:|---:|---:|---:|---:|---|---|---:|---:|---|"
+    );
+    for name in order {
+        let Some(seg) = a.segments.get(&format!("{prefix}|{name}")) else {
+            let _ = writeln!(out, "| {name} | **0 (NEPOKRYTO)** | | | | | | | | | |");
+            continue;
+        };
+        let n = seg.networks.max(1) as f64;
+        let _ = writeln!(
+            out,
+            "| {name} | {} | {:.0} | {:.1} | {:.0} | {} | {} | {} | {:.2} | {} | {} |",
+            seg.networks,
+            seg.devices as f64 / n,
+            seg.subnets as f64 / n,
+            seg.virtual_days,
+            seg.attacks,
+            ci(seg.detected_any, seg.attacks),
+            ci(seg.detected_typed, seg.attacks),
+            seg.fp_noise as f64 / seg.virtual_days.max(1e-9),
+            seg.benign_events,
+            ci(seg.benign_with_fp, seg.benign_events)
+        );
+    }
+}
+
+fn coverage_section(out: &mut String, a: &Aggregate) {
+    use crate::soak::{
+        netmodel::{Archetype, Role},
+        traffic::Family,
+    };
+    let _ = writeln!(
+        out,
+        "\n## Pokryti: velikosti siti, typy zarizeni, utoky, delka\n"
+    );
+    let _ = writeln!(
+        out,
+        "Kazda radka musi mit data; `NEPOKRYTO` = scenar se v behu nevyskytl (mezera v generatoru, ne dobry vysledek).\n"
+    );
+    let _ = writeln!(out, "### Podle velikosti site\n");
+    let sizes: Vec<String> = SIZE_ORDER.iter().map(|s| s.to_string()).collect();
+    segment_table(out, a, "size", &sizes);
+    let _ = writeln!(out, "\n### Podle archetypu\n");
+    let archs: Vec<String> = Archetype::ALL.iter().map(|x| format!("{x:?}")).collect();
+    segment_table(out, a, "arch", &archs);
+    let _ = writeln!(out, "\n### Podle delky behu (virtualni hodiny)\n");
+    let mut durs: Vec<u32> = a
+        .segments
+        .keys()
+        .filter_map(|k| k.strip_prefix("dur|")?.strip_suffix('h')?.parse().ok())
+        .collect();
+    durs.sort_unstable();
+    let dur_names: Vec<String> = durs.iter().map(|d| format!("{d}h")).collect();
+    segment_table(out, a, "dur", &dur_names);
+
+    let _ = writeln!(
+        out,
+        "\n### Detekce: rodina utoku x velikost site (podil detekovanych, v zavorce pocet utoku)\n"
+    );
+    let _ = write!(out, "| rodina |");
+    for size in SIZE_ORDER {
+        let _ = write!(out, " {size} |");
+    }
+    let _ = writeln!(out);
+    let _ = write!(out, "|---|");
+    for _ in SIZE_ORDER {
+        let _ = write!(out, "---:|");
+    }
+    let _ = writeln!(out);
+    for family in Family::ALL {
+        let _ = write!(out, "| {} |", family.label());
+        for size in SIZE_ORDER {
+            match a.segments.get(&format!("cell|{}|{size}", family.label())) {
+                Some(seg) if seg.attacks > 0 => {
+                    let _ = write!(
+                        out,
+                        " {:.0} % ({}) |",
+                        100.0 * seg.detected_any as f64 / seg.attacks as f64,
+                        seg.attacks
+                    );
+                }
+                _ => {
+                    let _ = write!(out, " - |");
+                }
+            }
+        }
+        let _ = writeln!(out);
+    }
+
+    let _ = writeln!(out, "\n### Typy zarizeni (instance napric vsemi sitemi)\n");
+    for role in Role::ALL {
+        let count = a.roles.get(role.label()).copied().unwrap_or(0);
+        let _ = writeln!(
+            out,
+            "- {}: {}{}",
+            role.label(),
+            count,
+            if count == 0 { " **NEPOKRYTO**" } else { "" }
+        );
+    }
+    let mut services: Vec<_> = a.services.iter().collect();
+    services.sort_by(|x, y| y.1.cmp(x.1));
+    let _ = writeln!(
+        out,
+        "\n### Sluzby/servery (instance): {}\n",
+        services
+            .iter()
+            .map(|(k, v)| format!("{k} {v}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
+    let o = &a.ops;
+    let _ = writeln!(out, "### Provozni realita (pady, patche, restarty)\n");
+    let _ = writeln!(
+        out,
+        "- restarty enginu (ztrata inventare, obnova identity z uloziste): {}",
+        o.engine_restarts
+    );
+    let _ = writeln!(
+        out,
+        "- zarizeni-cyklu mimo provoz (pady, patchovaci restarty, odstaveni): {}",
+        o.device_down_cycles
+    );
+    let _ = writeln!(
+        out,
+        "- patchnuta zarizeni: {}, nove nasazena: {}, vyrazena: {}",
+        o.patched_devices, o.onboarded_devices, o.decommissioned_devices
+    );
+    let _ = writeln!(
+        out,
+        "- zastarale nalezy zranitelnosti po patchi: {} z {} kontrol",
+        o.stale_exposure_findings, o.exposure_checks_after_patch
+    );
+    let _ = writeln!(
+        out,
+        "- cykly s vypadlym senzorem: {}, poskozene/nevalidni radky alertu zpracovane bez padu: {}",
+        o.sensor_down_cycles, o.corrupt_alert_lines
+    );
 }

@@ -36,12 +36,12 @@ use crate::{
     scope_policy::ScopePolicy,
     soak::{
         kernel::SimKernel,
-        netmodel::NetworkModel,
+        netmodel::{Archetype, NetworkModel},
         rng::{Rng, derive},
         stats::{Aggregate, FamilyStats},
         traffic::{
-            CYCLE_SECS, CycleContext, Kind, Telemetry, Truth, generate_cycle, plan_episode,
-            random_telemetry, seed_for_cycle, ts,
+            CYCLE_SECS, CycleContext, Kind, Lookalike, Telemetry, Truth, generate_cycle,
+            plan_episode, random_telemetry, seed_for_cycle, ts,
         },
     },
     verification_exec::{self, CheckRunner, ExecutionBudget, LocalRunner},
@@ -80,10 +80,26 @@ fn is_static_exposure(finding_type: &str) -> bool {
 
 struct SimRunner<'a> {
     model: &'a NetworkModel,
+    cycle: u32,
+    seed: u64,
 }
 
 impl CheckRunner for SimRunner<'_> {
     fn run(&self, method: &str, asset: &str, hosts: &[HostReport]) -> Result<String> {
+        // vstrikovane poruchy nastroju: ~4 % kontrol vyprsi / selze (nedostupny cil, timeout)
+        let roll = crate::soak::rng::mix(
+            asset
+                .bytes()
+                .chain(method.bytes())
+                .fold(self.seed ^ self.cycle as u64, |a, b| {
+                    a.wrapping_mul(131).wrapping_add(b as u64)
+                }),
+        ) % 100;
+        if roll < 4 {
+            return Err(BakulaError::Processing(format!(
+                "simulovany timeout nastroje {method} proti {asset}"
+            )));
+        }
         if method != "read_only_content_inspection" {
             return LocalRunner.run(method, asset, hosts);
         }
@@ -202,15 +218,44 @@ fn run_episode_inner(
         .entry(format!("{:?}", model.archetype))
         .or_default() += 1;
     let mut rng = Rng::new(derive(model.seed, 0xE915_0D));
-    let telemetry: Telemetry = random_telemetry(&mut rng);
+    let telemetry: Telemetry = random_telemetry(&mut rng, model.prefixes.len());
     let hours = if cfg.hours > 0 {
         cfg.hours
     } else {
-        [24u32, 48, 72, 96][rng.weighted(&[0.4, 0.3, 0.2, 0.1])]
+        // dlouhodobost: male site bezi i mesic virtualniho provozu, velke max tyden
+        match model.archetype {
+            Archetype::Metro => [24u32, 48, 72, 168][rng.weighted(&[0.3, 0.3, 0.2, 0.2])],
+            Archetype::Enterprise
+            | Archetype::Hospital
+            | Archetype::Industrial
+            | Archetype::Campus => {
+                [24u32, 48, 72, 168, 336][rng.weighted(&[0.2, 0.2, 0.2, 0.25, 0.15])]
+            }
+            _ => [24u32, 48, 72, 168, 336, 720, 1440]
+                [rng.weighted(&[0.14, 0.14, 0.12, 0.22, 0.17, 0.15, 0.06])],
+        }
     };
     let cycles = hours * 2;
     let start_offset_s = rng.range(0, 6) as i64 * 86400;
+    // nove (zatim nenasazena) zarizeni pro udalosti onboarding
+    let dormant = rng.poisson((hours as f64 / 24.0 * 0.5).min(20.0)) as usize;
+    model.add_dormant(&mut rng, dormant);
+    let initial_up: Vec<bool> = model.devices.iter().map(|d| d.up).collect();
+    for device in &model.devices {
+        *agg.roles
+            .entry(device.role.label().to_string())
+            .or_default() += 1;
+        for service in &device.services {
+            *agg.services.entry(service.name.to_string()).or_default() += 1;
+        }
+    }
     let mut truths = plan_episode(&model, &mut rng, hours, &telemetry);
+    let restart_cycles: HashSet<u32> = (0..rng.poisson(hours as f64 / 24.0 * 0.25))
+        .map(|_| rng.range(1, cycles.saturating_sub(1).max(1) as u64) as u32)
+        .collect();
+    let mut patched_ids: HashSet<u32> = HashSet::new();
+    let mut hosts_devices: Vec<u32> = Vec::new();
+    let mut lookalike_with_fp: HashSet<usize> = HashSet::new();
 
     let clock = Arc::new(AtomicI64::new(
         crate::soak::traffic::EPOCH0 + start_offset_s,
@@ -275,7 +320,7 @@ fn run_episode_inner(
         })
         .map(|(index, t)| {
             let subnet = model.prefixes[0];
-            let octet = 200 + (t.id % 50) as u8;
+            let octet = 251 + (t.id % 4) as u8; // mimo DHCP/staticky rozsah zarizeni
             let mut rrng = Rng::new(derive(model.seed, 0x6061 + t.id as u64));
             (
                 index,
@@ -301,6 +346,71 @@ fn run_episode_inner(
         let cycle_started = Instant::now();
         let t0 = crate::soak::traffic::cycle_start_abs(start_offset_s, cycle);
         clock.store(t0, Ordering::SeqCst);
+
+        // --- provozni udalosti menici stav modelu: pady, patche, onboarding, vyrazeni ---
+        {
+            let mut desired = initial_up.clone();
+            for truth in &truths {
+                let Kind::Benign(look) = truth.kind else {
+                    continue;
+                };
+                if cycle < truth.start_cycle {
+                    continue;
+                }
+                match look {
+                    Lookalike::Onboarding => {
+                        for &v in &truth.victim_devices {
+                            desired[v as usize] = true;
+                        }
+                        if cycle == truth.start_cycle {
+                            agg.ops.onboarded_devices += truth.victim_devices.len() as u64;
+                        }
+                    }
+                    Lookalike::Decommission => {
+                        for &v in &truth.victim_devices {
+                            desired[v as usize] = false;
+                        }
+                        if cycle == truth.start_cycle {
+                            agg.ops.decommissioned_devices += truth.victim_devices.len() as u64;
+                        }
+                    }
+                    Lookalike::ServiceCrash if cycle <= truth.end_cycle => {
+                        for &v in &truth.victim_devices {
+                            desired[v as usize] = false;
+                        }
+                    }
+                    Lookalike::PatchWindow if cycle <= truth.end_cycle => {
+                        let span = (truth.end_cycle - truth.start_cycle + 1) as usize;
+                        for (i, &v) in truth.victim_devices.iter().enumerate() {
+                            if cycle as usize == truth.start_cycle as usize + (i % span) {
+                                desired[v as usize] = false;
+                            }
+                            if cycle == truth.start_cycle && model.patch_device(v) {
+                                agg.ops.patched_devices += 1;
+                                patched_ids.insert(v);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            for (index, up) in desired.iter().enumerate() {
+                model.devices[index].up = *up;
+                if !*up && initial_up[index] {
+                    agg.ops.device_down_cycles += 1;
+                }
+            }
+        }
+        // restart enginu: ztrata volatilniho stavu (inventar), identita se nacte z uloziste
+        if restart_cycles.contains(&cycle) {
+            let json = serde_json::to_string(&resolver)
+                .map_err(|e| BakulaError::Processing(format!("serializace identity: {e}")))?;
+            resolver = serde_json::from_str(&json)
+                .map_err(|e| BakulaError::Processing(format!("obnova identity: {e}")))?;
+            hosts_cache.clear();
+            hosts_devices.clear();
+            agg.ops.engine_restarts += 1;
+        }
 
         let churn_share = if matches!(
             model.archetype,
@@ -344,6 +454,12 @@ fn run_episode_inner(
         agg.observations += output.observations.len() as u64;
         agg.alerts += output.alerts.len() as u64;
         agg.outage_cycles += output.outage as u64;
+        agg.ops.sensor_down_cycles += output.sensor_down as u64;
+        agg.ops.corrupt_alert_lines += output
+            .alerts
+            .iter()
+            .filter(|line| !(line.starts_with("{\"timestamp\":\"20") && line.ends_with("}}")))
+            .count() as u64;
         agg.enforcement.benign_flows_total += output.benign_flows;
         agg.enforcement.collateral_flows += output.benign_flows_blocked;
 
@@ -363,6 +479,7 @@ fn run_episode_inner(
                 }
             }
             hosts_cache = hosts;
+            hosts_devices = output.inventory_devices.clone();
         }
         let mut hosts = hosts_cache.clone();
 
@@ -449,7 +566,10 @@ fn run_episode_inner(
         // `hosts` ma poradi inventare (= poradi zarizeni v modelu), proto index = zarizeni;
         // `run_report.hosts` je serazene podle IP, ne podle zarizeni.
         for (index, host) in hosts.iter().enumerate() {
-            let Some(device) = model.devices.get(index) else {
+            let Some(device) = hosts_devices
+                .get(index)
+                .and_then(|id| model.devices.get(*id as usize))
+            else {
                 continue; // rogue host pripojeny na konec inventare
             };
             let mac = &device.mac;
@@ -486,7 +606,11 @@ fn run_episode_inner(
                     .iter()
                     .filter_map(|h| verification_planner::plan_for_hypothesis(h, &scope))
                     .collect();
-                let runner = SimRunner { model: &model };
+                let runner = SimRunner {
+                    model: &model,
+                    cycle,
+                    seed: model.seed,
+                };
                 let results = verification_exec::execute_plans(
                     &plans,
                     &run_report.hosts,
@@ -583,6 +707,21 @@ fn run_episode_inner(
                     Kind::Benign(_) => *attributed_to_lookalike.entry(index).or_default() += 1,
                 }
             }
+            if !attributed {
+                // udalosti bez klicovych IP (vypadek senzoru, poskozene logy, replay)
+                for (index, truth) in truths.iter().enumerate() {
+                    if let Kind::Benign(look) = truth.kind {
+                        if look.window_scoped()
+                            && cycle >= truth.start_cycle
+                            && cycle <= truth.end_cycle + ATTRIBUTION_LATENCY
+                        {
+                            attributed = true;
+                            *attributed_to_lookalike.entry(index).or_default() += 1;
+                            break;
+                        }
+                    }
+                }
+            }
             labels.insert(finding.finding_id.clone(), attacked);
             if !attributed {
                 agg.fp_noise += 1;
@@ -593,6 +732,7 @@ fn run_episode_inner(
         }
         agg.behavioral_tp += attributed_to_attack as u64;
         for (index, count) in &attributed_to_lookalike {
+            lookalike_with_fp.insert(*index);
             if let Kind::Benign(look) = truths[*index].kind {
                 agg.lookalikes
                     .entry(look.label().to_string())
@@ -721,7 +861,48 @@ fn run_episode_inner(
 
         // expozice z inventare (kazdy 4. cyklus)
         if cycle % 4 == 0 {
-            for device in &model.devices {
+            let found_keys: HashSet<(&str, &str)> = run_report
+                .findings
+                .iter()
+                .filter_map(|f| {
+                    f.service_key
+                        .as_deref()
+                        .map(|key| (f.finding_type.as_str(), key))
+                })
+                .collect();
+            for finding in &run_report.findings {
+                if !matches!(
+                    finding.finding_type.as_str(),
+                    "high_risk_cve_exposure" | "known_exploited_vulnerability"
+                ) {
+                    continue;
+                }
+                let Some(key) = finding.service_key.as_deref() else {
+                    continue;
+                };
+                let mut parts = key.split('/');
+                let (Some(ip), Some(proto), Some(port)) =
+                    (parts.next(), parts.next(), parts.next())
+                else {
+                    continue;
+                };
+                let Some(device) = model.device_by_ip(ip) else {
+                    continue;
+                };
+                if !patched_ids.contains(&device) {
+                    continue;
+                }
+                agg.ops.exposure_checks_after_patch += 1;
+                let still_vulnerable = model.devices[device as usize].services.iter().any(|s| {
+                    s.proto == proto
+                        && s.port.to_string() == port
+                        && s.cves.iter().any(|c| c.1 >= 7.0)
+                });
+                if !still_vulnerable {
+                    agg.ops.stale_exposure_findings += 1;
+                }
+            }
+            for device in model.devices.iter().filter(|d| d.up) {
                 let ip = &ips[device.id as usize];
                 for svc in &device.services {
                     let mut expected: Vec<&str> = Vec::new();
@@ -734,9 +915,7 @@ fn run_episode_inner(
                     for want in expected {
                         agg.exposure.expected += 1;
                         let key = format!("{ip}/{}/{}", svc.proto, svc.port);
-                        if run_report.findings.iter().any(|f| {
-                            f.finding_type == want && f.service_key.as_deref() == Some(key.as_str())
-                        }) {
+                        if found_keys.contains(&(want, key.as_str())) {
                             agg.exposure.found += 1;
                         }
                     }
@@ -922,6 +1101,20 @@ fn run_episode_inner(
                     stats.contained += 1;
                     stats.record_ttc(blocked.saturating_sub(first));
                 }
+                let size = model.size_class();
+                let arch = format!("{:?}", model.archetype);
+                let detected = ledger.first_detect.is_some() && truth.first_emit_cycle.is_some();
+                for key in [
+                    format!("size|{size}"),
+                    format!("arch|{arch}"),
+                    format!("cell|{}|{size}", family.label()),
+                    format!("dur|{hours}h"),
+                ] {
+                    let seg = agg.segment(&key);
+                    seg.attacks += 1;
+                    seg.detected_any += detected as u64;
+                    seg.detected_typed += ledger.typed as u64;
+                }
                 let (rp, re) = (ledger.ranked_prod, ledger.ranked_egress);
                 if truth.attacker_device.is_some() {
                     let key = format!("{}__ranked", family.label());
@@ -932,8 +1125,21 @@ fn run_episode_inner(
                 }
             }
             Kind::Benign(look) => {
+                let has_fp = lookalike_with_fp.contains(&index);
                 let entry = agg.lookalikes.entry(look.label().to_string()).or_default();
                 entry.occurrences += 1;
+                entry.occurrences_with_fp += has_fp as u64;
+                let size = model.size_class();
+                let arch = format!("{:?}", model.archetype);
+                for key in [
+                    format!("size|{size}"),
+                    format!("arch|{arch}"),
+                    format!("dur|{hours}h"),
+                ] {
+                    let seg = agg.segment(&key);
+                    seg.benign_events += 1;
+                    seg.benign_with_fp += has_fp as u64;
+                }
             }
         }
     }
@@ -946,6 +1152,28 @@ fn run_episode_inner(
         } else {
             1.0
         };
+
+    // pokryti po rezech: velikost site, archetyp, delka behu
+    {
+        let (devices, subnets) = (model.devices.len() as u64, model.prefixes.len() as u64);
+        let days = cycles as f64 / 48.0;
+        let (obs, findings, fp) = (agg.observations, agg.findings, agg.fp_noise);
+        for key in [
+            format!("size|{}", model.size_class()),
+            format!("arch|{:?}", model.archetype),
+            format!("dur|{hours}h"),
+        ] {
+            let seg = agg.segment(&key);
+            seg.networks += 1;
+            seg.devices += devices;
+            seg.subnets += subnets;
+            seg.virtual_days += days;
+            seg.cycles += cycles as u64;
+            seg.observations += obs;
+            seg.findings += findings;
+            seg.fp_noise += fp;
+        }
+    }
 
     // pamet pripadu: kolik zdroju guard oznacil a kolik poctivych zaznamu zadrzel
     agg.learning.flagged_sources += memory.flagged_sources().len() as u64;

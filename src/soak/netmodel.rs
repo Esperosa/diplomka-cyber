@@ -26,9 +26,42 @@ pub enum Role {
     IotSensor,
     Camera,
     Jump,
+    /// Prumyslovy automat (Modbus/S7/EtherNet-IP).
+    Plc,
+    /// Operatorsky panel/SCADA stanice, mluvi s PLC.
+    Hmi,
+    Medical,
+    VoipPhone,
+    WifiAp,
+    Vpn,
+    Container,
+    /// Mobilni zarizeni (roaming, castá zmena adresy).
+    Mobile,
 }
 
 impl Role {
+    pub const ALL: [Role; 19] = [
+        Role::Gateway,
+        Role::Dns,
+        Role::Web,
+        Role::Database,
+        Role::Mail,
+        Role::FileServer,
+        Role::Workstation,
+        Role::Printer,
+        Role::IotSensor,
+        Role::Camera,
+        Role::Jump,
+        Role::Plc,
+        Role::Hmi,
+        Role::Medical,
+        Role::VoipPhone,
+        Role::WifiAp,
+        Role::Vpn,
+        Role::Container,
+        Role::Mobile,
+    ];
+
     pub fn is_server(self) -> bool {
         matches!(
             self,
@@ -39,6 +72,10 @@ impl Role {
                 | Role::Mail
                 | Role::FileServer
                 | Role::Jump
+                | Role::Plc
+                | Role::WifiAp
+                | Role::Vpn
+                | Role::Container
         )
     }
 
@@ -55,6 +92,14 @@ impl Role {
             Role::IotSensor => "iot",
             Role::Camera => "cam",
             Role::Jump => "jump",
+            Role::Plc => "plc",
+            Role::Hmi => "hmi",
+            Role::Medical => "medical",
+            Role::VoipPhone => "voip",
+            Role::WifiAp => "wifi-ap",
+            Role::Vpn => "vpn",
+            Role::Container => "container",
+            Role::Mobile => "mobile",
         }
     }
 }
@@ -66,7 +111,50 @@ pub enum Archetype {
     Datacenter,
     IotHeavy,
     Campus,
+    /// Stovky az tisice zarizeni, desitky podsiti (VLAN), segmentace.
+    Enterprise,
+    /// Velka organizace: tisice zarizeni, desitky az stovky podsiti.
+    Metro,
+    /// OT/ICS: PLC, HMI, historian, oddelene vyrobni podsite.
+    Industrial,
+    Hospital,
+    /// Cloud VPC: kontejnery, kratce zijici adresy, VPN.
+    Cloud,
 }
+
+impl Archetype {
+    pub const ALL: [Archetype; 10] = [
+        Archetype::Soho,
+        Archetype::Smb,
+        Archetype::Datacenter,
+        Archetype::IotHeavy,
+        Archetype::Campus,
+        Archetype::Enterprise,
+        Archetype::Metro,
+        Archetype::Industrial,
+        Archetype::Hospital,
+        Archetype::Cloud,
+    ];
+}
+
+/// Velikostni trida sit podle poctu zarizeni (klic pro agregace v reportu).
+pub fn size_class(devices: usize) -> &'static str {
+    match devices {
+        0..=25 => "S (<=25)",
+        26..=100 => "M (26-100)",
+        101..=400 => "L (101-400)",
+        401..=1500 => "XL (401-1500)",
+        _ => "XXL (>1500)",
+    }
+}
+
+pub const SIZE_CLASSES: [&str; 5] = [
+    "S (<=25)",
+    "M (26-100)",
+    "L (101-400)",
+    "XL (401-1500)",
+    "XXL (>1500)",
+];
 
 #[derive(Debug, Clone)]
 pub struct Svc {
@@ -94,6 +182,8 @@ pub struct Device {
     /// Zakladni pocet toku za hodinu u klientskych roli.
     pub rate: f64,
     pub peers: Vec<u32>,
+    /// Zarizeni je pritomne a bezi (false = pad, odstaveni, jeste nenasazene).
+    pub up: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -107,6 +197,8 @@ pub struct NetworkModel {
     pub dns: u32,
     pub externals: Vec<String>,
     pub tz_hours: i64,
+    ip_index: std::collections::HashMap<String, u32>,
+    prefix_index: std::collections::HashMap<[u8; 3], usize>,
 }
 
 // Ilustrativni prirazeni zranitelnosti (kombinace produkt/verze -> CVE s realistickym
@@ -141,6 +233,13 @@ fn svc(
         ("Postfix", "3.3") => vec![("CVE-2020-12063", 5.9, false)],
         ("vsftpd", "2.3.4") => vec![("CVE-2011-2523", 9.8, true)],
         ("Boa", "0.94") => vec![("CVE-2017-9833", 8.8, false)],
+        ("Modicon M340", "3.0") => vec![("CVE-2021-22779", 9.8, true)],
+        ("Siemens S7-300", "3.2") => vec![("CVE-2019-13945", 7.5, false)],
+        ("Dropbear", "2017.75") => vec![("CVE-2018-15599", 5.3, false)],
+        ("OpenVPN", "2.4") => vec![("CVE-2020-11810", 5.9, false)],
+        ("kube-apiserver", "1.18") => vec![("CVE-2020-8558", 8.8, true)],
+        ("Asterisk", "13.0") => vec![("CVE-2019-18610", 7.5, false)],
+        ("Orthanc DICOM", "1.5") => vec![("CVE-2020-12640", 9.8, false)],
         _ => Vec::new(),
     };
     Svc {
@@ -266,6 +365,84 @@ fn services_for(role: Role, rng: &mut Rng) -> Vec<Svc> {
             svc(22, "tcp", "ssh", "OpenSSH", if old { "8.2" } else { "9.0" }),
             svc(3389, "tcp", "ms-wbt-server", "Microsoft RDP", "10.0"),
         ],
+        Role::Plc => {
+            let mut v = if rng.chance(0.6) {
+                vec![svc(
+                    502,
+                    "tcp",
+                    "modbus",
+                    "Modicon M340",
+                    if old { "3.0" } else { "3.4" },
+                )]
+            } else {
+                vec![svc(
+                    102,
+                    "tcp",
+                    "iso-tsap",
+                    "Siemens S7-300",
+                    if old { "3.2" } else { "3.3" },
+                )]
+            };
+            if rng.chance(0.3) {
+                v.push(svc(44818, "tcp", "EtherNet-IP", "Rockwell CIP", "20.0"));
+            }
+            v
+        }
+        Role::Hmi => vec![
+            svc(5900, "tcp", "vnc", "TightVNC", "2.8"),
+            svc(80, "tcp", "http", "Siemens WinCC", "7.5"),
+        ],
+        Role::Medical => vec![
+            svc(
+                104,
+                "tcp",
+                "dicom",
+                "Orthanc DICOM",
+                if old { "1.5" } else { "1.12" },
+            ),
+            svc(2575, "tcp", "hl7", "HL7 listener", "2.5"),
+        ],
+        Role::VoipPhone => vec![svc(
+            5060,
+            "udp",
+            "sip",
+            "Asterisk",
+            if old { "13.0" } else { "20.0" },
+        )],
+        Role::WifiAp => vec![
+            svc(
+                22,
+                "tcp",
+                "ssh",
+                "Dropbear",
+                if old { "2017.75" } else { "2022.83" },
+            ),
+            svc(443, "tcp", "https", "nginx", "1.24"),
+        ],
+        Role::Vpn => vec![
+            svc(
+                1194,
+                "udp",
+                "openvpn",
+                "OpenVPN",
+                if old { "2.4" } else { "2.6" },
+            ),
+            svc(443, "tcp", "https", "nginx", "1.24"),
+        ],
+        Role::Container => {
+            let mut v = vec![svc(8080, "tcp", "http-alt", "nginx", "1.24")];
+            if rng.chance(0.05) {
+                v.push(svc(
+                    6443,
+                    "tcp",
+                    "kube-apiserver",
+                    "kube-apiserver",
+                    if old { "1.18" } else { "1.29" },
+                ));
+            }
+            v
+        }
+        Role::Mobile => Vec::new(),
     }
 }
 
@@ -280,66 +457,305 @@ fn random_mac(rng: &mut Rng) -> String {
     )
 }
 
+struct Profile {
+    weight: f64,
+    devices: (u64, u64),
+    subnets: (u64, u64),
+    dhcp_share: f64,
+    server_share: f64,
+    /// (role, vaha) pro servery / klienty.
+    servers: &'static [(Role, f64)],
+    clients: &'static [(Role, f64)],
+}
+
+const GENERIC_SERVERS: &[(Role, f64)] = &[
+    (Role::Web, 2.0),
+    (Role::Database, 1.0),
+    (Role::Mail, 1.0),
+    (Role::FileServer, 1.0),
+    (Role::Jump, 1.0),
+];
+
+fn profile(archetype: Archetype) -> Profile {
+    match archetype {
+        Archetype::Soho => Profile {
+            weight: 0.20,
+            devices: (5, 14),
+            subnets: (1, 1),
+            dhcp_share: 0.8,
+            server_share: 0.1,
+            servers: GENERIC_SERVERS,
+            clients: &[
+                (Role::Workstation, 2.0),
+                (Role::Printer, 1.0),
+                (Role::IotSensor, 1.0),
+                (Role::Camera, 1.0),
+                (Role::Mobile, 1.5),
+            ],
+        },
+        Archetype::Smb => Profile {
+            weight: 0.18,
+            devices: (15, 55),
+            subnets: (1, 2),
+            dhcp_share: 0.6,
+            server_share: 0.2,
+            servers: GENERIC_SERVERS,
+            clients: &[
+                (Role::Workstation, 3.0),
+                (Role::Printer, 1.0),
+                (Role::IotSensor, 1.0),
+                (Role::Camera, 1.0),
+                (Role::VoipPhone, 1.5),
+                (Role::Mobile, 1.5),
+            ],
+        },
+        Archetype::Datacenter => Profile {
+            weight: 0.09,
+            devices: (30, 120),
+            subnets: (2, 3),
+            dhcp_share: 0.0,
+            server_share: 0.75,
+            servers: &[
+                (Role::Web, 3.0),
+                (Role::Database, 2.0),
+                (Role::Mail, 1.0),
+                (Role::FileServer, 1.0),
+                (Role::Jump, 1.0),
+                (Role::Container, 2.0),
+                (Role::Vpn, 0.3),
+            ],
+            clients: &[(Role::Workstation, 1.0), (Role::IotSensor, 1.0)],
+        },
+        Archetype::IotHeavy => Profile {
+            weight: 0.08,
+            devices: (20, 70),
+            subnets: (1, 2),
+            dhcp_share: 0.7,
+            server_share: 0.2,
+            servers: GENERIC_SERVERS,
+            clients: &[
+                (Role::IotSensor, 2.0),
+                (Role::Camera, 1.0),
+                (Role::Workstation, 1.0),
+                (Role::Printer, 1.0),
+            ],
+        },
+        Archetype::Campus => Profile {
+            weight: 0.08,
+            devices: (80, 220),
+            subnets: (2, 4),
+            dhcp_share: 0.7,
+            server_share: 0.2,
+            servers: GENERIC_SERVERS,
+            clients: &[
+                (Role::Workstation, 3.0),
+                (Role::Printer, 1.0),
+                (Role::IotSensor, 1.0),
+                (Role::Camera, 1.0),
+                (Role::WifiAp, 0.5),
+                (Role::Mobile, 3.0),
+            ],
+        },
+        Archetype::Enterprise => Profile {
+            weight: 0.15,
+            devices: (300, 1500),
+            subnets: (8, 32),
+            dhcp_share: 0.75,
+            server_share: 0.12,
+            servers: &[
+                (Role::Web, 2.0),
+                (Role::Database, 2.0),
+                (Role::Mail, 1.0),
+                (Role::FileServer, 2.0),
+                (Role::Jump, 1.0),
+                (Role::Vpn, 0.5),
+                (Role::WifiAp, 2.0),
+                (Role::Container, 0.5),
+            ],
+            clients: &[
+                (Role::Workstation, 10.0),
+                (Role::VoipPhone, 4.0),
+                (Role::Mobile, 4.0),
+                (Role::Printer, 1.5),
+                (Role::IotSensor, 1.0),
+                (Role::Camera, 1.0),
+            ],
+        },
+        Archetype::Metro => Profile {
+            weight: 0.04,
+            devices: (1500, 4000),
+            subnets: (30, 80),
+            dhcp_share: 0.8,
+            server_share: 0.1,
+            servers: &[
+                (Role::Web, 2.0),
+                (Role::Database, 2.0),
+                (Role::Mail, 1.0),
+                (Role::FileServer, 2.0),
+                (Role::Jump, 1.0),
+                (Role::Vpn, 1.0),
+                (Role::WifiAp, 3.0),
+                (Role::Container, 1.0),
+            ],
+            clients: &[
+                (Role::Workstation, 10.0),
+                (Role::VoipPhone, 5.0),
+                (Role::Mobile, 7.0),
+                (Role::Printer, 1.5),
+                (Role::IotSensor, 2.0),
+                (Role::Camera, 2.0),
+            ],
+        },
+        Archetype::Industrial => Profile {
+            weight: 0.06,
+            devices: (60, 400),
+            subnets: (3, 10),
+            dhcp_share: 0.15,
+            server_share: 0.55,
+            servers: &[
+                (Role::Plc, 10.0),
+                (Role::Database, 1.0),
+                (Role::Web, 1.0),
+                (Role::Jump, 0.6),
+                (Role::FileServer, 0.5),
+            ],
+            clients: &[
+                (Role::Hmi, 3.0),
+                (Role::Workstation, 2.0),
+                (Role::IotSensor, 6.0),
+                (Role::Camera, 1.0),
+                (Role::Printer, 0.3),
+            ],
+        },
+        Archetype::Hospital => Profile {
+            weight: 0.05,
+            devices: (150, 900),
+            subnets: (6, 20),
+            dhcp_share: 0.5,
+            server_share: 0.1,
+            servers: &[
+                (Role::Database, 2.0),
+                (Role::Web, 1.0),
+                (Role::FileServer, 1.5),
+                (Role::Mail, 0.6),
+                (Role::Jump, 0.6),
+                (Role::WifiAp, 1.5),
+            ],
+            clients: &[
+                (Role::Medical, 8.0),
+                (Role::Workstation, 5.0),
+                (Role::VoipPhone, 3.0),
+                (Role::Mobile, 3.0),
+                (Role::IotSensor, 2.0),
+                (Role::Printer, 1.0),
+                (Role::Camera, 1.0),
+            ],
+        },
+        Archetype::Cloud => Profile {
+            weight: 0.07,
+            devices: (100, 800),
+            subnets: (4, 16),
+            dhcp_share: 0.0,
+            server_share: 0.9,
+            servers: &[
+                (Role::Container, 8.0),
+                (Role::Web, 3.0),
+                (Role::Database, 2.0),
+                (Role::Vpn, 0.3),
+                (Role::Jump, 0.3),
+            ],
+            clients: &[(Role::Workstation, 1.0), (Role::Mobile, 1.0)],
+        },
+    }
+}
+
+fn pick_weighted(rng: &mut Rng, table: &[(Role, f64)]) -> Role {
+    let weights: Vec<f64> = table.iter().map(|(_, w)| *w).collect();
+    table[rng.weighted(&weights)].0
+}
+
 impl NetworkModel {
     pub fn generate(run_seed: u64, id: u64) -> Self {
         let seed = derive(run_seed, id);
         let mut rng = Rng::new(derive(seed, 0xA11CE));
-        let archetype = match rng.weighted(&[0.35, 0.30, 0.15, 0.12, 0.08]) {
-            0 => Archetype::Soho,
-            1 => Archetype::Smb,
-            2 => Archetype::Datacenter,
-            3 => Archetype::IotHeavy,
-            _ => Archetype::Campus,
-        };
-        let (device_range, subnet_range, dhcp_share) = match archetype {
-            Archetype::Soho => ((5, 14), (1, 1), 0.8),
-            Archetype::Smb => ((15, 55), (1, 2), 0.6),
-            Archetype::Datacenter => ((30, 120), (2, 3), 0.0),
-            Archetype::IotHeavy => ((20, 70), (1, 2), 0.7),
-            Archetype::Campus => ((80, 220), (2, 4), 0.7),
-        };
-        let subnets = rng.range(subnet_range.0, subnet_range.1) as usize;
+        let weights: Vec<f64> = Archetype::ALL.iter().map(|a| profile(*a).weight).collect();
+        let archetype = Archetype::ALL[rng.weighted(&weights)];
+        let prof = profile(archetype);
+        let total = rng.range(prof.devices.0, prof.devices.1) as usize;
+        // kapacita jedne /24: ~98 statickych + ~150 DHCP adres; drzime se hluboko pod nimi
+        let needed = (total as u64).div_ceil(110).max(1);
+        let subnets = rng
+            .range(prof.subnets.0, prof.subnets.1)
+            .max(needed)
+            .min(200) as usize;
         let base_a = if rng.chance(0.5) { 192 } else { 10 };
         let base_b = if base_a == 192 {
             168
         } else {
             rng.range(0, 250) as u8
         };
-        let base_c = rng.range(0, 200) as u8;
+        let base_c = rng.range(0, 40) as u8;
         let prefixes: Vec<[u8; 3]> = (0..subnets)
             .map(|index| [base_a, base_b, base_c.wrapping_add(index as u8)])
             .collect();
 
-        let total = rng.range(device_range.0, device_range.1) as usize;
         let mut devices: Vec<Device> = Vec::with_capacity(total + 2);
-        let mut octets_used: Vec<std::collections::HashSet<u8>> = vec![Default::default(); subnets];
+        let mut octets_used: Vec<Vec<bool>> = vec![vec![false; 256]; subnets];
+        // "serverova zona": servery se shlukuji v prvnich podsitich, klienti jsou rozprostreni
+        let server_zone = (subnets / 6).max(1);
 
         let mut add = |devices: &mut Vec<Device>,
                        rng: &mut Rng,
                        role: Role,
-                       subnet: usize,
+                       preferred_subnet: usize,
                        fixed_octet: Option<u8>,
                        dhcp: bool| {
-            let octet = fixed_octet.unwrap_or_else(|| {
-                loop {
-                    let candidate = if dhcp {
-                        rng.range(100, 250)
-                    } else {
-                        rng.range(2, 99)
-                    } as u8;
-                    if !octets_used[subnet].contains(&candidate) {
-                        break candidate;
+            let (lo, hi) = if dhcp {
+                (100u64, 250u64)
+            } else {
+                (2u64, 99u64)
+            };
+            let mut chosen: Option<(usize, u8)> = fixed_octet.map(|o| (preferred_subnet, o));
+            if chosen.is_none() {
+                'outer: for shift in 0..subnets {
+                    let subnet = (preferred_subnet + shift) % subnets;
+                    for _ in 0..24 {
+                        let candidate = rng.range(lo, hi) as u8;
+                        if !octets_used[subnet][candidate as usize] {
+                            chosen = Some((subnet, candidate));
+                            break 'outer;
+                        }
+                    }
+                    if let Some(free) = (lo as usize..=hi as usize)
+                        .find(|candidate| !octets_used[subnet][*candidate])
+                    {
+                        chosen = Some((subnet, free as u8));
+                        break 'outer;
                     }
                 }
-            });
-            octets_used[subnet].insert(octet);
+            }
+            let (subnet, octet) = chosen.expect("kapacita podsiti");
+            octets_used[subnet][octet as usize] = true;
             let id = devices.len() as u32;
             let services = services_for(role, rng);
             let criticality = match role {
-                Role::Gateway | Role::Dns => 1.0,
-                Role::Database | Role::FileServer | Role::Mail | Role::Web => 0.8,
-                Role::Jump => 0.7,
+                Role::Gateway | Role::Dns | Role::Plc => 1.0,
+                Role::Database
+                | Role::FileServer
+                | Role::Mail
+                | Role::Web
+                | Role::Medical
+                | Role::Vpn => 0.85,
+                Role::Jump | Role::Hmi | Role::Container => 0.7,
                 _ => 0.3,
+            };
+            let rate = match role {
+                r if r.is_server() => 0.0,
+                Role::Hmi => rng.lognormal(140.0, 0.3),
+                Role::Medical => rng.lognormal(40.0, 0.5),
+                Role::VoipPhone => rng.lognormal(30.0, 0.4),
+                Role::Mobile => rng.lognormal(12.0, 0.8),
+                _ => rng.lognormal(18.0, 0.6),
             };
             devices.push(Device {
                 id,
@@ -350,75 +766,60 @@ impl NetworkModel {
                 services,
                 criticality,
                 dhcp,
-                rate: if role.is_server() {
-                    0.0
-                } else {
-                    rng.lognormal(18.0, 0.6)
-                },
+                rate,
                 peers: Vec::new(),
+                up: true,
             });
         };
 
         add(&mut devices, &mut rng, Role::Gateway, 0, Some(1), false);
         add(&mut devices, &mut rng, Role::Dns, 0, Some(53), false);
-        let server_share = match archetype {
-            Archetype::Datacenter => 0.75,
-            Archetype::Soho => 0.1,
-            _ => 0.2,
-        };
         while devices.len() < total {
-            let subnet = rng.range(0, subnets as u64 - 1) as usize;
-            let is_server = rng.chance(server_share);
+            let is_server = rng.chance(prof.server_share);
             let role = if is_server {
-                *rng.pick(&[
-                    Role::Web,
-                    Role::Web,
-                    Role::Database,
-                    Role::Mail,
-                    Role::FileServer,
-                    Role::Jump,
-                ])
+                pick_weighted(&mut rng, prof.servers)
             } else {
-                match archetype {
-                    Archetype::IotHeavy => *rng.pick(&[
-                        Role::IotSensor,
-                        Role::IotSensor,
-                        Role::Camera,
-                        Role::Workstation,
-                        Role::Printer,
-                    ]),
-                    Archetype::Soho => *rng.pick(&[
-                        Role::Workstation,
-                        Role::Workstation,
-                        Role::Printer,
-                        Role::IotSensor,
-                        Role::Camera,
-                    ]),
-                    _ => *rng.pick(&[
-                        Role::Workstation,
-                        Role::Workstation,
-                        Role::Workstation,
-                        Role::Printer,
-                        Role::IotSensor,
-                        Role::Camera,
-                    ]),
-                }
+                pick_weighted(&mut rng, prof.clients)
             };
-            let dhcp = !role.is_server() && rng.chance(dhcp_share);
-            add(&mut devices, &mut rng, role, subnet, None, dhcp);
+            let preferred = if role == Role::WifiAp {
+                rng.range(0, subnets as u64 - 1) as usize
+            } else if role == Role::Plc {
+                // vyrobni podsite mimo serverovou zonu
+                (server_zone + rng.range(0, subnets as u64 - 1) as usize) % subnets
+            } else if role.is_server() {
+                rng.range(0, server_zone as u64 - 1) as usize
+            } else {
+                rng.range(0, subnets as u64 - 1) as usize
+            };
+            let dhcp = (!role.is_server() && role != Role::Hmi && rng.chance(prof.dhcp_share))
+                || role == Role::Mobile
+                || (archetype == Archetype::Cloud && role == Role::Container);
+            add(&mut devices, &mut rng, role, preferred, None, dhcp);
         }
 
         let server_ids: Vec<u32> = devices
             .iter()
-            .filter(|d| d.role.is_server())
+            .filter(|d| d.role.is_server() && d.role != Role::Plc)
+            .map(|d| d.id)
+            .collect();
+        let plc_ids: Vec<u32> = devices
+            .iter()
+            .filter(|d| d.role == Role::Plc)
             .map(|d| d.id)
             .collect();
         for index in 0..devices.len() {
-            if !devices[index].role.is_server() {
-                let count = rng.range(1, 3.min(server_ids.len() as u64));
-                let picks = rng.sample_distinct(server_ids.len(), count as usize);
-                devices[index].peers = picks.into_iter().map(|p| server_ids[p]).collect();
+            if devices[index].role.is_server() {
+                continue;
             }
+            if devices[index].role == Role::Hmi && !plc_ids.is_empty() {
+                let count = rng.range(1, 4.min(plc_ids.len() as u64));
+                let picks = rng.sample_distinct(plc_ids.len(), count as usize);
+                devices[index].peers = picks.into_iter().map(|p| plc_ids[p]).collect();
+                continue;
+            }
+            let count = rng.range(1, 3.min(server_ids.len() as u64));
+            let picks = rng.sample_distinct(server_ids.len(), count as usize);
+            devices[index].peers = picks.into_iter().map(|p| server_ids[p]).collect();
         }
 
         let externals: Vec<String> = (0..12)
@@ -433,7 +834,7 @@ impl NetworkModel {
             })
             .collect();
 
-        Self {
+        let mut model = Self {
             id,
             seed,
             archetype,
@@ -443,7 +844,122 @@ impl NetworkModel {
             dns: 1,
             externals,
             tz_hours: rng.range(0, 23) as i64 - 12,
+            ip_index: Default::default(),
+            prefix_index: Default::default(),
+        };
+        model.rebuild_indexes();
+        model
+    }
+
+    pub fn rebuild_indexes(&mut self) {
+        self.prefix_index = self
+            .prefixes
+            .iter()
+            .enumerate()
+            .map(|(index, prefix)| (*prefix, index))
+            .collect();
+        self.ip_index = (0..self.devices.len() as u32)
+            .map(|id| (self.ip_of(id), id))
+            .collect();
+    }
+
+    /// Podsit (index) pro IP z modelu; `None` pro externi / neznamou adresu.
+    pub fn subnet_of(&self, ip: &str) -> Option<usize> {
+        let mut parts = ip.split('.');
+        let prefix = [
+            parts.next()?.parse().ok()?,
+            parts.next()?.parse().ok()?,
+            parts.next()?.parse().ok()?,
+        ];
+        self.prefix_index.get(&prefix).copied()
+    }
+
+    /// Vzorkovani toku u velkych siti (NetFlow 1:N): velke site nikdy nedodavaji
+    /// plny provoz; utoky se nevzorkuji (zkresleni je v reportu uvedeno).
+    pub fn flow_sampling(&self) -> f64 {
+        (300.0 / self.devices.len().max(1) as f64).clamp(0.08, 1.0)
+    }
+
+    pub fn size_class(&self) -> &'static str {
+        size_class(self.devices.len())
+    }
+
+    /// Prida zarizeni, ktera jeste nejsou v siti (`up = false`); udalost Onboarding je
+    /// pozdeji "zapne". Id jsou stabilni od zacatku, takze ground truth nemusi nic prepisovat.
+    pub fn add_dormant(&mut self, rng: &mut Rng, count: usize) {
+        let server_ids: Vec<u32> = self
+            .devices
+            .iter()
+            .filter(|d| d.role.is_server() && d.role != Role::Plc)
+            .map(|d| d.id)
+            .collect();
+        let mut used: Vec<std::collections::HashSet<u8>> =
+            vec![Default::default(); self.prefixes.len()];
+        for device in &self.devices {
+            used[device.subnet].insert(device.host_octet);
         }
+        for _ in 0..count {
+            let role = *rng.pick(&[
+                Role::Workstation,
+                Role::Workstation,
+                Role::Workstation,
+                Role::Mobile,
+                Role::Printer,
+                Role::IotSensor,
+                Role::Camera,
+            ]);
+            let mut placed = None;
+            for _ in 0..40 {
+                let subnet = rng.range(0, self.prefixes.len() as u64 - 1) as usize;
+                let octet = rng.range(100, 250) as u8;
+                if !used[subnet].contains(&octet) {
+                    placed = Some((subnet, octet));
+                    break;
+                }
+            }
+            let Some((subnet, octet)) = placed else {
+                continue;
+            };
+            used[subnet].insert(octet);
+            let id = self.devices.len() as u32;
+            let services = services_for(role, rng);
+            let peers = if server_ids.is_empty() {
+                Vec::new()
+            } else {
+                let n = rng.range(1, 2.min(server_ids.len() as u64)) as usize;
+                rng.sample_distinct(server_ids.len(), n)
+                    .into_iter()
+                    .map(|p| server_ids[p])
+                    .collect()
+            };
+            self.devices.push(Device {
+                id,
+                mac: random_mac(rng),
+                role,
+                subnet,
+                host_octet: octet,
+                services,
+                criticality: 0.3,
+                dhcp: true,
+                rate: rng.lognormal(18.0, 0.6),
+                peers,
+                up: false,
+            });
+        }
+        self.rebuild_indexes();
+    }
+
+    /// Patch: sluzby ztrati zname zranitelnosti a dostanou novejsi verzi.
+    pub fn patch_device(&mut self, id: u32) -> bool {
+        let mut changed = false;
+        for service in &mut self.devices[id as usize].services {
+            if !service.cves.is_empty() {
+                service.cves.clear();
+                service.version = "patched";
+                changed = true;
+            }
+        }
+        changed
     }
 
     pub fn ip_of(&self, device: u32) -> String {
@@ -464,12 +980,13 @@ impl NetworkModel {
     }
 
     pub fn device_by_ip(&self, ip: &str) -> Option<u32> {
-        (0..self.devices.len() as u32).find(|id| self.ip_of(*id) == ip)
+        self.ip_index.get(ip).copied()
     }
 
     /// DHCP "renewal": cast dynamickych zarizeni dostane novou adresu (stejny MAC =
     /// stejne zarizeni - to je pravda identity, kterou engine musi dohledat).
-    /// Vzacne dve zarizeni prohodi adresy (NAT/swap). Vraci pocet zmen.
+    /// Mobilni zarizeni roamuji 4x casteji. Vzacne dve zarizeni prohodi adresy
+    /// (NAT/swap). Vraci pocet zmen.
     pub fn churn(&mut self, rng: &mut Rng, change_share: f64, swap_probability: f64) -> usize {
         let dynamic: Vec<usize> = (0..self.devices.len())
             .filter(|i| self.devices[*i].dhcp)
@@ -477,21 +994,27 @@ impl NetworkModel {
         if dynamic.is_empty() {
             return 0;
         }
+        let mut used: Vec<std::collections::HashSet<u8>> =
+            vec![Default::default(); self.prefixes.len()];
+        for device in &self.devices {
+            used[device.subnet].insert(device.host_octet);
+        }
         let mut changes = 0;
         for &index in &dynamic {
-            if !rng.chance(change_share) {
+            let share = if self.devices[index].role == Role::Mobile {
+                (change_share * 4.0).min(0.5)
+            } else {
+                change_share
+            };
+            if !rng.chance(share) {
                 continue;
             }
             let subnet = self.devices[index].subnet;
-            let used: std::collections::HashSet<u8> = self
-                .devices
-                .iter()
-                .filter(|d| d.subnet == subnet)
-                .map(|d| d.host_octet)
-                .collect();
             for _ in 0..20 {
                 let candidate = rng.range(100, 250) as u8;
-                if !used.contains(&candidate) {
+                if !used[subnet].contains(&candidate) {
+                    used[subnet].remove(&self.devices[index].host_octet);
+                    used[subnet].insert(candidate);
                     self.devices[index].host_octet = candidate;
                     changes += 1;
                     break;
@@ -508,21 +1031,29 @@ impl NetworkModel {
                 changes += 1;
             }
         }
+        if changes > 0 {
+            self.rebuild_indexes();
+        }
         changes
     }
 
-    /// Aktivni inventar (jako vystup nmapu): sluzby, produkty, verze.
-    pub fn inventory(&self) -> ParsedInventory {
-        ParsedInventory {
-            hosts: self
-                .devices
-                .iter()
-                .map(|d| ParsedHost {
+    /// Aktivni inventar (jako vystup nmapu): sluzby, produkty, verze. Vynecha zarizeni,
+    /// ktera neběží (pad, odstaveni, jeste nenasazena); druhy vystup = jejich id.
+    pub fn inventory(&self) -> (ParsedInventory, Vec<u32>) {
+        // nmap vidi MAC jen na stejne L2 siti jako scanner; ve velkych sitich je
+        // scanneru vic (kazda ~6. podsit), zbytek je dohledatelny jen pres IP.
+        let scanned_l2 = 1 + self.prefixes.len() / 6;
+        let mut ids = Vec::with_capacity(self.devices.len());
+        let hosts = self
+            .devices
+            .iter()
+            .filter(|d| d.up)
+            .map(|d| {
+                ids.push(d.id);
+                ParsedHost {
                     ip: self.ip_of(d.id),
                     hostname: Some(format!("{}-{}", d.role.label(), d.id)),
-                    // nmap vidi MAC jen na stejne L2 siti jako scanner (podsit 0);
-                    // zbytek je identifikovatelny jen pres IP (realisticke omezeni).
-                    mac: (d.subnet == 0).then(|| d.mac.clone()),
+                    mac: (d.subnet < scanned_l2).then(|| d.mac.clone()),
                     vendor: None,
                     services: d
                         .services
@@ -541,9 +1072,10 @@ impl NetworkModel {
                             cpes: Vec::new(),
                         })
                         .collect(),
-                })
-                .collect(),
-        }
+                }
+            })
+            .collect();
+        (ParsedInventory { hosts }, ids)
     }
 
     /// CVE zaznamy pro sluzbu (to, co by do reportu doplnil intel provider).
@@ -658,15 +1190,30 @@ mod tests {
             let ip: std::net::IpAddr = net.ip_of(d).parse().unwrap();
             assert!(scope.iter().any(|n| n.contains(&ip)));
         }
-        assert_eq!(net.inventory().hosts.len(), net.devices.len());
+        assert_eq!(net.inventory().0.hosts.len(), net.devices.len());
     }
 
     #[test]
-    fn archetype_mix_covers_all_five_kinds() {
+    fn archetype_mix_covers_all_kinds_sizes_and_roles() {
         let mut kinds = std::collections::HashSet::new();
-        for id in 0..400 {
-            kinds.insert(format!("{:?}", NetworkModel::generate(5, id).archetype));
+        let mut classes = std::collections::HashSet::new();
+        let mut roles = std::collections::HashSet::new();
+        let mut max_devices = 0;
+        let mut max_subnets = 0;
+        for id in 0..1200 {
+            let net = NetworkModel::generate(5, id);
+            kinds.insert(format!("{:?}", net.archetype));
+            classes.insert(net.size_class());
+            max_devices = max_devices.max(net.devices.len());
+            max_subnets = max_subnets.max(net.prefixes.len());
+            for d in &net.devices {
+                roles.insert(d.role);
+            }
         }
-        assert_eq!(kinds.len(), 5);
+        assert_eq!(kinds.len(), Archetype::ALL.len());
+        assert_eq!(classes.len(), SIZE_CLASSES.len(), "{classes:?}");
+        assert_eq!(roles.len(), Role::ALL.len(), "{roles:?}");
+        assert!(max_devices > 2500, "nejvetsi sit {max_devices}");
+        assert!(max_subnets >= 30, "nejvic podsiti {max_subnets}");
     }
 }

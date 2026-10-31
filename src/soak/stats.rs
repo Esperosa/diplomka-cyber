@@ -216,6 +216,74 @@ impl LearningStats {
     }
 }
 
+/// Pokryti a kvalita po rezech (velikost site, archetyp, rodina x velikost).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SegmentStats {
+    pub networks: u64,
+    pub devices: u64,
+    pub subnets: u64,
+    pub virtual_days: f64,
+    pub cycles: u64,
+    pub observations: u64,
+    pub findings: u64,
+    pub attacks: u64,
+    pub detected_any: u64,
+    pub detected_typed: u64,
+    pub fp_noise: u64,
+    pub benign_events: u64,
+    pub benign_with_fp: u64,
+}
+
+impl SegmentStats {
+    fn merge(&mut self, o: &SegmentStats) {
+        self.networks += o.networks;
+        self.devices += o.devices;
+        self.subnets += o.subnets;
+        self.virtual_days += o.virtual_days;
+        self.cycles += o.cycles;
+        self.observations += o.observations;
+        self.findings += o.findings;
+        self.attacks += o.attacks;
+        self.detected_any += o.detected_any;
+        self.detected_typed += o.detected_typed;
+        self.fp_noise += o.fp_noise;
+        self.benign_events += o.benign_events;
+        self.benign_with_fp += o.benign_with_fp;
+    }
+}
+
+/// Provozni spolehlivost: restarty, pady zarizeni, patchovani, onboarding.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OpsStats {
+    pub engine_restarts: u64,
+    pub identity_lost_on_restart: u64,
+    pub device_down_cycles: u64,
+    pub patched_devices: u64,
+    pub onboarded_devices: u64,
+    pub decommissioned_devices: u64,
+    pub stale_exposure_findings: u64,
+    pub exposure_checks_after_patch: u64,
+    pub tool_failures: u64,
+    pub corrupt_alert_lines: u64,
+    pub sensor_down_cycles: u64,
+}
+
+impl OpsStats {
+    fn merge(&mut self, o: &OpsStats) {
+        self.engine_restarts += o.engine_restarts;
+        self.identity_lost_on_restart += o.identity_lost_on_restart;
+        self.device_down_cycles += o.device_down_cycles;
+        self.patched_devices += o.patched_devices;
+        self.onboarded_devices += o.onboarded_devices;
+        self.decommissioned_devices += o.decommissioned_devices;
+        self.stale_exposure_findings += o.stale_exposure_findings;
+        self.exposure_checks_after_patch += o.exposure_checks_after_patch;
+        self.tool_failures += o.tool_failures;
+        self.corrupt_alert_lines += o.corrupt_alert_lines;
+        self.sensor_down_cycles += o.sensor_down_cycles;
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Aggregate {
     pub networks: u64,
@@ -247,11 +315,22 @@ pub struct Aggregate {
     pub panics: u64,
     pub panic_samples: Vec<String>,
     pub archetypes: BTreeMap<String, u64>,
+    /// "size|<trida>", "arch|<archetyp>", "cell|<rodina>|<trida>", "dur|<hodiny>h".
+    pub segments: BTreeMap<String, SegmentStats>,
+    /// Pocet zarizeni podle role (pokryti typu zarizeni).
+    pub roles: BTreeMap<String, u64>,
+    /// Pocet sluzeb podle nazvu (pokryti serveru/protokolu).
+    pub services: BTreeMap<String, u64>,
+    pub ops: OpsStats,
 }
 
 const SAMPLE_CAP: usize = 100;
 
 impl Aggregate {
+    pub fn segment(&mut self, key: &str) -> &mut SegmentStats {
+        self.segments.entry(key.to_string()).or_default()
+    }
+
     pub fn family(&mut self, label: &str) -> &mut FamilyStats {
         self.families.entry(label.to_string()).or_default()
     }
@@ -306,6 +385,16 @@ impl Aggregate {
         for (key, value) in &other.archetypes {
             *self.archetypes.entry(key.clone()).or_default() += value;
         }
+        for (key, value) in &other.segments {
+            self.segments.entry(key.clone()).or_default().merge(value);
+        }
+        for (key, value) in &other.roles {
+            *self.roles.entry(key.clone()).or_default() += value;
+        }
+        for (key, value) in &other.services {
+            *self.services.entry(key.clone()).or_default() += value;
+        }
+        self.ops.merge(&other.ops);
         for (key, value) in &other.perf {
             self.perf.entry(key.clone()).or_default().merge(value);
         }

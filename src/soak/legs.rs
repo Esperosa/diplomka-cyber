@@ -495,7 +495,13 @@ mod tests {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         std::thread::scope(|scope| {
             scope.spawn(|| anchor_leg(root, false, 0.2, &stop, &legs));
-            std::thread::sleep(Duration::from_secs(8));
+            // pod zatizenim trva pruchod ruzne dlouho: cekame na 2 pruchody, nejvyse 120 s
+            let started = Instant::now();
+            while legs.lock().unwrap().anchor.passes < 2
+                && started.elapsed() < Duration::from_secs(120)
+            {
+                std::thread::sleep(Duration::from_millis(250));
+            }
             stop.store(true, Ordering::SeqCst);
         });
         let state = legs.lock().unwrap().anchor.clone();
