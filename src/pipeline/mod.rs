@@ -523,7 +523,12 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
             targeted_ports: 0,
         })
     } else if args.spustit_nmap && args.nmap_xml.is_none() {
-        nmap::run_targeted_followup_nmap(&args.workspace, &raw_inventory, &args.profile)?
+        nmap::run_targeted_followup_nmap(
+            &args.workspace,
+            &raw_inventory,
+            &args.profile,
+            &args.scope,
+        )?
     } else {
         None
     };
@@ -601,7 +606,7 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
             "forensic",
             "Forenzní vrstva spouští hlubší ověření prioritních cílů.",
         );
-        nmap::run_forensic_followup_nmap(&args.workspace, &hosts, &args.profile)?
+        nmap::run_forensic_followup_nmap(&args.workspace, &hosts, &args.profile, &args.scope)?
     } else {
         None
     };

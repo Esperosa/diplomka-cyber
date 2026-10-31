@@ -109,8 +109,13 @@ pub fn run_targeted_followup_nmap(
     workspace: &Path,
     inventory: &ParsedInventory,
     profile: &str,
+    scope: &[IpNet],
 ) -> Result<Option<FollowupExecution>> {
     let targets = collect_followup_targets(inventory);
+    let (targets, excluded) = filter_targets_in_scope(targets, scope);
+    for ip in &excluded {
+        println!("Cileny follow-up: {ip} je mimo povoleny --scope, probing se na nej nepusti.");
+    }
     if targets.is_empty() {
         return Ok(None);
     }
@@ -176,8 +181,13 @@ pub fn run_forensic_followup_nmap(
     workspace: &Path,
     hosts: &[HostReport],
     profile: &str,
+    scope: &[IpNet],
 ) -> Result<Option<FollowupExecution>> {
     let targets = collect_forensic_targets(hosts);
+    let (targets, excluded) = filter_targets_in_scope(targets, scope);
+    for ip in &excluded {
+        println!("Forenzni follow-up: {ip} je mimo povoleny --scope, probing se na nej nepusti.");
+    }
     if targets.is_empty() {
         return Ok(None);
     }
@@ -418,6 +428,37 @@ fn sanitize_nmap_xml(xml: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Audit nalez (31.10.2026, 3-agentni produkcni audit - Opus/pragmatik/skeptik
+/// nezavisle nasli stejnou veci): `run_forensic_followup_nmap` nikdy nekontrolovalo
+/// cile proti `--scope` - pokud operator kombinuje `--nmap-xml <soubor>` (externe
+/// vytvorena inventura, muze obsahovat libovolne IP) s `--spustit-nmap
+/// --hloubkove-overeni`, `nmap_path` se vezme z XML (ma prioritu), ale forenzni
+/// vetev v `pipeline::run_pipeline` se spusti jen podle `args.spustit_nmap`, bez
+/// ohledu na to, odkud inventura skutecne pochazela - aktivni skriptovane proby by
+/// se spustily proti hostum, ktere operator nikdy neautorizoval skenovat. Fail-
+/// closed: pokud se IP neda parsovat, je vyrazena (stejna disciplina jako chybejici
+/// label -> "Unknown" v eval/, ne tiche "proste to zkus").
+fn filter_targets_in_scope(
+    targets: Vec<FollowupTarget>,
+    scope: &[IpNet],
+) -> (Vec<FollowupTarget>, Vec<String>) {
+    let mut kept = Vec::with_capacity(targets.len());
+    let mut excluded = Vec::new();
+    for target in targets {
+        let in_scope = target
+            .ip
+            .parse::<std::net::IpAddr>()
+            .map(|addr| scope.iter().any(|net| net.contains(&addr)))
+            .unwrap_or(false);
+        if in_scope {
+            kept.push(target);
+        } else {
+            excluded.push(target.ip);
+        }
+    }
+    (kept, excluded)
 }
 
 fn collect_followup_targets(inventory: &ParsedInventory) -> Vec<FollowupTarget> {
@@ -662,10 +703,12 @@ fn detail_score(service: &ParsedService) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{
-        ParsedHost, ParsedInventory, ParsedService, collect_followup_targets,
-        collect_forensic_targets, merge_followup_inventory, parse_nmap_xml,
+        FollowupTarget, ParsedHost, ParsedInventory, ParsedService, collect_followup_targets,
+        collect_forensic_targets, filter_targets_in_scope, merge_followup_inventory,
+        parse_nmap_xml, run_forensic_followup_nmap, run_targeted_followup_nmap,
     };
     use crate::model::{Confidence, HostReport, InventoryRecord, ServiceReport};
+    use ipnet::IpNet;
 
     #[test]
     fn parse_nmap_xml_accepts_doctype() {
@@ -861,5 +904,140 @@ mod tests {
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].ip, "192.168.1.50");
         assert!(targets[0].ports.contains(&3306));
+    }
+
+    /// Audit nalez (31.10.2026): `run_forensic_followup_nmap`/`run_targeted_followup_nmap`
+    /// nikdy nekontrolovaly cile proti `--scope`. Tenhle test overuje samotny filtr
+    /// (ne jen pres cely pipeline, ktery vyzaduje realny nmap binary) - smisene
+    /// in/out-of-scope cile se spravne rozdeli.
+    #[test]
+    fn filter_targets_in_scope_splits_mixed_targets_correctly() {
+        let targets = vec![
+            FollowupTarget {
+                ip: "192.168.1.10".to_string(),
+                ports: vec![443],
+            },
+            FollowupTarget {
+                ip: "10.0.0.5".to_string(),
+                ports: vec![22],
+            },
+            FollowupTarget {
+                ip: "not-an-ip".to_string(),
+                ports: vec![80],
+            },
+        ];
+        let scope: Vec<IpNet> = vec!["192.168.1.0/24".parse().expect("valid cidr")];
+
+        let (kept, excluded) = filter_targets_in_scope(targets, &scope);
+
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].ip, "192.168.1.10");
+        assert_eq!(
+            excluded,
+            vec!["10.0.0.5".to_string(), "not-an-ip".to_string()]
+        );
+    }
+
+    /// Nezparsovatelna IP se musi vyradit (fail-closed), ne tise povolit.
+    #[test]
+    fn filter_targets_in_scope_excludes_unparseable_ip() {
+        let targets = vec![FollowupTarget {
+            ip: "definitely-not-an-ip".to_string(),
+            ports: vec![80],
+        }];
+        let scope: Vec<IpNet> = vec!["0.0.0.0/0".parse().expect("valid cidr")];
+
+        let (kept, excluded) = filter_targets_in_scope(targets, &scope);
+
+        assert!(kept.is_empty());
+        assert_eq!(excluded, vec!["definitely-not-an-ip".to_string()]);
+    }
+
+    /// End-to-end: kdyz VSECHNY forenzni cile pochazeji mimo `--scope` (napr.
+    /// operator kombinoval `--nmap-xml` s externe vytvorenou inventurou a
+    /// `--spustit-nmap --hloubkove-overeni`), funkce se musi vratit `Ok(None)`
+    /// PRED tim, nez se vubec zavola `nmap` binary - bezpecne testovatelne i bez
+    /// realne nainstalovaneho nmap, protoze Command se vubec nespusti.
+    #[test]
+    fn run_forensic_followup_nmap_skips_execution_when_all_targets_out_of_scope() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let hosts = vec![HostReport {
+            host_id: "host:203.0.113.50".to_string(),
+            host_key: "203.0.113.50".to_string(),
+            ip: "203.0.113.50".to_string(),
+            hostname: None,
+            mac: None,
+            vendor: None,
+            identity_note: None,
+            asset_id: None,
+            services: vec![ServiceReport {
+                service_id: "svc:203.0.113.50/tcp/22".to_string(),
+                service_key: "203.0.113.50/tcp/22".to_string(),
+                proto: "tcp".to_string(),
+                port: 22,
+                port_state: "open".to_string(),
+                state_reason: None,
+                inventory: InventoryRecord {
+                    service_name: "ssh".to_string(),
+                    product: None,
+                    version: None,
+                    extrainfo: None,
+                    detection_source: "nmap".to_string(),
+                    confidence: Confidence::Low,
+                },
+                cpe: vec![],
+                cves: Vec::new(),
+                events: Vec::new(),
+                web_probe: None,
+                active_checks: Vec::new(),
+                score: 7.0,
+                priorita: "vysoka".to_string(),
+            }],
+        }];
+        let scope: Vec<IpNet> = vec!["192.168.1.0/24".parse().expect("valid cidr")];
+
+        let result = run_forensic_followup_nmap(dir.path(), &hosts, "vychozi", &scope)
+            .expect("nesmi selhat, ani kdyz nmap neni nainstalovan - funkce se vubec nespusti");
+
+        assert!(
+            result.is_none(),
+            "vsechny cile byly mimo scope, forenzni probing se nesmel spustit"
+        );
+    }
+
+    /// Stejna disciplina pro cileny follow-up.
+    #[test]
+    fn run_targeted_followup_nmap_skips_execution_when_all_targets_out_of_scope() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let inventory = ParsedInventory {
+            hosts: vec![ParsedHost {
+                ip: "203.0.113.50".to_string(),
+                hostname: None,
+                mac: None,
+                vendor: None,
+                services: vec![ParsedService {
+                    proto: "tcp".to_string(),
+                    port: 443,
+                    port_state: "open".to_string(),
+                    state_reason: None,
+                    service_name: Some("https".to_string()),
+                    product: None,
+                    version: None,
+                    extrainfo: None,
+                    detection_source: "nmap".to_string(),
+                    confidence: Confidence::Low,
+                    cpes: Vec::new(),
+                }],
+            }],
+        };
+        let scope: Vec<IpNet> = vec!["192.168.1.0/24".parse().expect("valid cidr")];
+
+        let result = run_targeted_followup_nmap(dir.path(), &inventory, "vychozi", &scope)
+            .expect("nesmi selhat, ani kdyz nmap neni nainstalovan - funkce se vubec nespusti");
+
+        assert!(
+            result.is_none(),
+            "jediny cil byl mimo scope, cileny follow-up se nesmel spustit"
+        );
     }
 }

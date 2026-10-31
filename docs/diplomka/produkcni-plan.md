@@ -222,3 +222,42 @@ Skeptikuv steelman z puvodniho gap auditu byl presny pro 2 moduly: `identity.rs`
 ### Supply-chain audit (levne, bez kontroverze mezi vsemi 3 agenty, nikdy dosud provedeno)
 
 Pridan novy CI job (`.github/workflows/ci.yml`, `supply-chain`) - `rustsec/audit-check@v2` bezi primo v CI, protoze lokalni stroj nema nainstalovany ani `cargo-audit`, ani `cargo-deny`. **Vedome `continue-on-error: true`**: zadny predchozi beh tenhle nastroj nikdy nespustil na tomhle `Cargo.lock`, takze neni znamo, jestli uz dnes obsahuje nejaky znamy advisory - informativni, dokud nekdo prvni vysledek neprohlidne a vedome nezmeni na blokujici. Ne `cargo-deny` (licence/duplicate-deps politika) - to by vyzadovalo `deny.toml` s rozhodnutimi o povolenych licencich, co je samo o sobe samostatne rozhodnuti, ne cisty bezrizikovy pridavek.
+
+## Druhe kolo zmeny ramce (31.10.2026): "produkcni program, dodelat VSECHNO" vs. bezpecne skalovani rozsahu
+
+**Impuls**: uzivatel znovu odmitl odlozeni z predchoziho kola - "nedelat jakoby bakalarku jen lepsi, ale delame produkcni program... potrebujeme tohle vsechno dodelat a hlavne dodelat tohle a vse zapojit a otestovat", s vyslovnym odkazem na "vedome NEudelano (scope-creep)" seznam z gap auditu vyse (Postgres migrace H5, observability/metrics stack, Kubernetes, SBOM/signing, multi-tenant/HA-DR, firewall/DNS/IPS). Stejna metodika jako predchozi 2 kola (CLAUDE.md: "netrivialni rozhodnuti... 3 nezavisle agenty, min. 1 na Opusu, agenti se mezi sebou debatuji") - **2 kola** (nezavisla analyza → kriz-debata s videnim navzajem) - Opus comprehensive, pragmatik, skeptik.
+
+### Kolo 1 (nezavisle, bez videni navzajem)
+
+**Oprava vlastniho predchoziho tvrzeni**: drive v tehle session jsem tvrdil, ze `fusion::fuse_same_flow_events` neni zapojeno do produkce ("mrtve zapojeni") - to byla chyba mereni (grepoval jsem jen `src/*.rs`, ne `src/passive/mod.rs`, kde je skutecne volano). Oprava provedena primo uzivateli pred timhle kolem, ne schovana.
+
+- **Opus (comprehensive)**: puvodni navrh byl 31-41 tydnu, vcetne vlastniho nftables gateway-agenta (mTLS, signed bundles, CAP_NET_ADMIN), Postgres migrace, multi-tenant s RLS, OIDC, HA/DR, K8s - cely puvodni "dodelat vsechno" seznam, rozfazovany.
+- **Pragmatik**: nezavisle nasel zivou, nezapojenou bezpecnostni mezeru - `run_targeted_followup_nmap`/`run_forensic_followup_nmap` (`pipeline/mod.rs`) nikdy nekontrolovaly cile proti `--scope`. Navrhl orchestraci existujicich `nftables` pres uz postaveny/testovany broker (`enforce.block_ip` job, TTL auto-expiry, allowlist, dry-run), NE vlastni packet-path engine. Postgres/multi-tenant/K8s: odlozit s explicitnimi trigger podminkami (2. realny uzel/tenant), ne kalendarne.
+- **Skeptik**: nezavisle potvrdil STEJNOU bezpecnostni mezeru. Tvrdil, ze vlastni firewall/IPS/DNS-filter neni jen pomalejsi, je to **nebezpecne** pro solo vyvojare bez zadneho ostreho nasazeni - blast radius spatneho pravidla (vypadek vlastniho pristupu, DNS na nemocnici/mzdy, falesny block na BGP/zaloze) je kvalitativne jiny nez spatny detekcni nalez. Multi-tenant/HA-DR/K8s bez 2. tenanta/uzlu je **neverifikovatelna hranice** (horsi nez chybejici funkce, vytvari falesnou duveru). `verification_planner.rs` je blizko navratu do rozsahu - potrebuje jen A9 mantinely prvni.
+
+### Kolo 2 (kriz-debata, kazdy videl zbyvajici 2 zpravy)
+
+Vsichni 3 nezavisle konvergovali ke stejnemu zaveru po videni druhych dvou zprav:
+
+1. **Zadny vlastni packet-path enforcement engine.** Opus explicitne stahl svuj puvodni gateway-agent navrh ("drop for now: dedicated gateway-agent binary, DNS RPZ, inline IPS... nikdo nerozhodl tap-vs-inline topologii"). Vsichni 3 souhlasi na pragmatikove `enforce.block_ip` broker jobu jako jedinem bezpecnem zpusobu, jak ziskat "tenhle program umi jednat" bez psani noveho packet-path kodu - ale s dodatecnymi mantinely ze skeptikova kola 2: (a) hardcoded denylist chranenych rozsahu (gateway/DNS/management) kontrolovany PRI VYKONANI, ne jen pri planovani, a vynucen i proti explicitnimu pozadavku; (b) NEZAVISLY periodicky sweep porovnavajici zivy `nft` stav proti audit logu (ne jen jeden naplanovany unblock job - presne ta trida rizika jako nedavny lease-renewal bug v `platform.rs`); (c) dry-run vynucen na fail-closed konfiguracni urovni (jako `BAKULA_API_TOKEN`), ne jen CLI flag default. Prvni skutecne vykonani (ne dry-run) navic vyzaduje explicitni lidske schvaleni - stejny "shadow/propose" vzor jako `verification_planner.rs`.
+2. **Postgres/multi-tenant/K8s/mTLS/OIDC/HA-DR zustavaji odlozeny, trigger-based** (Postgres: 2. realny control-plane uzel; multi-tenant: 2. realny tenant; mTLS: enforcement na jinem hostu nez control plane; OIDC: SSO/2. operatorska organizace; HA/DR: realne SLA; K8s: ops tym o to pozada). Opus svuj puvodni argument "rozhodnout tvar tenant schematu TED, aby se nemigrovalo 2x" stahl - "zadna migrace schematu se ted nedeje" - a vsichni 3 se shodli na **jen 1-stranovem design dokumentu** (ne kodu, ne nullable sloupci) pro tvar tenant_id - samotny nepouzivany sloupec by vytvarel stejnou falesnou duveru jako neverifikovatelna izolace, jen o vrstvu driv.
+3. **`external_sql.rs` (452 radku, 0 testu) se SMAZE**, ne otestuje nebo opravi dokumentace. Duvod: modul nikdy nemuze spoustet workery (chybi claim/lease/renew/leader-election), takze testovani neceho, co nemuze fungovat, je ztraceny cas.
+4. **Scope-revalidacni oprava je blokujici prvni krok**, ne soucast `verification_planner.rs` prace - vsichni 3 nezavisle nasli stejny bug, nejvyssi shoda v celem kole. **Opraveno v tomhle tahu** (viz nize) - `nmap::run_targeted_followup_nmap`/`run_forensic_followup_nmap` ted beru `scope: &[IpNet]` parametr, filtruji cile pres novou `filter_targets_in_scope` (fail-closed - neparsovatelna IP se vyradi), a reportuji vyrazene cile, ne tise je zahazuji. 6 novych testu (2 na samotny filtr, 2 end-to-end overujici, ze se `nmap` binary vubec nespusti kdyz jsou vsechny cile mimo scope, plus 2 existujici upravene na novou signaturu), overeno rozbij→spadne→vrat→projde.
+5. **Revidovany odhad: ~9-12 tydnu** (misto puvodnich 31-41) pro vse, co skutecne zustava v rozsahu po kole 2 - viz fazovani nize.
+
+### Rozhodnuti (synteza po 2 kolech)
+
+| Polozka | Rozhodnuti | Trigger pro navrat do rozsahu |
+|---|---|---|
+| Scope-revalidace na followup/forenzni nmap | **HOTOVO v tomhle tahu** | - |
+| `verification_planner.rs` produkcni vstupni bod | **Dalsi krok** - A9 katalog + mantinely, pak shadow mode, pak jen passive/read-only auto-exekuce | - |
+| `enforce.block_ip` broker job (orchestrace existujiciho `nftables`) | **Dalsi krok po planneru** - propose-only nejdriv, realne vykonani jen s lidskym schvalenim | - |
+| Structured logging (`tracing`), `external_sql.rs` smazani, FindingKindSpec/mas_* dedup, supply-chain blocking+SBOM, continuous ingest offsety, token expiry | **Dalsi krok, levne, bez kontroverze** | - |
+| Vlastni nftables/eBPF/XDP gateway-agent, DNS RPZ, inline Suricata IPS | Odlozeno (orchestrace existujicich nastroju staci) | realna tap-vs-inline topologie u skutecneho nasazeni |
+| Postgres migrace pro H5 multi-host | Odlozeno | 2. realny control-plane uzel |
+| Multi-tenant (`tenant_id`) | Odlozeno, jen 1-stranovy design dokument tvaru | 2. realny tenant |
+| mTLS mezi uzly | Odlozeno | enforcement na jinem hostu nez control plane |
+| OIDC | Odlozeno | SSO / 2. operatorska organizace |
+| HA/DR, Kubernetes | Odlozeno | realne SLA / ops tym si vyzada |
+
+Fazovani (po scope-revalidacni oprave): **Faze A** (3-4 tydny) - `ScopePolicy` generalizace (A9 prvni cast, vola se PRI VYKONANI kazdeho aktivniho executoru, ne jen pri planovani), audit log + schvalovaci tabulka v SQLite, structured logging, supply-chain blocking+SBOM, `external_sql.rs` smazani, mas_*/FindingKindSpec dedup, continuous ingest offsety, token expiry + constant-time compare, 1-stranovy tenant design dokument. **Faze B** (3-4 tydny) - `verification_planner.rs` katalog kandidatu (reuse nmap/webscan/pentest/`inspect_metrics_content` executoru) + shadow mode, pak automaticka exekuce jen passive/read-only kontrol. **Faze C** (2-3 tydny) - `enforce.block_ip` broker job s 3 mantinely z kola 2, propose-only → schvaleni-gated realne vykonani. Vse ostatni zustava na trigger, ne na kalendari.
