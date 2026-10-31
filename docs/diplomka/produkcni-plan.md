@@ -255,7 +255,8 @@ Vsichni 3 nezavisle konvergovali ke stejnemu zaveru po videni druhych dvou zprav
 | `ScopePolicy` (A9 krok 1, sdileny modul) | **HOTOVO** (31.10.2026, `src/scope_policy.rs`) | - |
 | `verification_planner.rs` produkcni vstupni bod, shadow mode | **HOTOVO** (31.10.2026) - viz nize | - |
 | `verification_planner.rs` automaticka exekuce passive/read-only kontrol | **Dalsi krok** - vyzaduje A9 rozpoctove/rate-limit mantinely pred prvnim skutecnym volanim | - |
-| `enforce.block_ip` broker job (orchestrace existujiciho `nftables`) | **Dalsi krok po planneru** - propose-only nejdriv, realne vykonani jen s lidskym schvalenim | - |
+| `enforce.block_ip` rozhodovaci jadro (generovani `nft` prikazu, ZADNA exekuce) | **HOTOVO** (31.10.2026, `src/enforcement.rs`) - viz nize | - |
+| `enforce.block_ip` zapojeni do job systemu + skutecna exekuce | **Dalsi krok** - vyzaduje rozsireni `platform.rs`'s job dispatche (dnes natvrdo `PipelineJobSpec`), audit log, nezavisly periodicky sweep, lidske schvaleni pred prvnim skutecnym `nft` volani | - |
 | Structured logging (`tracing`), FindingKindSpec/mas_* dedup, supply-chain blocking+SBOM, continuous ingest offsety, token expiry (platform.rs) | **Dalsi krok, levne, bez kontroverze** | - |
 | Vlastni nftables/eBPF/XDP gateway-agent, DNS RPZ, inline Suricata IPS | Odlozeno (orchestrace existujicich nastroju staci) | realna tap-vs-inline topologie u skutecneho nasazeni |
 | Postgres migrace pro H5 multi-host | Odlozeno | 2. realny control-plane uzel |
@@ -305,5 +306,37 @@ schopnost v tomhle kole, ne dalsi audit/fix. Druha (po `identity.rs`/
   (dnes jen plan, nikdy se nic nezavola), rozpoctove/rate-limit mantinely pro
   tu exekuci, presun `inspect_metrics_content` z `lab.rs` do produkcniho kodu
   jako skutecny executor za `read_only_content_inspection` kandidatem.
+
+### `enforce.block_ip` rozhodovaci jadro (31.10.2026) - `src/enforcement.rs`
+
+Prvni krok orchestrace existujiciho `nftables` (shoda vsech 3 agentu z kola 2:
+NE vlastni packet-path engine). **Jen rozhodovaci logika a generovani `nft`
+prikazu jako text - `Command::new("nft")` se nikde nevola.** Zapojeni do
+job systemu a skutecna exekuce zustavaji navazujicim krokem, protoze
+`platform.rs`'s job dispatch je dnes natvrdo svazany s jedinym typem
+(`PipelineJobSpec`, zadny obecny job-kind mechanismus) - rozsireni na vice
+typu uloh je samo o sobe architektonicke rozhodnuti, ne bezrizikovy pridavek
+k tomuhle kroku.
+
+Vsechny 3 mantinely z kola 2 debaty (skeptik) vynuceny PRIMO v rozhodovaci
+logice, ne jen jako doporuceni volajicimu:
+
+1. **`ProtectedRanges`** - loopback/link-local/multicast jsou vzdy chranene
+   (nejde vypnout) + operatorem nakonfigurovane rozsahy (gateway/DNS/
+   management). Zablokovani se odmitne, i kdyz o nej volajici VYSLOVNE
+   pozada - to byl presny scenar, ktery skeptik oznacil jako nebezpecny.
+2. **`MAX_BLOCK_TTL_SECONDS` = 24 hodin** - povinny strop, "navzdy" blok
+   neexistuje (TTL=0 i TTL>strop se odmitaji).
+3. **Dry-run je strukturalni** - `plan_block` vraci jen `BlockIpPlan` (textovy
+   `nft` prikaz), nikdy ho nevykona. `nft` vlastni jen `table inet bakula`/
+   `set blocked_ips` s `flags timeout` - kernel sam odstrani prvek po
+   vyprseni TTL i kdyby `bakula` spadnul (self-healing, nezavisi na tom, ze
+   nejaky "unblock" job skutecne dobehne - presne ta trida rizika, ktera uz
+   jednou zpusobila lease-renewal bug v `platform.rs`).
+
+7 novych testu, 2 klicove mantinely (protected range i proti explicitni
+zadosti, TTL strop) overeny rozbij→spadne→vrat→projde. Golden snapshot
+nezmenen (modul jeste nenapojen do `pipeline::run_pipeline` - zadne volaci
+misto dnes neexistuje).
 
 Fazovani (po scope-revalidacni oprave): **Faze A** (3-4 tydny) - `ScopePolicy` generalizace (A9 prvni cast, vola se PRI VYKONANI kazdeho aktivniho executoru, ne jen pri planovani), audit log + schvalovaci tabulka v SQLite, structured logging, supply-chain blocking+SBOM, `external_sql.rs` smazani, mas_*/FindingKindSpec dedup, continuous ingest offsety, token expiry + constant-time compare, 1-stranovy tenant design dokument. **Faze B** (3-4 tydny) - `verification_planner.rs` katalog kandidatu (reuse nmap/webscan/pentest/`inspect_metrics_content` executoru) + shadow mode, pak automaticka exekuce jen passive/read-only kontrol. **Faze C** (2-3 tydny) - `enforce.block_ip` broker job s 3 mantinely z kola 2, propose-only → schvaleni-gated realne vykonani. Vse ostatni zustava na trigger, ne na kalendari.

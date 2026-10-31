@@ -10,6 +10,7 @@ pub mod correlation_v2;
 pub mod cpe;
 pub mod decision;
 pub mod diff;
+pub mod enforcement;
 pub mod error;
 pub mod eval;
 pub mod evaluation;
