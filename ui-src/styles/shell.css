@@ -2,7 +2,7 @@
 .shell {
   height: 100dvh;
   display: grid;
-  grid-template-columns: 6.25rem minmax(0, 1fr);
+  grid-template-columns: 9.6rem minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
     "bar bar"
@@ -21,11 +21,11 @@
 }
 
 .wordmark {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 1rem;
-  letter-spacing: 0.04em;
-  margin-right: 0.5rem;
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 1.5rem;
+  line-height: 1;
+  margin-right: 0.6rem;
 }
 
 .spacer {
@@ -144,59 +144,100 @@
   color: var(--ink-2);
 }
 
-/* Dok */
+/* Dok: vlevo retez spojenych bublin ("goo"), vpravo popisky. Bubliny kresli samostatna vrstva pod odkazy. */
 .dock {
   grid-area: dock;
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.5rem 0 1rem 0.75rem;
+  align-items: stretch;
+  padding: 0.5rem 0.4rem 1rem 0.6rem;
   overflow-y: auto;
+  scrollbar-width: none;
+}
+.dock-goo {
+  position: absolute;
+  left: 0.6rem;
+  width: 3.4rem;
+  top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  filter: url(#goo);
+  pointer-events: none;
+}
+.dock-goo i {
+  position: relative;
+  display: block;
+  height: var(--pitch);
+}
+.dock-goo i::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2.3rem;
+  height: 2.3rem;
+  margin: -1.15rem 0 0 -1.15rem;
+  border-radius: 50%;
+  background: var(--line);
+  transition: width 0.32s var(--ease), height 0.32s var(--ease), margin 0.32s var(--ease), background 0.2s;
+}
+.dock-goo i:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.6rem;
+  height: 100%;
+  margin-left: -0.3rem;
+  background: var(--line);
+}
+.dock-goo i.on::before {
+  width: 3.2rem;
+  height: 3.2rem;
+  margin: -1.6rem 0 0 -1.6rem;
+  background: var(--ink);
 }
 .dock-item {
-  width: 100%;
-  min-height: var(--tap);
+  position: relative;
+  height: var(--pitch);
+  flex: none;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 0.2rem;
-  padding: 0.35rem 0;
+  gap: 0.9rem;
   color: var(--ink);
   text-decoration: none;
-  border-radius: 1.4rem;
 }
 .dock-disc {
   position: relative;
-  width: 3.1rem;
-  height: 3.1rem;
+  flex: none;
+  width: 3.4rem;
+  height: 3.4rem;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  border: 1px solid var(--line-2);
-  transition: background 0.2s, color 0.2s;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 .dock-abbr {
   display: block;
-  height: 0.85rem;
-}
-.dock-item:hover .dock-disc {
-  background: var(--surface-2);
 }
 .dock-item.is-active .dock-disc {
-  background: var(--ink);
   color: var(--bg);
-  border-color: var(--ink);
 }
 .dock-label {
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.02em;
+  font-size: var(--fs-sm);
   color: var(--ink-2);
+  white-space: nowrap;
 }
 .dock-item.is-active .dock-label {
   color: var(--ink);
   font-weight: 600;
+}
+.dock-item:hover .dock-label {
+  color: var(--ink);
 }
 .badge {
   position: absolute;
@@ -434,5 +475,32 @@
   }
   .spacer {
     display: none;
+  }
+}
+
+@media (max-width: 64rem) {
+  .dock {
+    padding: 0.2rem 0.5rem calc(0.4rem + env(safe-area-inset-bottom));
+  }
+  .dock-goo {
+    display: none;
+  }
+  .dock-item {
+    height: auto;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .dock-disc {
+    width: 2.6rem;
+    height: 2.6rem;
+    border: 1px solid var(--line-2);
+    border-radius: 50%;
+  }
+  .dock-item.is-active .dock-disc {
+    background: var(--ink);
+    border-color: var(--ink);
+  }
+  .dock-label {
+    font-size: 0.66rem;
   }
 }

@@ -1,3 +1,65 @@
+@font-face {
+  font-family: "Sedmdvacet Text C";
+  src: url("/fonts/sedmdvacet-text-c/SedmdvacetTextC-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sedmdvacet Text C";
+  src: url("/fonts/sedmdvacet-text-c/SedmdvacetTextC-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sedmdvacet Text C";
+  src: url("/fonts/sedmdvacet-text-c/SedmdvacetTextC-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sedmdvacet Text C";
+  src: url("/fonts/sedmdvacet-text-c/SedmdvacetTextC-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sedmdvacet Text C";
+  src: url("/fonts/sedmdvacet-text-c/SedmdvacetTextC-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sedmdvacet Display";
+  src: url("/fonts/sedmdvacet-display/SedmdvacetDisplay-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sedmdvacet Display";
+  src: url("/fonts/sedmdvacet-display/SedmdvacetDisplay-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sedmdvacet Display";
+  src: url("/fonts/sedmdvacet-display/SedmdvacetDisplay-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sedmdvacet Mono";
+  src: url("/fonts/sedmdvacet-mono/SedmdvacetMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sedmdvacet Mono";
+  src: url("/fonts/sedmdvacet-mono/SedmdvacetMono-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+
 /* Tokeny. Jedna signalni cervena, jinak teple sede. Svetly i tmavy rezim jsou plnohodnotne. */
 :root {
   color-scheme: light dark;
@@ -13,8 +75,16 @@
   --signal-ink: #b3121a;
   --on-signal: #ffffff;
 
-  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, Menlo, "Liberation Mono", monospace;
-  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Sedmdvacet Mono", "Cascadia Mono", Consolas, monospace;
+  --sans: "Sedmdvacet Text C", "Segoe UI", system-ui, Arial, sans-serif;
+  --display: "Sedmdvacet Display", "Segoe UI", Arial, sans-serif;
+  --hot: var(--signal);
+  --hot-ink: var(--signal-ink);
+  --on-hot: var(--on-signal);
+  --chain: #dcdad2;
+  --chain-2: #bdbbb2;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --pitch: 4rem;
 
   --fs-xs: 0.72rem;
   --fs-sm: 0.82rem;
@@ -39,10 +109,14 @@
     --line-2: rgba(236, 235, 229, 0.4);
     --signal: #e5262e;
     --signal-ink: #ff6a70;
+    --chain: #262624;
+    --chain-2: #3a3a37;
   }
 }
 
 :root[data-theme="dark"] {
+  --chain: #262624;
+  --chain-2: #3a3a37;
   --bg: #0b0b0a;
   --surface: #131312;
   --surface-2: #1d1d1b;

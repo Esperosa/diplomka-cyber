@@ -1,93 +1,152 @@
-/* ---------- Prehled ---------- */
+/* ---------- Mapa site ---------- */
 .overview {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 21.5rem;
-  gap: 1.2rem;
-  padding: 0 1.6rem 1.4rem 1.2rem;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  gap: 1.4rem;
+  padding: 0 2.2rem 1.4rem 1.4rem;
 }
 .field-wrap {
   position: relative;
   min-height: 0;
   min-width: 0;
 }
-.pebble-field {
+.netmap {
   width: 100%;
   height: 100%;
   display: block;
 }
-.contour {
+
+/* zony (podsite): jemny organicky obrys */
+.zone-outline {
   fill: none;
   stroke: var(--line-2);
   stroke-width: 1;
+  stroke-dasharray: 2 5;
+  stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
-.contour.c0 {
-  opacity: 0.55;
+.zone-label {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  fill: var(--ink-2);
+  text-anchor: middle;
 }
-.contour.c1 {
-  opacity: 0.4;
+.zone-count {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  fill: var(--ink-2);
+  text-anchor: middle;
+  opacity: 0.75;
 }
-.contour.c2 {
-  opacity: 0.28;
+
+/* goo vrstva: bubliny a mosty splyvaji do jedne organicke hmoty */
+.goo {
+  filter: url(#goo);
 }
-.outer-dot {
+.gl {
   fill: none;
+  stroke: var(--chain-2);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.gs {
+  fill: none;
+  stroke: var(--chain);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.g-net {
+  fill: var(--chain);
+}
+.g-gate {
+  fill: var(--ink);
+}
+.g-hub {
+  fill: var(--ink);
+}
+.g-node {
+  fill: var(--chain);
+}
+.g-node.s1 {
+  fill: var(--chain-2);
+}
+.g-node.s2 {
+  fill: var(--ink);
+}
+.g-node.s3 {
+  fill: var(--hot);
+}
+
+/* ostra vrstva */
+.net-edge {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 4;
+  vector-effect: non-scaling-stroke;
+}
+.net-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  fill: var(--ink-2);
+  text-anchor: middle;
+}
+.out-edge {
+  fill: var(--surface);
   stroke: var(--ink-2);
   stroke-width: 1.2;
+  stroke-dasharray: 2 3;
   vector-effect: non-scaling-stroke;
 }
-.pebble {
+.out-ip {
+  font-family: var(--mono);
+  font-size: 10px;
+  fill: var(--ink-2);
+  text-anchor: middle;
+}
+.node {
   cursor: pointer;
-  animation: drift var(--dur, 12s) ease-in-out var(--delay, 0s) infinite alternate;
 }
-.pebble:focus-visible {
-  outline: 0.1875rem solid var(--ink);
-  outline-offset: 0.5rem;
+.node .hit {
+  fill: transparent;
 }
-@keyframes drift {
-  from {
-    transform: translate(0, 0);
-  }
-  to {
-    transform: translate(var(--dx, 2px), var(--dy, 2px));
-  }
+.node:focus-visible {
+  outline: none;
 }
-.pebble-body {
-  fill: var(--surface-2);
+.node:focus-visible .node-edge,
+.node:hover .node-edge {
+  stroke-width: 2.4;
+}
+.node-edge {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.3;
+  vector-effect: non-scaling-stroke;
+}
+.node-edge.is-dashed {
+  stroke-dasharray: 4 3;
+}
+.node-ip {
+  font-family: var(--mono);
+  font-weight: 500;
+  fill: var(--ink);
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+.node-ip.s3 {
+  fill: var(--on-hot);
+}
+.node-ip.s2 {
+  fill: var(--bg);
+}
+.sel-ring {
+  fill: none;
   stroke: var(--ink);
   stroke-width: 1.6;
   vector-effect: non-scaling-stroke;
-  transition: fill 0.25s;
-}
-.pebble:hover .pebble-body {
-  fill: var(--bg);
-}
-.pebble.is-selected .pebble-body {
-  fill: var(--ink);
-}
-.pebble-ip {
-  font-family: var(--mono);
-  font-weight: 600;
-  fill: var(--ink);
-  text-anchor: middle;
-  dominant-baseline: central;
-  pointer-events: none;
-}
-.pebble-name {
-  font-family: var(--mono);
-  fill: var(--ink-2);
-  text-anchor: middle;
-  dominant-baseline: central;
-  pointer-events: none;
-}
-.pebble.is-selected .pebble-ip {
-  fill: var(--bg);
-}
-.pebble.is-selected .pebble-name {
-  fill: var(--bg);
-  opacity: 0.75;
 }
 .ring-dot {
   fill: var(--line-2);
@@ -96,21 +155,70 @@
   fill: var(--ink);
 }
 .ring-dot.hot {
-  fill: var(--signal);
+  fill: var(--hot);
+}
+
+/* cesta skoku agenta (pivoting): jantarova */
+.hop-arc {
+  fill: none;
+  stroke: var(--hot);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-dasharray: 1 7;
+  vector-effect: non-scaling-stroke;
+}
+.hopper {
+  fill: var(--hot);
+  stroke: var(--ink);
+  stroke-width: 1.2;
+}
+.hop-mark circle {
+  fill: var(--hot);
+  stroke: var(--ink);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.hop-mark text {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  fill: var(--on-hot);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.hop-mark.st-needs_approval circle {
+  fill: var(--surface);
+  stroke-dasharray: 2 2;
+}
+.hop-mark.st-needs_approval text {
+  fill: var(--ink);
+}
+.hop-mark.st-failed circle {
+  fill: var(--ink);
+}
+.hop-mark.st-failed text {
+  fill: var(--bg);
+}
+.hop-mark.st-skipped_out_of_scope circle,
+.hop-mark.st-skipped_budget circle {
+  fill: var(--surface-2);
+}
+.hop-mark.st-skipped_out_of_scope text,
+.hop-mark.st-skipped_budget text {
+  fill: var(--ink-2);
 }
 
 .legend {
   position: absolute;
-  left: 0.6rem;
-  bottom: 0.2rem;
+  left: 0.2rem;
+  bottom: 0.1rem;
   list-style: none;
   padding: 0;
   margin: 0;
   display: grid;
   gap: 0.3rem;
   font-family: var(--mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.03em;
+  font-size: var(--fs-xs);
   color: var(--ink-2);
 }
 .legend li {
@@ -137,10 +245,11 @@
   border-radius: 50%;
   border: 1.5px dashed var(--ink);
 }
-.lg-out {
+.lg-hop {
   border-radius: 50%;
-  border: 1.2px solid var(--ink-2);
-  transform: scale(0.55);
+  background: var(--hot);
+  border: 1px solid var(--ink);
+  transform: scale(0.7);
 }
 
 .side {
@@ -148,27 +257,25 @@
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 1rem;
   padding: 0 0.2rem 0.4rem 0;
   scrollbar-width: thin;
 }
 .run-name {
+  font-family: var(--display);
   font-size: var(--fs-lg);
   font-weight: 500;
-  line-height: 1.25;
+  line-height: 1.2;
   margin: 0.15rem 0 0.35rem;
 }
 .consensus {
   margin-top: 0.8rem;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 0.9rem;
 }
-.consensus .dm {
-  height: 0.95rem;
-}
 .host-card {
-  padding: 1.1rem 1.3rem;
+  padding: 1rem 1.2rem;
   border: 1px solid var(--line-2);
   border-radius: 2.2rem 1.4rem 2rem 1.6rem;
   display: flex;
@@ -181,10 +288,63 @@
 }
 .host-ip {
   font-size: var(--fs-lg);
-  font-weight: 600;
+  font-weight: 500;
 }
 .pending-line .btn {
   width: 100%;
+}
+.hops-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.hop-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.hop-list li {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+  gap: 0.6rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+  align-items: start;
+}
+.hop-no {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  background: var(--hot);
+  color: var(--on-hot);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ink);
+}
+.hop-list li.st-needs_approval .hop-no {
+  background: transparent;
+  border-style: dashed;
+  color: var(--ink);
+}
+.hop-list li.st-failed .hop-no {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.hop-list li.st-skipped_out_of_scope .hop-no,
+.hop-list li.st-skipped_budget .hop-no {
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+.hop-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 /* ---------- Seznam + detail ---------- */
@@ -805,7 +965,7 @@
     display: flex;
     flex-direction: column;
   }
-  .pebble-field {
+  .netmap {
     flex: 1;
     min-height: 0;
   }

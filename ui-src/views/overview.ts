@@ -1,5 +1,4 @@
-import { dotMatrix } from "../dotmatrix";
-import { renderField } from "../pebbles";
+import { hopsOf, renderNetMap, statusLabel } from "../netmap";
 import { navigate } from "../router";
 import { activeHost, state, update, type View } from "../state";
 import { esc, fmtDate, hostFindings, maxSeverityLevel, meanUncertainty, hypothesesForHost, pct, num, SEVERITY_LABEL } from "../ui";
@@ -20,17 +19,18 @@ function render(): string {
   const consensus = String(report.summary.mas_consensus_state ?? "");
   const selected = activeHost();
 
-  const hostCard = selected ? hostSummary(selected) : `<p class="muted small">Vyber stanici v poli. Velikost oblázku odpovídá významu stanice, tečky na obvodu riziku, přerušení obrysu nejistotě.</p>`;
+  const hostCard = selected ? hostSummary(selected) : `<p class="muted small">Vyber stanici na mapě. Velikost bubliny odpovídá významu stanice, tečky kolem ní riziku, přerušený obrys nejistotě.</p>`;
+  const hops = hopsOf(report);
 
-  return `${paneHead("Přehled")}
+  return `${paneHead("Mapa sítě")}
   <div class="overview">
-    <section class="field-wrap" aria-label="Pole stanic">
-      ${renderField(report, state.selectedHost)}
+    <section class="field-wrap" aria-label="Mapa sítě">
+      ${renderNetMap(report, state.selectedHost)}
       <ul class="legend" aria-label="Legenda">
         <li><i class="lg lg-size"></i>velikost: význam stanice</li>
-        <li><i class="lg lg-ring"></i>tečky na obvodu: riziko</li>
+        <li><i class="lg lg-ring"></i>tečky kolem: riziko</li>
         <li><i class="lg lg-dash"></i>přerušený obrys: nejistota</li>
-        <li><i class="lg lg-out"></i>vnější kroužky: ostatní aktiva</li>
+        <li><i class="lg lg-hop"></i>červená cesta: skoky agenta</li>
       </ul>
     </section>
     <aside class="side" aria-label="Souhrn běhu">
@@ -39,7 +39,7 @@ function render(): string {
         <p class="run-name">${esc(report.run.nazev)}</p>
         <p class="mono small muted">${esc(fmtDate(report.run.finished_at))}</p>
         <p class="mono small muted">rozsah ${esc(report.run.scope.join(", "))} · ${esc(report.run.profile)}</p>
-        ${consensus ? `<p class="consensus"><span class="eyebrow">Shoda agentů</span>${dotMatrix(consensus, {})}</p>` : ""}
+        ${consensus ? `<p class="consensus"><span class="eyebrow">Shoda agentů</span><span class="mono">${esc(consensus)}</span></p>` : ""}
       </div>
       <div class="readouts">
         ${readout(report.hosts.length, "stanice")}
@@ -56,8 +56,20 @@ function render(): string {
             ? `<button type="button" class="btn btn-hot" data-action="goto" data-key="zasahy">${pending} ${pending === 1 ? "zásah čeká" : "zásahy čekají"} na schválení</button>`
             : `<span class="muted small">Žádný zásah nečeká na schválení.</span>`
       }</p>
+      ${hops.length ? hopList(hops) : ""}
       <div class="host-card" aria-live="polite">${hostCard}</div>
     </aside>
+  </div>`;
+}
+
+function hopList(hops: ReturnType<typeof hopsOf>): string {
+  return `<div class="hops-card">
+    <p class="eyebrow">Cesta skoků agenta</p>
+    <ol class="hop-list">${hops
+      .map(
+        (hop) => `<li class="st-${hop.status}"><span class="hop-no">${hop.index}</span><span class="hop-main"><span class="mono">${esc(hop.asset)}</span><span class="small muted">${esc(hop.method.replace(/_/g, " "))} · ${esc(statusLabel(hop.status))}${hop.outcome ? ` · ${esc(hop.outcome)}` : ""}</span></span></li>`,
+      )
+      .join("")}</ol>
   </div>`;
 }
 

@@ -21,7 +21,8 @@ check(/color-scheme/.test(html), "chybi meta color-scheme");
 
 // Zadne zbytky stareho UI
 check(!/jumping|spider/i.test(css + js), "bundle obsahuje maskota ze stareho UI");
-check((await readdir("ui")).sort().join(",") === "app.js,index.html,styles.css", "ui/ ma obsahovat jen app.js, index.html, styles.css");
+check((await readdir("ui")).sort().join(",") === "app.js,fonts,index.html,styles.css", "ui/ ma obsahovat jen app.js, fonts, index.html, styles.css");
+check((await readdir("ui/fonts")).sort().join(",") === "sedmdvacet-display,sedmdvacet-mono,sedmdvacet-text-c", "ui/fonts ma obsahovat jen rodiny Sedmdvacet");
 
 // Zakazane AI vzory (docs: anti-patterns-ai-look.md)
 check(!/#6366f1|#8b5cf6|#a855f7|#7c3aed|indigo|violet/i.test(css), "CSS obsahuje fialovomodrou paletu");
@@ -35,7 +36,9 @@ check(!/animation:[^;]*infinite[^;]*;[^}]*background/.test(css), "nekonecna anim
 
 // Zadne tretistranove zdroje / fonty
 check(!/https?:\/\/(?!www\.w3\.org)/.test(css + html), "UI nacita zdroj z cizi domeny");
-check(!/@font-face/.test(css), "UI nesmi dodavat fontove soubory (zadny font se neposila)");
+const faces = [...css.matchAll(/@font-face\{[^}]*\}/g)].map((m) => m[0]);
+check(faces.length > 0 && faces.every((f) => /url\(\/fonts\/sedmdvacet-/.test(f)), "@font-face smi odkazovat jen na vlastni pisma Sedmdvacet (SIL OFL) v /fonts/");
+check(!/Inter|Roboto|Helvetica Neue|Space Grotesk/.test(css), "CSS pouziva cizi (AI-typicke) pismo");
 
 // Kontrast tokenu (WCAG AA: text 4.5, velke/ikonicke 3)
 function parseBlock(source, selector) {
@@ -69,8 +72,8 @@ for (const [name, set] of [["svetly", light], ["tmavy", dark]]) {
     check(value >= min, `kontrast ${name}: --${fg} na --${bg} = ${value.toFixed(2)} (< ${min})`);
   }
 }
-check(ratio(light["on-signal"] ?? "#ffffff", light.signal) >= 4.5, "kontrast: bily text na --signal (svetly) < 4.5");
-check(ratio("#ffffff", dark.signal) >= 4.5, "kontrast: bily text na --signal (tmavy) < 4.5");
+check(ratio(light["on-signal"] ?? "#ffffff", light.signal) >= 4.5, "kontrast: text na --signal (svetly) < 4.5");
+check(ratio(dark["on-signal"] ?? "#ffffff", dark.signal) >= 4.5, "kontrast: text na --signal (tmavy) < 4.5");
 
 if (failures.length) {
   console.error("UI smoke: SELHALO\n - " + failures.join("\n - "));

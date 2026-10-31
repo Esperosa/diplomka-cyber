@@ -1,4 +1,6 @@
-# Fingerprinting služeb a pasivní analýza síťového provozu
+# Skákavka: fingerprinting služeb a pasivní analýza síťového provozu
+
+Program se jmenuje **Skákavka** (dříve Bakula): agent při ověřování podezřelého uzlu poskakuje po souvisejících zařízeních (pivoting). Interní názvy balíčku (`bakula-program`) a proměnných prostředí zůstávají kvůli kompatibilitě.
 
 Veřejná softwarová příloha mé bakalářské práce na FIM UHK. Prototyp v Rustu spojuje aktivní inventář služeb, kontext zranitelností a vybrané pasivní síťové události do nálezů, které lze zpětně prověřit.
 

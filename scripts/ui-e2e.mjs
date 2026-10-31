@@ -75,15 +75,15 @@ try {
 
   await test("Prehled: pole ma oblazek pro kazdou stanici, klik i klavesnice vybere stanici", async () => {
     const { page, context } = await open(base);
-    const count = await page.locator(".pebble").count();
+    const count = await page.locator(".node").count();
     assert(count === 3, `ocekavany 3 oblazky, nalezeno ${count}`);
-    await page.locator(".pebble").first().click({ force: true });
+    await page.locator(".node").first().click({ force: true });
     assert((await page.locator(".host-card .host-ip").count()) === 1, "po kliku se nezobrazila karta stanice");
-    await page.locator(".pebble").nth(1).focus();
+    await page.locator(".node").nth(1).focus();
     await page.keyboard.press("Enter");
     const ip = await page.locator(".host-card .host-ip").textContent();
     assert(/192\.168\.56\.\d+/.test(ip ?? ""), "klavesnice (Enter) stanici nevybrala");
-    const label = await page.locator(".pebble").first().getAttribute("aria-label");
+    const label = await page.locator(".node").first().getAttribute("aria-label");
     assert(/Riziko .*Nejistota/.test(label ?? ""), "oblazek nema popisek s rizikem a nejistotou");
     await context.close();
   });
@@ -229,7 +229,7 @@ try {
     await page.waitForSelector("dialog.modal[open]");
     await page.fill('dialog.modal input[name="token"]', "test");
     await page.click('dialog.modal button[value="ok"]');
-    await page.waitForFunction(() => document.querySelector(".pebble") !== null, null, { timeout: 8000 });
+    await page.waitForFunction(() => document.querySelector(".node") !== null, null, { timeout: 8000 });
     const stored = await page.evaluate(() => ({ s: sessionStorage.getItem("bakulaApiToken"), l: localStorage.getItem("bakulaApiToken") }));
     assert(stored.s === "test" && stored.l === null, `token je ulozen spatne: ${JSON.stringify(stored)}`);
     await context.close();
@@ -248,7 +248,7 @@ try {
           const name = (el.getAttribute("aria-label") || el.textContent || el.getAttribute("placeholder") || "").trim() || (el.labels && el.labels[0]?.textContent?.trim()) || el.getAttribute("title");
           if (!name) out.unnamed.push(el.outerHTML.slice(0, 80));
           const r = el.getBoundingClientRect();
-          const exempt = el.classList.contains("link") || el.closest(".pebble-field") || el.closest(".dock") && r.height >= 44;
+          const exempt = el.classList.contains("link") || el.closest(".netmap") || el.closest(".dock") && r.height >= 44;
           if (!exempt && (r.height < 43 || r.width < 43)) out.small.push(`${el.tagName}.${el.className} ${Math.round(r.width)}x${Math.round(r.height)}`);
         });
         return out;
@@ -260,10 +260,9 @@ try {
     await context.close();
   });
 
-  await test("Pohyb: pri prefers-reduced-motion se oblazky nehybou", async () => {
+  await test("Pohyb: pri prefers-reduced-motion se tecka skoku nehybe", async () => {
     const { page, context } = await open(base, undefined, { reducedMotion: "reduce" });
-    const name = await page.locator(".pebble").first().evaluate((el) => getComputedStyle(el).animationName);
-    assert(name === "none", `animace bezi i pri reduced-motion (${name})`);
+    assert((await page.locator(".netmap animateMotion").count()) === 0, "skakajici tecka bezi i pri reduced-motion");
     await context.close();
   });
 } finally {

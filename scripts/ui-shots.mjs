@@ -30,7 +30,7 @@ try {
       for (const section of sections) {
         await page.evaluate((s) => { window.location.hash = `#/${s}`; }, section);
         await page.waitForTimeout(350);
-        if (section === "prehled") { await page.locator(".pebble").first().click({ force: true }); await page.waitForTimeout(200); }
+        if (section === "prehled") { await page.locator(".node").first().click({ force: true }); await page.waitForTimeout(200); }
         if (section === "hostitele" || section === "nalezy") {
           await page.locator(".row").first().click({ timeout: 1500 }).catch(() => {});
           await page.waitForTimeout(200);

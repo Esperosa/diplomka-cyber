@@ -23,7 +23,7 @@ use ipnet::IpNet;
 #[command(
     name = "bakula",
     version,
-    about = "Bakula - korelace aktivniho a pasivniho pohledu na sit."
+    about = "Skakavka (drive Bakula) - korelace aktivniho a pasivniho pohledu na sit."
 )]
 struct Cli {
     #[command(subcommand)]

@@ -106,10 +106,86 @@ function largeReport(id, nazev, minutesAgo) {
   return r;
 }
 
-const RUNS = [
+// Ukazkova sit pro prohlidku mapy: 4 podsite, ~90 stanic, brana a cesta skoku agenta.
+function showcaseReport(id, nazev, minutesAgo) {
+  const r = baseReport(id, nazev, minutesAgo);
+  const templates = r.hosts;
+  const subnets = [
+    { prefix: "10.20.1", n: 16, names: ["web", "mail", "proxy", "dns", "vpn", "git", "ci", "wiki"], label: "dmz" },
+    { prefix: "10.20.2", n: 12, names: ["db", "files", "bak", "erp", "ldap"], label: "srv" },
+    { prefix: "10.20.3", n: 26, names: ["cam", "iot", "ap", "print", "hvac"], label: "iot" },
+    { prefix: "10.20.4", n: 38, names: ["ws", "nb", "voip"], label: "usr" },
+  ];
+  const hosts = [];
+  const findings = [];
+  const hypotheses = [];
+  let counter = 0;
+  const mkHost = (ip, hostname, i) => {
+    const t = structuredClone(templates[i % templates.length]);
+    t.ip = ip;
+    t.host_key = ip;
+    t.host_id = `host:${ip}`;
+    t.asset_id = `asset:${100 + counter}`;
+    t.hostname = hostname;
+    t.services = t.services.slice(0, 1 + (i % 3)).map((sv) => ({ ...sv, service_key: `${ip}/${sv.proto}/${sv.port}`, service_id: `svc:${ip}/${sv.proto}/${sv.port}`, cves: i % 4 === 0 ? sv.cves : i % 4 === 1 ? sv.cves.slice(0, 1) : [] }));
+    hosts.push(t);
+    const source = r.findings.filter((f) => f.host_key === templates[i % templates.length].host_key);
+    const flagged = counter % 7 === 3 || ["10.20.3.31", "10.20.3.40", "10.20.2.16", "10.20.2.19", "10.20.1.22"].includes(ip);
+    if (flagged) {
+      source.forEach((f, k) => {
+        if (k > 1) return;
+        const nf = structuredClone(f);
+        nf.host_key = ip;
+        nf.finding_id = `${f.finding_id}:${counter}`;
+        nf.severity = ["10.20.3.31", "10.20.3.40"].includes(ip) ? "high" : counter % 3 === 0 ? "medium" : f.severity;
+        findings.push(nf);
+        const hyp = r.hypotheses.find((h) => h.hypothesis_type === f.finding_type) ?? r.hypotheses[0];
+        const nh = structuredClone(hyp);
+        nh.affected_assets = [ip];
+        hypotheses.push(nh);
+      });
+    }
+    counter += 1;
+  };
+  mkHost("10.20.1.1", "gw-brana", 0);
+  subnets.forEach((net) => {
+    for (let i = 0; i < net.n; i += 1) {
+      if (net.prefix === "10.20.1" && i === 0) continue;
+      mkHost(`${net.prefix}.${10 + i * 3}`, `${net.names[i % net.names.length]}-${net.label}${i + 1}`, counter);
+    }
+  });
+  r.hosts = hosts;
+  r.findings = findings;
+  r.hypotheses = hypotheses;
+  r.networkAssets = [{ asset_id: "a-gw", asset_type: "router", name: "Brána", source: "nmap", confidence: "High", ip: "10.20.1.1", linked_host_key: "10.20.1.1" }];
+  r.verification_plans = hypotheses.slice(0, 12).map((h, i) => {
+    const base = structuredClone(r.verification_plans[i % r.verification_plans.length]);
+    base.in_scope_assets = h.affected_assets;
+    base.hypothesis_type = h.hypothesis_type;
+    return base;
+  });
+  // cesta skoku: podezrely uzel -> sousedni zarizeni -> server -> (schvaleni) -> mimo rozsah
+  r.verification_results = [
+    { hypothesis_type: "unexpected_traffic", method: "passive_extended_observation", asset: "10.20.3.31", status: "executed", outcome: "odchozí spojení na 198.51.100.7:4444", runtime_ms: 640 },
+    { hypothesis_type: "multi_target_pattern", method: "read_only_content_inspection", asset: "10.20.3.40", status: "executed", outcome: "stejný vzor, druhý uzel ve stejné podsíti", runtime_ms: 910 },
+    { hypothesis_type: "lateral_movement", method: "cve_intel_relookup", asset: "10.20.2.16", status: "executed", outcome: "SMB relace z 10.20.3.40", runtime_ms: 388 },
+    { hypothesis_type: "lateral_movement", method: "nmap_targeted_followup", asset: "10.20.2.19", status: "needs_approval", outcome: null, runtime_ms: null },
+    { hypothesis_type: "high_risk_cve_exposure", method: "cve_intel_relookup", asset: "10.20.1.22", status: "reused", outcome: "převzato z dřívější kontroly", runtime_ms: 0 },
+    { hypothesis_type: "unexpected_traffic", method: "passive_extended_observation", asset: "198.51.100.7", status: "skipped_out_of_scope", outcome: null, runtime_ms: null },
+  ];
+  r.summary.hosts_total = hosts.length;
+  r.summary.services_total = hosts.reduce((n, h) => n + h.services.length, 0);
+  return r;
+}
+
+const ALL_RUNS = [
+  { id: "run-20261031130000-1-sit", nazev: "Ukázková síť: 4 podsítě, cesta skoků", build: () => showcaseReport("run-20261031130000-1-sit", "Ukázková síť: 4 podsítě, cesta skoků", 2) },
   { id: "run-20261031120000-1-demo", nazev: "Full visibility stack", build: () => baseReport("run-20261031120000-1-demo", "Full visibility stack", 6) },
   { id: "run-20261031090000-1-large", nazev: "Rozsáhlá síť (ukázka, 14 stanic)", build: () => largeReport("run-20261031090000-1-large", "Rozsáhlá síť (ukázka, 14 stanic)", 190) },
 ];
+
+// Ukazkova sit je nejnovejsi jen s MOCK_SHOWCASE=1; testy pocitaji s malym demo behem jako vychozim.
+const RUNS = process.env.MOCK_SHOWCASE === "1" ? ALL_RUNS : [...ALL_RUNS.slice(1), ALL_RUNS[0]];
 
 // ---------- stav zasahu ----------
 const nowIso = () => new Date().toISOString();
@@ -141,7 +217,7 @@ const readBody = (req) => new Promise((resolve) => {
   req.on("data", (c) => (data += c));
   req.on("end", () => { try { resolve(data ? JSON.parse(data) : {}); } catch { resolve({}); } });
 });
-const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml" };
+const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8" };
 
 const automationStatus = {
   state: "idle", current_cycle: 3, total_cycles: 3, progress_pct: 100, progress_ratio: 1, current_phase: "finalize", current_phase_label: "Dokončeno", message: "Poslední cyklus doběhl bez chyby.", latest_run_id: RUNS[0].id, process_running: process.env.MOCK_RUNNING === "1",

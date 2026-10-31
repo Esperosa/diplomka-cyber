@@ -1,4 +1,3 @@
-import { dotMatrix } from "../dotmatrix";
 import { esc } from "../ui";
 
 export function paneHead(title: string, tools = ""): string {
@@ -10,7 +9,7 @@ export function emptyState(title: string, text: string, action = ""): string {
 }
 
 export function readout(value: string | number, label: string, tone: "" | "hot" = "", small = false): string {
-  return `<div class="readout${tone ? ` is-${tone}` : ""}${small ? " is-small" : ""}"><div class="readout-dm">${dotMatrix(String(value))}</div><div class="readout-label">${esc(label)}</div></div>`;
+  return `<div class="readout${tone ? ` is-${tone}` : ""}${small ? " is-small" : ""}"><div class="readout-num">${esc(String(value))}</div><div class="readout-label">${esc(label)}</div></div>`;
 }
 
 export function backButton(label = "Zpět na seznam"): string {

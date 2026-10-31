@@ -289,16 +289,20 @@ table.data td {
 .readout:nth-child(even) {
   border-radius: 2.3rem 1.5rem 2.2rem 1.6rem;
 }
-.readout-dm {
-  height: 2.15rem;
+.readout-num {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 2rem;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
 }
-.readout.is-small .readout-dm {
-  height: 1.3rem;
+.readout.is-small .readout-num {
+  font-size: 1.35rem;
 }
 .readout.is-hot {
   border-color: var(--signal);
 }
-.readout.is-hot .readout-dm {
+.readout.is-hot .readout-num {
   color: var(--signal-ink);
 }
 .readout-label {

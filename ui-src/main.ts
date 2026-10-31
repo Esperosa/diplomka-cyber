@@ -2,7 +2,6 @@ import { api, getToken, setAuthHandler, setToken } from "./api";
 import { renderLog, sendPrompt, setAssistantOpen, shellHtml } from "./assistant";
 import { refreshAll, refreshAudit, refreshEnforcement } from "./data";
 import { tokenDialog } from "./dialogs";
-import { dotMatrix } from "./dotmatrix";
 import { parseHash, navigate } from "./router";
 import { onChange, state, update, type SectionId, type View } from "./state";
 import { countdown, esc } from "./ui";
@@ -38,10 +37,11 @@ function effectiveDark() {
 // ---------- kostra ----------
 function renderShell() {
   app.innerHTML = `
+  <svg class="goo-defs" aria-hidden="true" focusable="false"><defs><filter id="goo" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8" result="goo"/><feBlend in="SourceGraphic" in2="goo"/></filter></defs></svg>
   <a class="skip" href="#stage">Přeskočit na obsah</a>
   <div class="shell">
     <header class="bar">
-      <span class="wordmark">Bakula</span>
+      <span class="wordmark">Skákavka</span>
       <label class="run-pick"><span class="sr-only">Běh</span><select id="runSelect" aria-label="Běh"></select></label>
       <span class="status" id="status" role="status"><span class="pulse" data-state="idle"></span><span class="status-text"></span></span>
       <span class="spacer"></span>
@@ -75,7 +75,8 @@ function renderChrome() {
   // dok
   const dock = app.querySelector<HTMLElement>("#dock")!;
   const pending = state.enforcement ? state.enforcement.actions.filter((a) => a.status === "proposed").length : 0;
-  dock.innerHTML = VIEWS.map((view) => {
+  const goo = `<div class="dock-goo" aria-hidden="true">${VIEWS.map((view) => `<i${view.id === state.section ? ' class="on"' : ""}></i>`).join("")}</div>`;
+  dock.innerHTML = goo + VIEWS.map((view) => {
     const active = view.id === state.section;
     const badge = view.id === "zasahy" && pending > 0 ? `<span class="badge" aria-label="${pending} čeká na schválení">${pending}</span>` : "";
     return `<a class="dock-item${active ? " is-active" : ""}" href="#/${view.id}" data-nav="${view.id}" ${active ? 'aria-current="page"' : ""} aria-label="${esc(view.label)}">
@@ -116,8 +117,8 @@ function renderChrome() {
 }
 
 function dockGlyph(abbr: string): string {
-  // Dvoupismenna zkratka jako tecky; plny nazev je v aria-label a popisku.
-  return `<span class="dock-abbr" aria-hidden="true">${dotMatrix(abbr)}</span>`;
+  // Dvoupismenna zkratka v bublině doku; plny nazev je v aria-label a popisku.
+  return `<span class="dock-abbr" aria-hidden="true">${esc(abbr)}</span>`;
 }
 
 function focusSignature(el: Element | null): string | null {
@@ -188,7 +189,7 @@ function applyRoute(focusStage: boolean) {
     void refreshAudit();
   }
   if (section === "zasahy" && previous !== "zasahy") void refreshEnforcement();
-  document.title = `${currentView().label} · Bakula`;
+  document.title = `${currentView().label} · Skákavka`;
   renderAll();
   if (focusStage && previous !== section) stage.focus({ preventScroll: true });
 }

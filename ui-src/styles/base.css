@@ -82,6 +82,21 @@ button {
   top: 0.75rem;
 }
 
+.goo-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--display);
+  font-weight: 500;
+}
+
 .mono {
   font-family: var(--mono);
 }

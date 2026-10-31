@@ -1,12 +1,16 @@
 // Sestaveni UI: TypeScript + CSS -> ui/ (app.js, styles.css, index.html).
 // Zadny framework, zadny Tailwind - esbuild sklada obe casti.
 import { build } from "esbuild";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 
 await mkdir("ui", { recursive: true });
 // Zbytky stareho UI (maskot, Tailwind vstup) nemaji v novem bundlu co delat.
 await rm("ui/assets", { recursive: true, force: true });
 await rm("ui/.styles.entry.pcss", { force: true });
+
+// Pisma Sedmdvacet (SIL OFL 1.1, vcetne licenci) se kopiruji vedle bundlu.
+await rm("ui/fonts", { recursive: true, force: true });
+await cp("ui-src/fonts", "ui/fonts", { recursive: true });
 
 await build({
   entryPoints: ["ui-src/main.ts"],
@@ -23,6 +27,7 @@ await build({
   entryPoints: ["ui-src/styles/index.css"],
   outfile: "ui/styles.css",
   bundle: true,
+  external: ["/fonts/*"],
   minify: true,
   target: ["chrome110", "firefox110", "safari16"],
   legalComments: "none",
@@ -35,13 +40,13 @@ const indexHtml = `<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
-  <title>Bakula</title>
-  <meta name="description" content="Bakula: korelace aktivního a pasivního pohledu na síť.">
+  <title>Skákavka</title>
+  <meta name="description" content="Skákavka: korelace aktivního a pasivního pohledu na síť.">
   <link rel="stylesheet" href="/styles.css?v=${cacheBust}">
 </head>
 <body>
   <div id="app"></div>
-  <noscript>Bakula potřebuje zapnutý JavaScript.</noscript>
+  <noscript>Skákavka potřebuje zapnutý JavaScript.</noscript>
   <script type="module" src="/app.js?v=${cacheBust}"></script>
 </body>
 </html>

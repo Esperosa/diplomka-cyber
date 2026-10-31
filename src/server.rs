@@ -141,7 +141,7 @@ pub async fn serve_with_config(addr: SocketAddr, config: AppConfig) -> Result<()
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state);
 
-    tracing::info!(%addr, "Bakula UI bezi");
+    tracing::info!(%addr, "Skakavka UI bezi");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
