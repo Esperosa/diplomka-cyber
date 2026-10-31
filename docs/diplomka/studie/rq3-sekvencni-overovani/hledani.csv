@@ -1,0 +1,26 @@
+datum;zdroj;dotaz;pocet_vysledku;prohlizeno;poznamka
+2026-10-31;WebSearch;threshold random walk portscan detection Jung Paxson Berger Balakrishnan fast portscan detection sequential hypothesis testing pdf;10;3;TRW 2004 PDF, arXiv 1204.1935
+2026-10-31;WebSearch;active learning alert triage security analyst intrusion detection labeling effort evaluation;10;4;Jasmine, Ziai, AACT, Doak (OSTI nedostupne)
+2026-10-31;WebSearch;sequential probability ratio test scan detection evaluation false positive worm Schechter reverse sequential hypothesis testing credit-based rate limiting;10;3;RBS+CBCRL, Jung-Milito-Paxson 2008
+2026-10-31;WebSearch;AI^2 training a big data machine to defend analyst-in-the-loop Veeramachaneni pdf;10;1;AI2 PDF
+2026-10-31;WebSearch;End-to-end active learning for computer security experts Beaugnon ILAB;10;3;ILAB zablokovan (Incapsula/Anubis) - V1
+2026-10-31;WebSearch;POMDP cyber defense investigation action selection intrusion response sequential decision;10;5;vetsina literatury = odpoved, ne overovani; CAGE-2, OT, agentic IR, Hu et al. (nedostupne)
+2026-10-31;WebSearch;cost-sensitive alert investigation prioritization audit game analyst budget evaluation;10;3;Yan 2018, Tong 2019
+2026-10-31;WebSearch;cascade intrusion detection cost two-stage cheap filter expensive classifier recall loss computation savings;10;3;GreenShield, Rezaee, WebAD2 - stazeni selhalo
+2026-10-31;WebSearch;automated alert verification SOC evaluation reduce false positives analyst time provenance alert triage NoDoze;10;3;Carbon Filter, NoDoze, vendor (Elastic/Tines/VMRay) jen jako tvrzeni vyrobcu
+2026-10-31;WebSearch;alert verification determining success of intrusion attempts active validation vulnerability scan IDS alerts Kruegel Robertson;10;2;PIK 2004
+2026-10-31;WebSearch;sequential detection limitations adversarial evasion SPRT attacker evades threshold random walk scan detection;10;3;NEGATIVNI: Carleton STRW, nenalezena prime analyza evaze pod-prahem
+2026-10-31;WebSearch;active probing network scanning risks crash devices industrial control systems active scan impact study;10;2;NEGATIVNI/riziko: Samanis 2022; Pospisil 2021 jen snippet (V1)
+2026-10-31;WebSearch;99% false positives qualitative study SOC analysts perspectives alert fatigue USENIX Security;10;1;NEGATIVNI: Alahmadi 2022 (kvalitativni, bez metrik triaze - vyloucena z extrakce)
+2026-10-31;WebSearch;DeepCASE semi-automated alert triage security operations center context-based reduce alerts evaluation;10;3;NEGATIVNI: replikace/nepomer trid (2507.01571)
+2026-10-31;WebSearch;BotSniffer detecting botnet command and control channels sequential probability ratio test evaluation false positive;10;1;BotSniffer NDSS 2008
+2026-10-31;WebSearch;multi-armed bandit OR value of information selecting which host to probe network security investigation Bayesian adaptive scanning evaluation;10;0;nenalezena prima prace o VOI/bandit pro vyber kontroly bezpecnostniho alertu (jen nepriame)
+2026-10-31;WebSearch;honeypot confirmation OR active validation reduce false positive alerts exploitability verification automated evaluation;10;0;nenalezeno kvantitativni mereni honeypot-confirmation; pouze starsi poznamky
+2026-10-31;WebSearch;Revisiting network scanning detection using sequential hypothesis testing Carleton stateful TRW false positives transient services;10;2;NEGATIVNI: Alsaleh thesis (TR-11-08 PDF 404)
+2026-10-31;WebSearch;botProbe active botnet probing identify obscure command and control channels hypothesis testing ACSAC 2009;10;1;BotProbe PDF
+2026-10-31;WebSearch;Continuous learning for Android malware detection active learning labeling cost reduction USENIX Security 2023 arXiv;10;2;Chen 2023, ActDroid
+2026-10-31;WebSearch;value of information alert triage security operations analyst which alert to investigate expected utility reinforcement learning scheduling analysts;10;0;nenalezena akademicka prace s VOI; jen vendor blogy (nepouzito)
+2026-10-31;WebSearch;two-stage network intrusion detection flow-based first stage deep packet second stage computational cost reduction detection rate retained arXiv;10;1;Sudyana 2025
+2026-10-31;WebSearch;NoDoze combatting threat alert fatigue with automated provenance triage NDSS 2019 pdf false alarms reduced;10;2;NoDoze PDF 404, V2 z NDSS stranky
+2026-10-31;WebSearch;Kim Dan active learning approach to dynamic alert prioritization real-time situational awareness arXiv;10;2;Kim a Dan TDSC 2025, TIFS 2024 (stazeno, necteno)
+2026-10-31;WebFetch;arxiv.org/abs/1509.03114 (zkouska ID);1;1;ID nesouviselo (chemie) - nepouzito, zaznamenano pro uplnost

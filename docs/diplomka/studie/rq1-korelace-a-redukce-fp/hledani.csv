@@ -1,0 +1,36 @@
+datum;zdroj;dotaz;pocet_vysledku;prohlizeno;poznamka
+2026-10-31;WebSearch;alert correlation false positive reduction evaluation intrusion detection;10;ano (shrnutí); plné texty nedohledány;nalezeny jen starší DARPA práce (fuzzy, Dempster-Shafer) -> V1 v neovereno.md
+2026-10-31;WebSearch;alert fatigue SOC empirical study analysts interviews USENIX Security;10;ano;vedlo na Alahmadi 2022 (otevřen) a AMCIS 2025 (jen abstrakt -> V1)
+2026-10-31;WebSearch;base rate fallacy intrusion detection Axelsson;10;ano;otevřeny Axelsson 2000 a Erbacher 2022
+2026-10-31;WebSearch;attack graph alert correlation evaluation reduction of alerts;10;ano;MAAC, Tedesco, Ning toolkit
+2026-10-31;WebSearch;alert aggregation systematic review Landauer Skopik attack stage alerts dataset AIT alert data set;10;ano;AIT-ADS, AlertBERT
+2026-10-31;WebSearch;risk-based alerting UEBA evaluation entity risk score accumulate weak signals false positive reduction academic;10;ano;jen výrobci (Splunk, Exabeam) -> tabulka tvrzení výrobců
+2026-10-31;WebSearch;multi-sensor fusion Zeek Suricata network detection evaluation precision;10;ano;žádná měřená fúze Zeek+Suricata; Corelight vendor
+2026-10-31;WebSearch;Hassan NoDoze combatting threat alert fatigue automated provenance triage NDSS 2019 pdf;10;ano;otevřen plný text
+2026-10-31;WebSearch;Alert-driven attack graph generation using S-PDFA Nadeem arxiv;10;ano;SAGE otevřen
+2026-10-31;WebSearch;AI2 training a big data machine to defend Veeramachaneni analyst feedback;10;ano;otevřen plný text
+2026-10-31;WebSearch;Landauer time-based alert aggregation attack stage clustering alert aggregation arXiv evaluation;10;ano;GraphCtx 2509.12923, AlertBERT
+2026-10-31;WebSearch;Tactical Provenance Analysis EDR RapSheet arxiv false alarms reduction;10;ano;RapSheet plný text přes adambates.org
+2026-10-31;WebSearch;Julisch clustering intrusion detection alarms root cause analysis reduce alarm load pdf;10;ano;otevřena disertace Dortmund (ne článek TISSEC)
+2026-10-31;WebSearch;Beehive large-scale log analysis suspicious activity enterprise networks Yen ACSAC 2013;10;ano;otevřen plný text
+2026-10-31;WebSearch;Ning Cui Reeves constructing attack scenarios correlation of intrusion alerts DARPA LLDOS reduction;10;ano;otevřeny Ning04 a Noel04, bez použitelné metriky FP -> vyloučeno
+2026-10-31;WebSearch;Automated Alert Classification and Triage AACT SOC machine learning;10;ano;plný text arXiv
+2026-10-31;WebSearch;Oprea MADE security analytics enterprise threat detection ranking;10;ano;MADE otevřen; DSN15 PDF nedostupné (404) -> V1
+2026-10-31;WebSearch;Kruegel Robertson alert verification vulnerability context false positives;10;ano;plný text + ATLANTIDES
+2026-10-31;WebSearch;SOC analysts alert triage time per alert measurement field study;10;ano;jen vendor/anekdoty; cyber-eval survey 1902.00053 použit jako anekdotický zdroj
+2026-10-31;WebSearch;Suricata alerts Zeek logs community_id correlation false positive reduction evaluation;10;ano;pouze Corelight/Brim/blogy -> vendor; žádné měření
+2026-10-31;WebSearch;systematic literature review alert fatigue security operations centers false positives prevalence;10;ano;nalezen survey 2605.08316 (otevřen), ostatní vendor
+2026-10-31;WebSearch;alert correlation limitations does not generalize false negatives lost true alerts correlation filtering intrusion;10;ano;PROTI: jen starší práce; Tedesco (otevřen)
+2026-10-31;WebSearch;deduplication NIDS alerts real deployment study alerts per day university network Snort Suricata;10;ano;nalezeny Gashi et al. 2021/2023 (otevřeny)
+2026-10-31;WebSearch;DeepCase semi-supervised contextual analysis security events van Ede;10;ano;otevřen plný text
+2026-10-31;WebSearch;Landauer Skopik Wurzenberger Dealing with Security Alert Flooding ACM TOPS pdf;10;ne (PDF nenalezen);Landauer 2022 TOPS -> V1
+2026-10-31;WebSearch;Marchetti Pierazzi Colajanni Guido analysis of high volumes of network traffic APT detection host ranking;10;ne (IRIS PDF stažení selhalo);V1
+2026-10-31;WebSearch;Kokulu Matched and Mismatched SOCs qualitative study CCS 2019 pdf;10;ne (PDF nenalezen);V0/V1
+2026-10-31;WebSearch;HOLMES real-time APT detection correlation suspicious information flows alert reduction;10;ano;otevřen plný text
+2026-10-31;WebSearch;Landauer domain-independent alert aggregation ML alert flooding TOPS 2022 reduction meta-alerts results;10;ne;čísla redukce z TOPS nedohledána
+2026-10-31;WebSearch;alert prioritization asset criticality vulnerability context enrichment reduces false positives SIEM evaluation study;10;ano;vedlo na Fraunhofer FKIE RBA; jinak vendor
+2026-10-31;WebSearch;Zeek Suricata combined features ensemble intrusion detection UNSW-NB15 CIC-IDS2017 fusion;10;ano;PROTI: žádná fúze Zeek+Suricata; jen ML ensemble nad flow features (mimo téma)
+2026-10-31;WebSearch;Fraunhofer FKIE risk-based alerting empirical evaluation SIEM rule severity;10;ano;arXiv 2609.02465 otevřen
+2026-10-31;WebSearch;alert aggregation clustering IDS fails to generalize across datasets replication negative result;10;ano;PROTI: žádná replikační studie; jen varianta redukce mezi datasety (V1)
+2026-10-31;WebSearch;risk-based alerting limitations tuning difficulty missed attacks risk score threshold evasion study;10;ano;PROTI: jen dokumentace/blogy výrobců; evaze skóre neměřena
+2026-10-31;WebSearch;machine learning alert triage SOC deployment fails real-world false negatives analyst trust empirical negative findings;10;ano;PROTI: jen simulace/rámce (V1), žádná provozní studie selhání

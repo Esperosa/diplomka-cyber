@@ -1,0 +1,31 @@
+datum;zdroj;dotaz;pocet_vysledku;prohlizeno;poznamka
+2026-10-31;WebSearch;seasonal baseline network anomaly detection false positive rate Holt-Winters evaluation;10;3;Northwestern HW (nerecenzováno), Brauckhoff disertace, spectral
+2026-10-31;WebSearch;EWMA CUSUM network traffic anomaly detection evaluation false alarm Abilene;10;3;Münz&Carle, Callegari (jen shrnutí)
+2026-10-31;WebSearch;conformal prediction anomaly detection network intrusion false alarm rate guarantee arxiv;10;4;PAC-Wrap, nonconform, O-RAN ICML 2026 (jen stránka)
+2026-10-31;WebSearch;concept drift network intrusion detection evaluation performance degradation time CIC-IDS;10;3;"proti: degradace; preprint chrono split, REFINE, ceur"
+2026-10-31;WebSearch;false discovery rate Benjamini-Hochberg intrusion detection anomaly detection many entities;10;4;"Rebjock online FDR, nonconform; nenalezen IDS-specifický článek"
+2026-10-31;WebSearch;Sensitivity of PCA for traffic anomaly detection Ringberg Rexford false positives;10;1;Ringberg 2007
+2026-10-31;WebSearch;Applying PCA for traffic anomaly detection: problems and solutions Brauckhoff;10;2;INFOCOM 2009 plný text nedostupný (403/Anubis)
+2026-10-31;WebSearch;Numenta Anomaly Benchmark real-time anomaly detection evaluation false positives arxiv;10;1;NAB
+2026-10-31;WebSearch;Isolation forest vs simple statistical baseline network flow anomaly detection comparison fails false positive;10;0;"proti: nenalezeno přímé srovnání; patent a lokální repozitář"
+2026-10-31;WebSearch;Outside the closed world: on using machine learning for network intrusion detection Sommer Paxson;10;1;"proti/kritika; PDF nedostupný (ECONNREFUSED), V1"
+2026-10-31;WebSearch;change point detection network traffic PELT BOCPD anomaly evaluation dataset false alarms;10;3;"Lévy-Leduc&Roueff; žádný síťový benchmark PELT vs BOCPD nenalezen"
+2026-10-31;WebSearch;conformal anomaly detection exchangeability violation concept drift weighted conformal p-values distribution shift;10;3;weighted CAD, TSFM ICLR 2026, Eliades (jen shrnutí)
+2026-10-31;WebSearch;Conformal novelty detection with false discovery rate control Bates Candes Lei Romano Sesia;10;2;"Bates et al.; Sesia e-values přečteno, vyřazeno (bez síťové aplikace)"
+2026-10-31;WebSearch;calibration of anomaly scores intrusion detection isotonic Platt temperature scaling expected calibration error network;10;3;CALIBURN, Alalawi IJACSA
+2026-10-31;WebSearch;concept drift network intrusion detection retraining frequency false positive rate temporal evaluation CICIDS2017 CIC-IDS2018 time-aware split;10;3;"proti: chronologický split; INSOMNIA nedostupný"
+2026-10-31;WebSearch;peer group baseline anomaly detection enterprise network hosts similar devices lateral movement LANL dataset false positives;10;4;"Powell, Hopper, Larroche; peer-group baseline pro zařízení nenalezen"
+2026-10-31;WebSearch;anomaly detection network fails false positive rate high base rate intrusion detection base-rate fallacy;10;2;"proti: Erbacher; Axelsson 2000 neotevřen"
+2026-10-31;WebSearch;Soule Salamatian Taft combining filtering and statistical methods for anomaly detection IMC 2005 Abilene false positive;10;1;Soule 2005
+2026-10-31;WebSearch;robust z-score MAD median absolute deviation vs mean standard deviation anomaly detection network traffic outliers evaluation false positives;10;0;nenalezeno síťové měření robustního z-skóre
+2026-10-31;WebSearch;adaptive threshold online anomaly detection cold start new device baseline network telemetry few observations;10;2;"Adaptive NAD; Sun ICML 2024 PDF nedostupný"
+2026-10-31;WebSearch;MAWI traffic anomaly detection evaluation false positive rate statistical detector labeled MAWILab comparison;10;2;"MAWILab HAL nedostupný; Wilmet link stream přečten, vyřazen"
+2026-10-31;WebSearch;INSOMNIA concept drift robustness network intrusion detection pdf results TPR FPR time-aware;10;0;proti/drift: PDF nedostupný (UCL ECONNREFUSED, ACM 403)
+2026-10-31;WebSearch;daily seasonality diurnal traffic baseline reduces false positives flow anomaly detection time-of-day profile evaluation;10;1;"převážně vendor dokumentace (Dynatrace); akademické měření nenalezeno"
+2026-10-31;WebSearch;ADBench anomaly detection benchmark tabular unsupervised methods no universal best kNN isolation forest network intrusion datasets;10;1;ADBench
+2026-10-31;WebSearch;conformal prediction network intrusion detection CICIDS2017 coverage guarantee empirical false positive rate calibration split conformal;10;2;"Li (ta-CP); botnet conformal přečten, vyřazen"
+2026-10-31;WebSearch;temperature scaling calibration network intrusion detection deep learning expected calibration error distribution shift UNSW-NB15 CIC-IDS;10;1;"Alalawi; temperature scaling v IDS nenalezen jako měření"
+2026-10-31;WebSearch;intrusion detection performance degrades over time temporal drift NetFlow dataset months UGR'16 CIC-IDS2018 longitudinal evaluation retraining;10;2;"proti: MAWIFlow; preprints.org nedostupný"
+2026-10-31;WebSearch;alert fatigue false positive rate SOC per-host anomaly baseline thousands of hosts multiple comparisons correction p-values network;10;0;"nenalezeno: FDR pro per-host baseline; jen vendor/survey"
+2026-10-31;WebFetch;(WebFetch) dynatrace seasonal-baseline docs;-;-;vendor, tabulka tvrzení výrobců
+2026-10-31;WebFetch;(WebFetch) ieeexplore 5504793, hal-00620090, dl.acm.org/10.1145/3460120.3484551, core.ac.uk/47289568;-;-;neúspěch: prázdné/403/Anubis
