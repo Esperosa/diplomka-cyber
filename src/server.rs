@@ -544,7 +544,7 @@ fn authorize_for(
             });
         }
         if let Some(expected) = state.api_token.as_deref() {
-            if token == expected {
+            if constant_time_eq(&token, expected) {
                 return Ok(admin_context("static-admin"));
             }
         }
@@ -567,12 +567,32 @@ fn authorize_for(
         ));
     };
     match provided {
-        Some(token) if token == expected => Ok(admin_context("static-admin")),
+        Some(token) if constant_time_eq(&token, expected) => Ok(admin_context("static-admin")),
         _ => Err((
             StatusCode::UNAUTHORIZED,
             "Chybi nebo je neplatny API token.".to_string(),
         )),
     }
+}
+
+/// Audit nalez (31.10.2026, 3-agentni produkcni audit): `token == expected`
+/// pouzivalo `String::eq`, ktere konci na prvnim ruznem bajtu - timing
+/// side-channel proti statickemu API tokenu (vzdalenost odezvy koreluje s
+/// poctem spravne uhodnutych prefix-bajtu). Konstantni-casove porovnani bez
+/// nove zavislosti (bajtova XOR akumulace, zadne branveni na obsahu).
+/// Delka tokenu samotna se nepovažuje za tajnou (standardni praxe - i
+/// `subtle` crate porovnava delky pred samotnym XOR).
+fn constant_time_eq(left: &str, right: &str) -> bool {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (a, b) in left.iter().zip(right.iter()) {
+        diff |= a ^ b;
+    }
+    diff == 0
 }
 
 fn ensure_permissions(
@@ -942,6 +962,26 @@ mod tests {
             platform_db: Arc::new(None),
             automation_process: Arc::new(Mutex::new(None)),
         }
+    }
+
+    #[test]
+    fn constant_time_eq_accepts_identical_tokens() {
+        assert!(constant_time_eq("tajny-token-123", "tajny-token-123"));
+    }
+
+    #[test]
+    fn constant_time_eq_rejects_same_length_different_token() {
+        assert!(!constant_time_eq("tajny-token-123", "tajny-token-124"));
+    }
+
+    #[test]
+    fn constant_time_eq_rejects_different_length_token() {
+        assert!(!constant_time_eq("kratky", "mnohem-delsi-token"));
+    }
+
+    #[test]
+    fn constant_time_eq_rejects_empty_against_nonempty() {
+        assert!(!constant_time_eq("", "neprazdny"));
     }
 
     #[test]
