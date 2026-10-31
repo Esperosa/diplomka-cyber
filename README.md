@@ -4,7 +4,7 @@ Veřejná softwarová příloha mé bakalářské práce na FIM UHK. Prototyp v 
 
 **Role:** návrh a implementace prototypu, webového rozhraní, testů a ověření vydaného balíčku.  
 **Stack:** Rust, Axum, TypeScript/CSS, Nmap, Suricata, Zeek, CPE/CVE/CVSS.  
-**Stav:** vzešlo z bakalářské práce, nyní rozvíjené v navazující diplomové práci směrem k produkční kvalitě (bezpečnostní opravy, Docker nasazení, cross-run identita napříč běhy – viz [produkční plán](docs/diplomka/produkcni-plan.md)); žádné reálné nasazení ještě neproběhlo a některé vrstvy (distribuovaný multi-host provoz, aktivní verification planner) zůstávají otevřené.
+**Stav:** vzešlo z bakalářské práce, nyní rozvíjené v navazující diplomové práci směrem k produkční kvalitě (bezpečnostní opravy, Docker nasazení, cross-run identita napříč běhy – viz [produkční plán](docs/diplomka/produkcni-plan.md)); žádné reálné nasazení ještě neproběhlo a některé vrstvy (distribuovaný multi-host provoz na Postgres, multi-tenant, vlastní packet-path enforcement) zůstávají vědomě odložené s konkrétními spouštěcími podmínkami.
 
 ## Co projekt řeší
 
@@ -73,6 +73,22 @@ potřebuje `--provider nvd` nebo `vulners` + odpovídající API klíč v
 proměnné prostředí (`NVD_API_KEY`, `VULNERS_API_KEY`, `ABUSEIPDB_API_KEY`
 pro intel enrichment) – bez nich (`--provider demo`) report ukazuje
 smyšlený CVE kontext, ne reálný.
+
+## Provozní vrstva: ověřování, zásahy, audit
+
+Vše níže je **bezpečné ve výchozím stavu** – nic nespouští ani neblokuje, dokud to provozovatel výslovně nezapne.
+
+| Co | Jak se zapíná | Čeho se drží |
+|---|---|---|
+| Plán ověření (`verification_plans` v reportu) | vždy, jen zápis | žádná aktivní akce |
+| Vykonání vybraných kontrol | `--execute-verification` | scope se kontroluje znovu při vykonání, kontroly vyžadující schválení (aktivní sken) se nikdy nespustí samy, rozpočet `--verification-max-checks`, odstup mezi kontrolami na stejný cíl, stejná kontrola se nespouští dvakrát |
+| Inkrementální čtení logů | `--incremental-ingest` (u `monitor --continuous` automaticky) | čte jen nové řádky, kurzor se posune až po uloženém běhu, rotace logu je vidět |
+| Zásahy `enforce.block_ip` | API `/api/enforcement/*`, tlačítka v UI | navrhuje analytik, schvaluje operátor/admin; **dry-run je výchozí**, skutečné `nft` jen s `BAKULA_ENFORCEMENT_MODE=enforce` |
+| Audit | vždy | append-only, hash-řetěz (`/api/audit/verify` ověří, že historie nebyla změněna) |
+
+Zásahy upravují **výhradně vlastní** tabulku `inet bakula` v nftables (jen `drop` nad dvěma sety s časovým limitem, takže blok vyprší i při pádu aplikace). Loopback, link-local, multicast a rozsahy z `BAKULA_PROTECTED_RANGES` (brána, DNS, management) nejdou zablokovat ani na výslovnou žádost; TTL má strop 24 h. Nezávislá kontrola každou minutu odstraní prvky v jádře bez aktivní akce a označí akce, jejichž prvek v jádře chybí. `enforce` má smysl jen tam, kde `bakula` běží přímo na bráně s právem `CAP_NET_ADMIN` – v kontejneru bez `--network host` by se blokovala jen síť kontejneru.
+
+Logy jdou na stderr přes `tracing` (`BAKULA_LOG=debug`, `BAKULA_LOG_FORMAT=json`), metriky na `/api/metrics` (Prometheus). API tokeny platformy vypršejí po 90 dnech (`platform token issue --ttl-days N`, `0` = bez vypršení).
 
 **Pojmenování:** projekt vznikal pod pracovním názvem *Bakula*. Ten zůstává v technických identifikátorech – crate a binárka `bakula-program`, konfigurace `bakula.toml`, ID šablon `bakula-*` a název ZIP balíčku ve vydání – aby odpovídaly ověřenému release `v0.1.0-thesis` a odkazům v práci. Jde o tentýž projekt.
 
