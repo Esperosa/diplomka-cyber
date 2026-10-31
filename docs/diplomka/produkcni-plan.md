@@ -255,7 +255,7 @@ Vsichni 3 nezavisle konvergovali ke stejnemu zaveru po videni druhych dvou zprav
 | Structured logging (`tracing`), `external_sql.rs` smazani, FindingKindSpec/mas_* dedup, supply-chain blocking+SBOM, continuous ingest offsety, token expiry | **Dalsi krok, levne, bez kontroverze** | - |
 | Vlastni nftables/eBPF/XDP gateway-agent, DNS RPZ, inline Suricata IPS | Odlozeno (orchestrace existujicich nastroju staci) | realna tap-vs-inline topologie u skutecneho nasazeni |
 | Postgres migrace pro H5 multi-host | Odlozeno | 2. realny control-plane uzel |
-| Multi-tenant (`tenant_id`) | Odlozeno, jen 1-stranovy design dokument tvaru | 2. realny tenant |
+| Multi-tenant (`tenant_id`) | Odlozeno, jen 1-stranovy design dokument tvaru - **hotovo**, `docs/diplomka/eval/multi-tenant-schema-design.md` | 2. realny tenant |
 | mTLS mezi uzly | Odlozeno | enforcement na jinem hostu nez control plane |
 | OIDC | Odlozeno | SSO / 2. operatorska organizace |
 | HA/DR, Kubernetes | Odlozeno | realne SLA / ops tym si vyzada |
