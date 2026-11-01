@@ -1408,7 +1408,13 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     if let Some(session) = v3_session.as_mut() {
         let now = report.run.started_at;
         session
-            .post_findings(&args.workspace, &mut report, &identity_by_host_key, now)
+            .post_findings(
+                &args.workspace,
+                &mut report,
+                &identity_by_host_key,
+                now,
+                args.execute_verification,
+            )
             .map_err(|error| anyhow::Error::new(error).context("Pamet nalezu v3"))?;
     }
     // Case Memory (chybejici soubor = prazdna pamet, nic se nemeni) + historie

@@ -140,22 +140,7 @@ pub fn loo_candidates(run_seed: u64, network_id: u64, attack_ids: &[u32], k: usi
     ranked.into_iter().take(k).map(|(_, id)| id).collect()
 }
 
-/// Typy nalezu odvozene z inventare (ne z provozu): nejsou "poplachy", takze se
-/// nepocitaji do FP/TP behavioralnich nalezu, meri se zvlast (exposure recall).
-fn is_static_exposure(finding_type: &str) -> bool {
-    matches!(
-        finding_type,
-        "plaintext_management_protocol"
-            | "high_risk_cve_exposure"
-            | "known_exploited_vulnerability"
-            | "probable_exploitation_interest"
-            | "identification_gap"
-            | "management_surface_exposure"
-            | "new_exposed_service"
-            | "correlation_uncertainty"
-    ) || finding_type.starts_with("intel:")
-        || finding_type.starts_with("active_check:")
-}
+use crate::finding_kinds::is_static_exposure;
 
 struct SimRunner<'a> {
     model: &'a NetworkModel,

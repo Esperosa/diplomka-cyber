@@ -128,6 +128,14 @@ pub struct RunReport {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub finding_lifecycle: Vec<crate::finding_memory::LifecycleRecord>,
+    /// Engine v3 (žebřík ověřování, krok 2B): rozhodnutí v tomto běhu (potvrzeno,
+    /// vyvráceno, eskalováno člověku) s důvodem po kontrolách. Prázdné v legacy.
+    #[serde(
+        default,
+        rename = "verificationDecisions",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub verification_decisions: Vec<crate::verify_ladder::DecisionRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

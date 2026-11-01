@@ -36,6 +36,23 @@ pub fn is_plaintext_like(finding_type: &str) -> bool {
     PLAINTEXT_LIKE.contains(&finding_type)
 }
 
+/// Typy nálezů odvozené z inventáře (ne z provozu): nejsou poplachy, neověřují se
+/// žebříkem a počítají se zvlášť (expozice). Sdíleno jádrem a soakem.
+pub fn is_static_exposure(finding_type: &str) -> bool {
+    matches!(
+        finding_type,
+        "plaintext_management_protocol"
+            | "high_risk_cve_exposure"
+            | "known_exploited_vulnerability"
+            | "probable_exploitation_interest"
+            | "identification_gap"
+            | "management_surface_exposure"
+            | "new_exposed_service"
+            | "correlation_uncertainty"
+    ) || finding_type.starts_with("intel:")
+        || finding_type.starts_with("active_check:")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

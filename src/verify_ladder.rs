@@ -255,6 +255,79 @@ pub struct Decision {
     pub steps: Vec<(CheckId, &'static str)>,
 }
 
+/// Rozhodnutí v reportu (UI, API, audit).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DecisionRecord {
+    pub finding_id: String,
+    pub finding_type: String,
+    pub status: Status,
+    pub posterior: f64,
+    pub checks: usize,
+    pub reason: String,
+}
+
+impl From<&Decision> for DecisionRecord {
+    fn from(d: &Decision) -> Self {
+        Self {
+            finding_id: d.finding_id.clone(),
+            finding_type: d.finding_type.clone(),
+            status: d.status,
+            posterior: d.posterior,
+            checks: d.checks,
+            reason: d.reason.clone(),
+        }
+    }
+}
+
+/// Záznam reputačního zdroje (`reputation.json` ve workspace): síť, verdikt, zdroj,
+/// expirace. Plní člověk nebo import feedu (Pásmo B); chybějící soubor = vše neznámé.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReputationEntry {
+    pub net: ipnet::IpNet,
+    /// `bad` | `good`
+    pub verdict: String,
+    pub source: String,
+    pub expires: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct StaticReputation {
+    entries: Vec<ReputationEntry>,
+}
+
+impl StaticReputation {
+    pub fn new(entries: Vec<ReputationEntry>) -> Self {
+        Self { entries }
+    }
+
+    pub fn load(path: &std::path::Path) -> crate::error::Result<Self> {
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let text = std::fs::read_to_string(path)?;
+        let entries: Vec<ReputationEntry> =
+            serde_json::from_str(&text).map_err(crate::error::BakulaError::Json)?;
+        Ok(Self::new(entries))
+    }
+
+    /// Nejužší platná shoda; vypršelé záznamy se ignorují.
+    pub fn lookup(&self, ip: &str, at: chrono::DateTime<chrono::Utc>) -> Reputation {
+        let Ok(addr) = ip.parse::<std::net::IpAddr>() else {
+            return Reputation::Unknown;
+        };
+        self.entries
+            .iter()
+            .filter(|e| e.expires > at && e.net.contains(&addr))
+            .max_by_key(|e| e.net.prefix_len())
+            .map(|e| match e.verdict.as_str() {
+                "bad" => Reputation::Bad(e.source.clone()),
+                "good" => Reputation::Good(e.source.clone()),
+                _ => Reputation::Unknown,
+            })
+            .unwrap_or(Reputation::Unknown)
+    }
+}
+
 /// Věrohodnostní poměry (volba autora, kvalitativní síla důkazu; měří se v A/B).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]

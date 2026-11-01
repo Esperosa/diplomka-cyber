@@ -112,9 +112,36 @@ fn v3_memory_shows_first_occurrence_and_suppresses_repeat_across_processes() {
         "opakovany stejny stav se podruhe nema zobrazit: {second:?}"
     );
 
+    // krok 2D: typ zarizeni v modelu hostu (API vraci report.json)
+    let hosts = runs[0]["hosts"].as_array().expect("hosts");
+    assert!(
+        hosts
+            .iter()
+            .all(|h| h["device_class"]["kind"].is_string()
+                && h["device_class"]["reasons"].is_array()),
+        "kazdy host ma typ, jistotu a duvody"
+    );
+    // krok 2B: stav zebriku prezije mezi procesy (otevrene pripady, rozhodnuti v reportu)
+    let conn = rusqlite::Connection::open(workspace.join("engine-state.sqlite")).unwrap();
+    let ladder: String = conn
+        .query_row("SELECT value FROM kv WHERE name = 'ladder'", [], |r| {
+            r.get(0)
+        })
+        .expect("stav zebriku ulozen");
+    assert!(ladder.contains("\"policy\""));
+
     let legacy = temp.path().join("ws-legacy");
     run(&legacy, &scenarios, "legacy");
     let runs = reports(&legacy);
     assert!(runs[0].get("findingLifecycle").is_none());
+    assert!(runs[0].get("verificationDecisions").is_none());
+    assert!(
+        runs[0]["hosts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|h| h.get("device_class").is_none()),
+        "legacy vystup beze zmeny"
+    );
     assert!(!legacy.join("engine-state.sqlite").exists());
 }

@@ -132,6 +132,8 @@ pub(crate) struct V3StatefulDetector {
     now: chrono::DateTime<chrono::Utc>,
     /// IP -> peer skupina (typ zarizeni a podsit, krok 2D); prazdne = bez skupin.
     peer_groups: std::collections::HashMap<String, String>,
+    /// Souhrn okna pro ulozenou historii toku (L0 zebriku, krok 2B).
+    summary: std::sync::Mutex<Option<crate::flow_history::WindowSummary>>,
 }
 
 impl V3StatefulDetector {
@@ -152,7 +154,16 @@ impl V3StatefulDetector {
             known_hosts,
             now,
             peer_groups,
+            summary: std::sync::Mutex::new(None),
         }
+    }
+
+    /// Souhrn posledního okna toků (pro `flow_history`), pokud detekce proběhla.
+    pub(crate) fn take_summary(&self) -> Option<crate::flow_history::WindowSummary> {
+        self.summary
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
     }
 
     /// Stav detektoru a dominantní zdroje posledního běhu.
@@ -195,6 +206,8 @@ impl ConnectionDetector for V3StatefulDetector {
             &self.peer_groups,
         );
         *self.sources.lock().unwrap_or_else(|p| p.into_inner()) = out.sources;
+        let summary = crate::flow_history::summarize(&connections, &hosts);
+        *self.summary.lock().unwrap_or_else(|p| p.into_inner()) = Some(summary);
         out.events
     }
 }
