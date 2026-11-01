@@ -22,6 +22,7 @@ pub mod evaluation;
 pub mod finding_kinds;
 pub mod finding_memory;
 pub mod findings;
+pub mod flow_history;
 pub mod fusion;
 pub mod hypothesis;
 pub mod identity;
@@ -52,6 +53,7 @@ pub mod validation;
 pub mod verification;
 pub mod verification_exec;
 pub mod verification_planner;
+pub mod verify_ladder;
 pub mod vuln;
 pub mod webscan;
 
