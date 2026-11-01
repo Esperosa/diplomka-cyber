@@ -263,10 +263,10 @@ try {
     }
   });
 
-  await test("Cisla: velka cisla jsou bodove pismo s aria-label a spojenymi body", async () => {
+  await test("Cisla: velka cisla jsou bodove pismo s aria-label, jeden goo path (uzly spojene metaball mosty)", async () => {
     const { page, context } = await open(base);
-    const info = await page.evaluate(() => { const svg = document.querySelector(".readout-num .dm"); return { label: svg?.getAttribute("aria-label"), links: Boolean(svg?.querySelector("path[d^='M']")), circles: svg?.querySelectorAll("circle").length }; });
-    assert(info.label && /^\d+$/.test(info.label) && info.links && info.circles > 3, `bodove cislo je spatne: ${JSON.stringify(info)}`);
+    const info = await page.evaluate(() => { const svg = document.querySelector(".readout-num .dm"); return { label: svg?.getAttribute("aria-label"), paths: svg?.querySelectorAll("path").length, lines: svg?.querySelectorAll("line, circle").length, curves: (svg?.querySelector("path")?.getAttribute("d") ?? "").split("C").length - 1 }; });
+    assert(info.label && /^\d+$/.test(info.label) && info.paths === 1 && info.lines === 0 && info.curves > 3, `bodove cislo je spatne: ${JSON.stringify(info)}`);
     await context.close();
   });
 

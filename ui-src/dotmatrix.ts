@@ -1,7 +1,10 @@
-// Vlastni pismo z teček: kazdy znak je KOSTRA z malo uzlu (kruhu) spojenych zaoblenymi tahy.
+// Vlastni pismo z teček: kazdy znak je KOSTRA z malo uzlu (kruhu) spojenych metaball mosty (goo hrdla).
 // B ma 8 uzlu, H 6, I 2. Zadne pismo z cizich zdroju, zadny raster ani rasterovy filtr: znak je kruhy
 // a jedna cesta (path) s kulatymi konci a zaoblenymi rohy, barva z currentColor. Pri kazdem zvetseni,
 // scrollu a zmene velikosti je stejny. Mrizka znaku: 4 x 6 jednotek.
+
+import { metaballBridge } from "./metaball";
+import type { P } from "./pebbles";
 
 type Pt = [number, number];
 /** Tah: body kostry; "z" na konci uzavre tah do smycky. */
@@ -80,42 +83,11 @@ export type DotOptions = {
 };
 
 const ADVANCE = 6;
-const CORNER = 0.9; // polomer zaobleni rohu tahu
-const BEAD = 0.62; // polomer uzlu
-const WIDTH = 1.04; // sirka tahu
+const BEAD = 0.66; // polomer uzlu
+const NECK = 0.78; // sirka krcku mostu (cca 0,6 prumeru uzlu)
 
 const f = (v: number) => +v.toFixed(2);
-
-/** Cesta tahu se zaoblenymi rohy (kvadraticka krivka pres roh, G1 napojeni na rovne useky). */
-function strokePath(stroke: Stroke, dx: number): string {
-  const closed = stroke[stroke.length - 1] === "z";
-  const pts = stroke.filter((p): p is Pt => p !== "z").map((p) => [p[0] + dx, p[1]] as Pt);
-  const n = pts.length;
-  if (n < 2) return "";
-  const cut = (v: Pt, to: Pt): Pt => {
-    const len = Math.hypot(to[0] - v[0], to[1] - v[1]) || 1;
-    const t = Math.min(CORNER, len / 2) / len;
-    return [v[0] + (to[0] - v[0]) * t, v[1] + (to[1] - v[1]) * t];
-  };
-  if (!closed) {
-    let d = `M${f(pts[0][0])} ${f(pts[0][1])}`;
-    for (let i = 1; i < n - 1; i += 1) {
-      const a = cut(pts[i], pts[i - 1]);
-      const b = cut(pts[i], pts[i + 1]);
-      d += `L${f(a[0])} ${f(a[1])}Q${f(pts[i][0])} ${f(pts[i][1])} ${f(b[0])} ${f(b[1])}`;
-    }
-    return `${d}L${f(pts[n - 1][0])} ${f(pts[n - 1][1])}`;
-  }
-  const start = cut(pts[0], pts[1]);
-  let d = `M${f(start[0])} ${f(start[1])}`;
-  for (let k = 1; k <= n; k += 1) {
-    const i = k % n;
-    const a = cut(pts[i], pts[(i - 1 + n) % n]);
-    const b = cut(pts[i], pts[(i + 1) % n]);
-    d += `L${f(a[0])} ${f(a[1])}Q${f(pts[i][0])} ${f(pts[i][1])} ${f(b[0])} ${f(b[1])}`;
-  }
-  return `${d}Z`;
-}
+const circle = (x: number, y: number, r: number) => `M${f(x + r)} ${f(y)}A${r} ${r} 0 1 1 ${f(x - r)} ${f(y)}A${r} ${r} 0 1 1 ${f(x + r)} ${f(y)}Z`;
 
 /** Pocet uzlu znaku (pro kontrolu a testy): jedinecne body vsech tahu plus samostatne tecky. */
 export function glyphNodeCount(char: string): number {
@@ -129,25 +101,41 @@ export function glyphNodeCount(char: string): number {
 
 /**
  * Vraci SVG retezec. Velikost se ridi CSS (vyska prvku), ne atributy. Hodnota je v aria-label.
- * Kazdy znak: kruhy v uzlech kostry + jedna cesta zaoblenych tahu (bez filtru).
+ * Znak = uzly kostry (kruhy) spojene metaball mosty (sdilena funkce metaballBridge): konkavni krcek,
+ * Bezierovy krivky navazujici G1 na oblouky kruznic. Vse je JEDEN souvisly path bez cary mezi body.
  */
 export function dotMatrix(text: string, _options: DotOptions = {}): string {
   const chars = [...normalizeForMatrix(String(text))];
-  const pad = BEAD + 0.25;
+  const pad = BEAD + 0.2;
   const cols = Math.max(1, chars.length * ADVANCE - (ADVANCE - 4));
-  let paths = "";
-  let beads = "";
+  let d = "";
   chars.forEach((char, index) => {
     const glyph = GLYPHS[char] ?? GLYPHS["?"];
     const dx = index * ADVANCE;
-    paths += glyph.strokes.map((s) => strokePath(s, dx)).join("");
-    const nodes = new Map<string, Pt>();
-    for (const s of glyph.strokes) for (const p of s) if (p !== "z") nodes.set(`${p[0]},${p[1]}`, [p[0] + dx, p[1]]);
-    for (const p of glyph.extra ?? []) nodes.set(`${p[0]},${p[1]}`, [p[0] + dx, p[1]]);
-    for (const [x, y] of nodes.values()) beads += `<circle cx="${f(x)}" cy="${f(y)}" r="${BEAD}"/>`;
+    const nodes = new Map<string, P>();
+    const edges = new Set<string>();
+    const add = (p: Pt) => {
+      const k = `${p[0]},${p[1]}`;
+      if (!nodes.has(k)) nodes.set(k, { x: p[0] + dx, y: p[1] });
+      return k;
+    };
+    for (const stroke of glyph.strokes) {
+      const closed = stroke[stroke.length - 1] === "z";
+      const pts = stroke.filter((p): p is Pt => p !== "z");
+      const keys = pts.map(add);
+      for (let i = 0; i + 1 < keys.length; i += 1) edges.add([keys[i], keys[i + 1]].sort().join("|"));
+      if (closed && keys.length > 2) edges.add([keys[keys.length - 1], keys[0]].sort().join("|"));
+    }
+    for (const p of glyph.extra ?? []) add(p);
+    for (const n of nodes.values()) d += circle(n.x, n.y, BEAD);
+    for (const e of edges) {
+      const [ka, kb] = e.split("|");
+      const a = nodes.get(ka)!;
+      const b = nodes.get(kb)!;
+      d += metaballBridge(a, BEAD, b, BEAD, NECK)?.d ?? "";
+    }
   });
-  const path = paths ? `<path d="${paths}" fill="none" stroke="currentColor" stroke-width="${WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>` : "";
-  return `<svg class="dm" viewBox="${f(-pad)} ${f(-pad)} ${f(cols + 2 * pad)} ${f(6 + 2 * pad)}" role="img" aria-label="${escapeAttr(String(text))}" focusable="false"><g>${beads}</g>${path}</svg>`;
+  return `<svg class="dm" viewBox="${f(-pad)} ${f(-pad)} ${f(cols + 2 * pad)} ${f(6 + 2 * pad)}" role="img" aria-label="${escapeAttr(String(text))}" focusable="false"><path d="${d}"/></svg>`;
 }
 
 function escapeAttr(value: string) {
