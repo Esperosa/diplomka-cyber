@@ -98,6 +98,89 @@ pub fn generate_findings(report: &RunReport) -> Vec<Finding> {
     deduplicate_findings(findings)
 }
 
+/// Engine v3 (krok 1C, R13): nálezy, které legacy pravidla neznají. `scan_attempts`
+/// = pokusy bez odpovědi přičtené ZDROJI (sken, průzkum), připojené k nejčastějšímu
+/// cíli. Legacy detektor tyto události nevydává, takže legacy výstup se nemění.
+pub fn v3_extra_findings(report: &RunReport) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    for host in &report.hosts {
+        for service in &host.services {
+            let events: Vec<_> = service
+                .events
+                .iter()
+                .filter(|item| item.event.event_type == "scan_attempts")
+                .collect();
+            let Some(strongest) = events.iter().max_by_key(|item| item.event.severity) else {
+                continue;
+            };
+            findings.push(Finding {
+                finding_id: build_finding_id(
+                    "scan_attempts",
+                    Some(&host.host_key),
+                    Some(&service.service_key),
+                ),
+                finding_type: "scan_attempts".to_string(),
+                title: format!(
+                    "Na cíl {} míří opakované pokusy o spojení bez odpovědi (sken)",
+                    service.service_key
+                ),
+                severity: strongest.event.severity,
+                confidence: Confidence::Medium,
+                host_key: Some(host.host_key.clone()),
+                service_key: Some(service.service_key.clone()),
+                rationale:
+                    "Jeden zdroj zkouší mnoho cílů nebo portů a nedostává odpověď; pokusy se přičítají zdroji, ne cílové službě."
+                        .to_string(),
+                evidence: build_protocol_evidence(service, "scan_attempts"),
+                recommendation:
+                    "Ověřit, zda je zdroj autorizovaný skener; jinak omezit jeho přístup a prověřit, zda nenásleduje úspěšné spojení."
+                        .to_string(),
+            });
+        }
+    }
+    findings
+}
+
+/// Engine v3 (krok 1C, audit A13): `unmapped_passive_event` se neskládá po
+/// jednotlivých událostech (id obsahovalo `event_id` s počtem, takže každý cyklus
+/// vznikl nový nález), ale jeden nález na (cíl, protokol, port, typ události).
+pub fn aggregate_unmapped_findings(findings: &mut Vec<Finding>, report: &RunReport) {
+    let by_event: std::collections::HashMap<&str, &crate::model::CorrelatedEvent> = report
+        .unmapped_events
+        .iter()
+        .map(|event| (event.event.event_id.as_str(), event))
+        .collect();
+    let prefix = "finding:unmapped_passive_event:-:";
+    for finding in findings.iter_mut() {
+        if finding.finding_type != "unmapped_passive_event" {
+            continue;
+        }
+        let Some(event) = finding
+            .finding_id
+            .strip_prefix(prefix)
+            .and_then(|id| by_event.get(id))
+        else {
+            continue;
+        };
+        let e = &event.event;
+        let target = format!(
+            "{}/{}/{}",
+            e.dst_ip,
+            e.proto,
+            e.dst_port
+                .map(|p| p.to_string())
+                .unwrap_or_else(|| "-".into())
+        );
+        finding.finding_id = format!(
+            "finding:unmapped_passive_event:{}:{target}:{}",
+            e.dst_ip, e.event_type
+        );
+        finding.service_key = Some(target);
+    }
+    let mut seen = BTreeSet::new();
+    findings.retain(|finding| seen.insert(finding.finding_id.clone()));
+}
+
 /// Pasivni udalost bez mapovani na aktivni inventar.
 fn rule_unmapped_passive_event(report: &RunReport, findings: &mut FindingSink) {
     for event in &report.unmapped_events {
