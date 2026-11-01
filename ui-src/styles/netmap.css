@@ -238,14 +238,28 @@
 .is-far .zl-cnt {
   display: none;
 }
+.zlw text {
+  stroke-width: calc(7px * var(--u));
+}
 .zl-o {
   opacity: 0;
 }
-.zone.is-open .zl-o {
+.zlw.is-open .zl-o {
   opacity: 1;
 }
-.zone.is-open .zl-c {
+.zlw.is-open .zl-c {
   opacity: 0;
+}
+.zlw {
+  transition: opacity var(--dur-slow) var(--ease-soft), visibility 0s linear 0s;
+}
+.zlw.is-away {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-base) var(--ease-soft), visibility 0s linear var(--dur-slow);
+}
+.zlw.is-empty {
+  opacity: 0.32;
 }
 
 /* ---- zarizeni: tekute bubliny ---- */

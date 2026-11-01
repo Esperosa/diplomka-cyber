@@ -16,8 +16,9 @@ export type BridgeGeometry = {
 /**
  * @param neck   sirka mostu uprostred (v jednotkach mapy)
  * @param maxGap volny odstup okraju kruhu, nad kterym se most prerusi (null = nikdy)
+ * @param openA  true = cesta nezahrnuje kruh a (jen krcek ven z nej, uzavreny kratkym obloukem po okraji a)
  */
-export function metaballBridge(a: P, ra: number, b: P, rb: number, neck: number, maxGap: number | null = null): BridgeGeometry | null {
+export function metaballBridge(a: P, ra: number, b: P, rb: number, neck: number, maxGap: number | null = null, openA = false): BridgeGeometry | null {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const d = Math.hypot(dx, dy);
@@ -67,7 +68,7 @@ export function metaballBridge(a: P, ra: number, b: P, rb: number, neck: number,
     const q = g(p);
     return `${f2(q.x)},${f2(q.y)}`;
   };
-  const dstr = `M${t(P1u)}C${t(Q1u)} ${t(Q2u)} ${t(P2u)}A${f2(rb)},${f2(rb)} 0 1 1 ${t(P2l)}C${t(Q2l)} ${t(Q1l)} ${t(P1l)}A${f2(ra)},${f2(ra)} 0 1 1 ${t(P1u)}Z`;
+  const dstr = `M${t(P1u)}C${t(Q1u)} ${t(Q2u)} ${t(P2u)}A${f2(rb)},${f2(rb)} 0 1 1 ${t(P2l)}C${t(Q2l)} ${t(Q1l)} ${t(P1l)}A${f2(ra)},${f2(ra)} 0 ${openA ? "0 0" : "1 1"} ${t(P1u)}Z`;
   const dir = (from: P, to: P): P => {
     const l = Math.hypot(to.x - from.x, to.y - from.y) || 1;
     return { x: (to.x - from.x) / l, y: (to.y - from.y) / l };

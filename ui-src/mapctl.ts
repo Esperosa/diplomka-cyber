@@ -352,6 +352,12 @@ function paint(c: Ctx) {
     zoneEl.classList.toggle("is-away", st.away.has(key));
     const z = c.model.zoneByKey.get(key)!;
     zoneEl.classList.toggle("is-empty", isOpen && st.attr && !z.items.some((i) => matching.has(i.key)));
+    const lw = svg.querySelector<SVGGElement>(`.zlw[data-zone="${CSS.escape(key)}"]`);
+    if (lw) {
+      lw.classList.toggle("is-open", isOpen);
+      lw.classList.toggle("is-away", st.away.has(key));
+      lw.classList.toggle("is-empty", zoneEl.classList.contains("is-empty"));
+    }
     const bub = zoneEl.querySelector<SVGGElement>(".zbub");
     bub?.setAttribute("aria-pressed", String(f.zones.includes(key)));
   }

@@ -129,6 +129,25 @@ function zoneComposition(zone: Zone): string {
   return `<g class="zinner">${segs}${glyphs}</g>`;
 }
 
+/** Svisly odstup zakladny nazvu zony pod stredem: za oblouk rizika (Rb + 11 + polovina tloustky) a vysku pisma. */
+const LABEL_DY = 38;
+
+/** Popisky zony jsou ve vlastni vrstve NAD cestou skoku (nezavisle na skupine zony); okno si prebira tridy zony. */
+function zoneLabels(zone: Zone): string {
+  const n = zone.items.length;
+  const sevText = SEV_TEXT[zone.sevMax];
+  return `<g class="zlw" data-zone="${esc(zone.key)}">
+    <g class="zl zl-c" transform="translate(${f1(zone.cx)} ${f1(zone.cy + zone.Rb + LABEL_DY)})">
+      <text class="zl-name" y="0">${esc(zone.label)}</text>
+      <text class="zl-sub" y="0" dy="1.35em">${esc(zone.sub)}</text>
+      <text class="zl-cnt" y="0" dy="2.7em">${n} zařízení · ${zone.findings} nálezů${zone.sevMax ? ` · ${sevText}` : ""}</text>
+    </g>
+    <g class="zl zl-o" transform="translate(${f1(zone.cx)} ${f1(zone.cy - zone.Rd - 8)})">
+      <text class="zl-name" y="0">${esc(zone.label)} · ${n} zařízení</text>
+    </g>
+  </g>`;
+}
+
 function zoneMarkup(model: NetModel, zone: Zone, selected: string | null): string {
   const n = zone.items.length;
   const fieldD = blobPath(zoneSeed(model, zone), 1, 0.045, 13);
@@ -181,14 +200,6 @@ function zoneMarkup(model: NetModel, zone: Zone, selected: string | null): strin
         <title>${esc(aria)}</title>
         <circle class="zhit" r="${f1(zone.Rb + 18)}"/>
       </g>
-    </g>
-    <g class="zl zl-c" transform="translate(${f1(zone.cx)} ${f1(zone.cy + zone.Rb + 22)})">
-      <text class="zl-name" y="0">${esc(zone.label)}</text>
-      <text class="zl-sub" y="0" dy="1.35em">${esc(zone.sub)}</text>
-      <text class="zl-cnt" y="0" dy="2.7em">${n} zařízení · ${zone.findings} nálezů${zone.sevMax ? ` · ${sevText}` : ""}</text>
-    </g>
-    <g class="zl zl-o" transform="translate(${f1(zone.cx)} ${f1(zone.cy - zone.Rd - 8)})">
-      <text class="zl-name" y="0">${esc(zone.label)} · ${n} zařízení</text>
     </g>
     <g class="nodes">${nodes}</g>
   </g>`;
@@ -253,8 +264,8 @@ function routeLayer(stops: Stop[], idPrefix: string, reduced: boolean): { svg: s
     const id = `${idPrefix}${i}`;
     defs += `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${f1(seg.s.x)}" y1="${f1(seg.s.y)}" x2="${f1(seg.e.x)}" y2="${f1(seg.e.y)}"><stop offset="0" class="hg-e"/><stop offset="0.16" class="hg-f"/><stop offset="0.84" class="hg-f"/><stop offset="1" class="hg-e"/></linearGradient>`;
     // vstup cesty do uzlu: tekuty krček (metaball) od okraje uzlu k prvni a posledni tecce, bez sve
-    const sockA = metaballBridge(seg.a.p, seg.a.core, seg.s, 3.4, 2.4)?.d ?? "";
-    const sockB = metaballBridge(seg.b.p, seg.b.core, seg.e, 3.4, 2.4)?.d ?? "";
+    const sockA = metaballBridge(seg.a.p, seg.a.core, seg.s, 3.4, 2.4, null, true)?.d ?? "";
+    const sockB = metaballBridge(seg.b.p, seg.b.core, seg.e, 3.4, 2.4, null, true)?.d ?? "";
     paths += `<path class="hop-seg hop-sock" data-a="${esc(seg.a.key)}" data-b="${esc(seg.b.key)}" data-za="${esc(seg.a.zoneKey ?? "")}" data-zb="${esc(seg.b.zoneKey ?? "")}" d="${sockA}${sockB}"/>`;
     paths += `<path class="hop-seg" data-a="${esc(seg.a.key)}" data-b="${esc(seg.b.key)}" data-za="${esc(seg.a.zoneKey ?? "")}" data-zb="${esc(seg.b.zoneKey ?? "")}" stroke="url(#${id})" d="M${f1(seg.s.x)},${f1(seg.s.y)}C${f1(seg.c1.x)},${f1(seg.c1.y)} ${f1(seg.c2.x)},${f1(seg.c2.y)} ${f1(seg.e.x)},${f1(seg.e.y)}"/>`;
   });
@@ -337,8 +348,14 @@ function hopMarks(model: NetModel, stops: Stop[], level: "node" | "zone"): strin
       ax -= d.x;
       ay -= d.y;
     }
-    const ang = ax || ay ? Math.atan2(ay, ax) : -2.3;
+    let ang = ax || ay ? Math.atan2(ay, ax) : -2.3;
     const rr = e.stop.r + (level === "zone" ? 16 : 17);
+    if (level === "zone") {
+      // popisky zon, brany i vnejsich adres jsou POD bublinou: odznak smi nejvyse 20 stupnu pod vodorovnou osou,
+      // takze na popisek nemuze padnout, at je text jakkoli siroky nebo mapa jakkoli priblizena
+      const lim = 0.34;
+      if (Math.sin(ang) > lim) ang = Math.cos(ang) >= 0 ? -lim : -Math.PI + lim;
+    }
     const x = e.stop.p.x + Math.cos(ang) * rr;
     const y = e.stop.p.y + Math.sin(ang) * rr;
     const first = model.hops.find((h) => e.nos.includes(h.index))!;
@@ -436,7 +453,7 @@ export function renderNetMap(model: NetModel, selected: string | null, runId: st
     .join("");
   const gooFixed = `<path class="zbridge" d="${bridgePath(model.internet, 30, model.gate, gate ? 21 : 15, 14, 5)}"/><circle class="g-net" cx="${model.internet.x}" cy="${model.internet.y}" r="30"/>${gate ? "" : `<circle class="g-gate" cx="${model.gate.x}" cy="${model.gate.y}" r="15"/>`}`;
 
-  return `<svg class="netmap no-anim" viewBox="${vb}" data-vb="${vb}" data-run="${esc(runId)}" role="group" aria-label="Mapa sítě. Tabulátor vstoupí na mapu, šipky přeskakují mezi podsítěmi a zařízeními, Enter rozbalí podsíť nebo vybere zařízení, Esc se vrací o úroveň zpět, plus a mínus přibližují, nula zobrazí celou mapu." preserveAspectRatio="none">
+  return `<svg class="netmap no-anim" viewBox="${vb}" data-vb="${vb}" data-run="${esc(runId)}" role="group" aria-label="Mapa sítě. Tabulátor vstoupí na mapu, šipky přeskakují mezi podsítěmi a zařízeními, Enter rozbalí podsíť nebo vybere zařízení, Esc se vrací o úroveň zpět, plus a mínus přibližují, nula zobrazí celou mapu." preserveAspectRatio="xMidYMid meet">
     <defs>${nodeRoute.defs}${zoneRoute.defs}</defs>
     <g class="links">${gooFixed}</g>
     <g class="sel-links"></g>
@@ -444,6 +461,7 @@ export function renderNetMap(model: NetModel, selected: string | null, runId: st
     <g class="zones">${zones}</g>
     <g class="route-node">${nodeRoute.svg}</g>
     <g class="route-zone">${zoneRoute.svg}</g>
+    <g class="zlabels">${model.zones.map(zoneLabels).join("")}</g>
     <g class="overlay">${internet}${gateLabel}${outsiderOverlay}${gateOverlay}</g>
     <g class="marks marks-node">${hopMarks(model, nodeStops, "node")}</g>
     <g class="marks marks-zone">${hopMarks(model, zoneStops, "zone")}</g>
