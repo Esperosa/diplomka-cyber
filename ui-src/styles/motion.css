@@ -1,129 +1,24 @@
 /* Pohybovy system: vsechny prechody pouzivaji tokeny z tokens.css (--dur-*, --ease-*, --stagger).
    Animuje se transform, opacity a clip-path; vyjimka je sloupec asistenta (--as-col). */
 
-/* ---- Prechod mezi plochami: klidne prelevani ----
-   Stara plocha se zklidni (ztlumi a jemne rozostri), nova se tekute rozevre z "membrany" s mekce
-   zaoblenymi okraji, ktera se pomalu narovna; obsah vstupuje po vrstvach se zpozdenim.
-   Jedna krivka s dlouhym dozvukem, bez odskoku, bez dvou plne viditelnych ploch pres sebe. */
+/* ---- Prechod mezi plochami: goo rozlevani ----
+   Nova plocha je hned hotova pod starou. Stara plocha (snimek v .stage-ghost) se ustupem stahuje
+   zvlnenou hranou (clip-path polygon, tvar pocita main.ts), takze se nova rozlije jako kapalina.
+   Jedna krivka s dozvukem (--ease-soft), jen clip-path a opacity. */
 .stage {
-  view-transition-name: stage;
+  position: relative;
 }
-.dock {
-  view-transition-name: dock; /* dok zije dal: jeho kapka se behem prechodu dokonci */
-}
-::view-transition-group(root),
-::view-transition-group(dock) {
-  animation: none;
-}
-::view-transition-old(root),
-::view-transition-old(dock) {
-  display: none;
-}
-::view-transition-new(root),
-::view-transition-new(dock) {
-  animation: none;
-}
-::view-transition-group(stage) {
-  animation-duration: 0s;
-}
-::view-transition-old(stage),
-::view-transition-new(stage) {
-  mix-blend-mode: normal;
-  animation-duration: var(--dur-page);
-  animation-fill-mode: both;
-}
-::view-transition-old(stage) {
-  animation-name: vt-calm-out;
-  animation-timing-function: var(--ease-soft);
-}
-::view-transition-new(stage) {
-  animation-name: vt-melt-in;
-  animation-timing-function: var(--ease-soft);
-}
-html[data-vt="up"]::view-transition-new(stage) {
-  animation-name: vt-melt-in-up;
-}
-@keyframes vt-calm-out {
-  0% {
-    opacity: 1;
-    filter: blur(0);
-  }
-  42%,
-  100% {
-    opacity: 0;
-    filter: blur(5px);
-  }
-}
-@keyframes vt-melt-in {
-  0% {
-    opacity: 0;
-    clip-path: inset(7% 3.5% 0 3.5% round 5.5rem 7rem 4rem 6rem / 6rem 4rem 7rem 5rem);
-    transform: translate3d(0, 1.6rem, 0);
-  }
-  30% {
-    opacity: 0;
-  }
-  62% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 1;
-    clip-path: inset(0 0 0 0 round 2.6rem 3.8rem 2.2rem 3.1rem / 2.8rem 2.2rem 3.6rem 2.5rem);
-    transform: none;
-  }
-}
-@keyframes vt-melt-in-up {
-  0% {
-    opacity: 0;
-    clip-path: inset(0 3.5% 7% 3.5% round 4rem 6rem 5.5rem 7rem / 7rem 5rem 4rem 6rem);
-    transform: translate3d(0, -1.6rem, 0);
-  }
-  30% {
-    opacity: 0;
-  }
-  62% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 1;
-    clip-path: inset(0 0 0 0 round 2.6rem 3.8rem 2.2rem 3.1rem / 2.8rem 2.2rem 3.6rem 2.5rem);
-    transform: none;
-  }
-}
-/* obsah noveho panelu vstupuje po vrstvach */
-@keyframes layer-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 0.9rem, 0);
-    filter: blur(3px);
-  }
-}
-html[data-vt] .stage > *,
-.stage.enter-down > *,
-.stage.enter-up > * {
-  animation: layer-in var(--dur-slow) var(--ease-soft) both;
-  animation-delay: calc(var(--dur-fast) + var(--stagger) * var(--layer, 0));
-}
-html[data-vt] .stage > :nth-child(2),
-.stage.enter-down > :nth-child(2),
-.stage.enter-up > :nth-child(2) {
-  --layer: 1;
-}
-html[data-vt] .stage > :nth-child(3),
-.stage.enter-down > :nth-child(3),
-.stage.enter-up > :nth-child(3) {
-  --layer: 2;
-}
-html[data-vt] .stage > :nth-child(n + 4),
-.stage.enter-down > :nth-child(n + 4),
-.stage.enter-up > :nth-child(n + 4) {
-  --layer: 3;
-}
-.stage.enter-down {
-  animation: vt-melt-in var(--dur-page) var(--ease-soft) both;
-}
-.stage.enter-up {
-  animation: vt-melt-in-up var(--dur-page) var(--ease-soft) both;
+.stage-ghost {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--surface);
+  will-change: clip-path;
 }
 
 /* ---- Dialogy, toast, rozbalovani ---- */

@@ -2,7 +2,7 @@ import { api, getToken, setAuthHandler, setToken } from "./api";
 import { renderLog, sendPrompt, setAssistantOpen, shellHtml, watchAssistantLayout } from "./assistant";
 import { FILTER_DEFS } from "./filters";
 import { infoBandHtml } from "./infoband";
-import { afterStageRender, initRipple } from "./motion";
+import { afterStageRender, initRipple, tokenMs } from "./motion";
 import { refreshAll, refreshAudit, refreshEnforcement } from "./data";
 import { tokenDialog } from "./dialogs";
 import { parseHash, navigate } from "./router";
@@ -270,34 +270,67 @@ function applyRoute(focusStage: boolean) {
 // Dolu v doku = nova plocha prijede zespodu, nahoru = shora. View Transitions API; kde chybi,
 // stejny pohyb zajisti CSS trida na .stage. Bez animace pri prefers-reduced-motion.
 let shellReady = false;
-let transitionEpoch = 0;
+let ghostAnim: Animation | null = null;
 function indexOf(id: SectionId) {
   return VIEWS.findIndex((view) => view.id === id);
 }
+
+// Zvlnena hrana: polygon s pevnym poctem bodu (aby se dal prolinat). Front se posouva o 0..1 vysky,
+// vlna se s postupem posouva a na zacatku i na konci utichá (obalka sin(pi u)).
+const WAVE_N = 36;
+function waveShape(u: number, dir: "down" | "up", w: number, h: number): string {
+  const amp = (0.075 * Math.sin(Math.PI * Math.min(1, u * 1.05)) + 0.012) * h;
+  const phase = u * Math.PI * 3.4;
+  const pts: string[] = [];
+  const pad = amp * 1.5 + 2;
+  // down: nova plocha vyrusta zespodu, stara zustava nahore (oblast nad frontem)
+  // front se pohybuje z (h + pad) do (-pad), u stare plochy zbyva cast nad frontem
+  const front = dir === "down" ? (h + pad) * (1 - u) - pad * u : -pad + (h + 2 * pad) * u;
+  for (let i = 0; i <= WAVE_N; i += 1) {
+    const x = (i / WAVE_N) * w;
+    const y = front + amp * Math.sin((i / WAVE_N) * Math.PI * 2.6 + phase) + amp * 0.35 * Math.sin((i / WAVE_N) * Math.PI * 5.3 - phase * 1.3);
+    pts.push(`${x.toFixed(1)}px ${y.toFixed(1)}px`);
+  }
+  if (dir === "down") return `polygon(0px -10px, ${w}px -10px, ${[...pts].reverse().join(", ")})`;
+  return `polygon(0px ${h + 10}px, ${w}px ${h + 10}px, ${[...pts].reverse().join(", ")})`;
+}
+
+/** Vytvori snimek stare plochy (nad novou) a stahne ho zvlnenou hranou. Nezavisle na View Transitions API. */
 function transitionSections(direction: "down" | "up", commit: () => void) {
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  ghostAnim?.cancel();
+  stage.querySelectorAll(".stage-ghost").forEach((g) => g.remove());
   if (reduced) {
     commit();
     return;
   }
-  const root = document.documentElement;
-  root.dataset.vt = direction;
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };
-  if (doc.startViewTransition) {
-    const t = doc.startViewTransition(commit);
-    void t.finished.catch(() => undefined).finally(() => {
-      if (root.dataset.vt === direction) delete root.dataset.vt;
-    });
-    return;
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  const ghost = document.createElement("div");
+  ghost.className = "stage-ghost";
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.setAttribute("inert", "");
+  const offset = stage.scrollTop;
+  ghost.style.top = `${offset}px`;
+  ghost.style.height = `${h}px`;
+  for (const child of Array.from(stage.children)) {
+    const copy = child.cloneNode(true) as HTMLElement;
+    copy.removeAttribute("id");
+    copy.querySelectorAll("[id]").forEach((n) => n.removeAttribute("id"));
+    ghost.appendChild(copy);
   }
   commit();
-  const epoch = ++transitionEpoch;
-  stage.classList.remove("enter-down", "enter-up");
-  void stage.offsetWidth;
-  stage.classList.add(direction === "down" ? "enter-down" : "enter-up");
-  window.setTimeout(() => {
-    if (epoch === transitionEpoch) stage.classList.remove("enter-down", "enter-up");
-  }, 520);
+  stage.appendChild(ghost);
+  const frames = Array.from({ length: 16 }, (_, i) => ({ clipPath: waveShape(i / 15, direction, w, h), offset: i / 15 }));
+  const duration = tokenMs("--dur-page", 540) - 40;
+  const anim = ghost.animate(frames, { duration, easing: "cubic-bezier(0.4, 0.1, 0.2, 1)", fill: "forwards" });
+  ghostAnim = anim;
+  const done = () => {
+    ghost.remove();
+    if (ghostAnim === anim) ghostAnim = null;
+  };
+  anim.onfinish = done;
+  anim.oncancel = done;
 }
 
 async function switchRun(runId: string) {
