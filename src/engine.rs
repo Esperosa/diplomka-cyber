@@ -70,17 +70,13 @@ pub struct V3Features {
     /// Typ zařízení v jádru: kontext ověřování a ochrana křehkých zařízení (krok 2D).
     pub devices: bool,
     /// Peer baseline detektoru podle typu zařízení a podsítě (krok 2D, zvlášť měřeno).
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub peers: bool,
-}
-
-fn default_true() -> bool {
-    true
 }
 
 impl Default for V3Features {
     fn default() -> Self {
-        Self::all()
+        Self::recommended()
     }
 }
 
@@ -112,6 +108,15 @@ impl V3Features {
             learning: true,
             devices: true,
             peers: true,
+        }
+    }
+
+    /// Doporučené (výchozí) nastavení v3: vše kromě peer baseline detektoru, která
+    /// v párovém A/B kroku 2 neměla měřitelný přínos (impl-krok2.md, D).
+    pub fn recommended() -> Self {
+        Self {
+            peers: false,
+            ..Self::all()
         }
     }
 
@@ -204,7 +209,7 @@ impl EngineConfig {
     pub fn v3() -> Self {
         Self {
             mode: EngineMode::V3,
-            v3: V3Features::all(),
+            v3: V3Features::recommended(),
         }
     }
 

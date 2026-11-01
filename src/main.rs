@@ -929,7 +929,7 @@ fn main() -> anyhow::Result<()> {
             cfg.legs = !args.no_legs;
             cfg.engine = bakula_program::engine::EngineConfig {
                 mode: args.engine.parse().map_err(anyhow::Error::msg)?,
-                v3: bakula_program::engine::V3Features::all()
+                v3: bakula_program::engine::V3Features::recommended()
                     .disable_list(&args.v3_off)
                     .map_err(anyhow::Error::msg)?,
             };
