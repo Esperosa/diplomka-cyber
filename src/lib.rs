@@ -17,6 +17,7 @@ pub mod error;
 pub mod eval;
 pub mod evaluation;
 pub mod finding_kinds;
+pub mod finding_memory;
 pub mod findings;
 pub mod fusion;
 pub mod hypothesis;
