@@ -2,6 +2,7 @@ import { askAssistantStream, type AssistantContext } from "./api";
 import { state, update } from "./state";
 import type { ChatMessage } from "./types";
 import { esc } from "./ui";
+import { tokenMs } from "./motion";
 
 const SECTION_TO_PANEL: Record<string, string> = {
   prehled: "assets",
@@ -56,88 +57,113 @@ export function renderLog() {
   log.scrollTop = log.scrollHeight;
 }
 
-const CLOSE_MS = 360;
-let closeTimer = 0;
-
 function reducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 /**
- * Spocita bod, ze ktereho se karta chatu "zhmotni" (stred tlacitka Asistent), vuci jejimu KONECNEMU
- * umisteni (sloupec se v tu chvili jeste roztahuje). Jedno cteni layoutu, pak jen zapis promennych.
+ * Zvlnena kapka: polygon se stejnym poctem bodu (aby se dal prolinat), stred v mistě tlacitka, polomer
+ * roste od nuly nad nejvzdalenejsi roh, okraj se vlni a ke konci vyhladi do kruhu.
  */
-function placeAssistant() {
-  const panel = document.getElementById("assistant");
-  const card = panel?.querySelector<HTMLElement>(".assistant-card");
-  if (!panel || !card) return;
-  const phone = window.matchMedia("(max-width: 64.06rem)").matches;
-  const btn = document.querySelector<HTMLElement>("[data-global='assistant-toggle']")?.getBoundingClientRect();
-  const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  let left: number, top: number, width: number, height: number;
-  if (phone) {
-    left = 0;
-    top = 0;
-    width = window.innerWidth;
-    height = window.innerHeight;
-  } else {
-    const dock = document.getElementById("dock")?.getBoundingClientRect();
-    const asW = parseFloat(getComputedStyle(card).getPropertyValue("--as-w")) || 0;
-    const w = asW || Math.min(Math.max(window.innerWidth * 0.3, 22 * rootPx), 28 * rootPx);
-    width = card.offsetWidth || w;
-    width = Math.min(Math.max(width, w), w);
-    left = window.innerWidth - rootPx - width;
-    top = dock?.top ?? 0;
-    height = (dock?.height ?? window.innerHeight) - rootPx;
+function blobFrames(cx: number, cy: number, w: number, h: number): Keyframe[] {
+  const rmax = Math.hypot(Math.max(cx, w - cx), Math.max(cy, h - cy)) * 1.12 + 24;
+  const frames: Keyframe[] = [];
+  const steps = 14;
+  const points = 36;
+  for (let i = 0; i <= steps; i += 1) {
+    const u = i / steps;
+    const wob = 0.16 * Math.sin(Math.PI * Math.min(1, u * 1.1)) ** 1.2;
+    const pts: string[] = [];
+    for (let k = 0; k < points; k += 1) {
+      const th = (k / points) * Math.PI * 2;
+      const r = rmax * u * (1 + wob * Math.sin(3 * th + u * 5) + wob * 0.55 * Math.sin(5 * th - u * 7));
+      pts.push(`${(cx + Math.cos(th) * r).toFixed(1)}px ${(cy + Math.sin(th) * r).toFixed(1)}px`);
+    }
+    frames.push({ clipPath: `polygon(${pts.join(", ")})`, offset: u });
   }
-  const clamp = (v: number, max: number) => Math.min(Math.max(v, 0), max);
-  const ox = btn ? clamp(btn.left + btn.width / 2 - left, width) : width;
-  const oy = btn ? clamp(btn.top + btn.height / 2 - top, height) : 0;
-  card.style.setProperty("--c-t", `${oy.toFixed(0)}px`);
-  card.style.setProperty("--c-l", `${ox.toFixed(0)}px`);
-  card.style.setProperty("--c-r", `${(width - ox).toFixed(0)}px`);
-  card.style.setProperty("--c-b", `${(height - oy).toFixed(0)}px`);
+  return frames;
 }
 
-export function watchAssistantLayout() {
-  if (typeof ResizeObserver === "undefined") return;
-  const observer = new ResizeObserver(() => {
-    if (state.assistantOpen) placeAssistant();
-  });
-  for (const sel of [".bar", "#errorbar"]) {
-    const el = document.querySelector(sel);
-    if (el) observer.observe(el);
-  }
-  window.addEventListener("resize", () => state.assistantOpen && placeAssistant());
+let animations: Animation[] = [];
+let finishClose: (() => void) | null = null;
+
+function cancelAnimations() {
+  for (const a of animations) a.cancel();
+  animations = [];
+  finishClose?.();
+  finishClose = null;
 }
 
 /**
- * Otevre/zavre asistenta. Okno se zhmotni z tlacitka (clip-path + posun, bez odskoku), po otevreni
- * dostane fokus pole zpravy, po zavreni se fokus vrati na tlacitko. Bez animace u prefers-reduced-motion.
+ * Otevre/zavre asistenta technikou FLIP. Sloupec layoutu se prepne hned na konecny stav (jedno
+ * prepocitani), hlavni plocha se animuje pres transform z puvodniho obdelniku a karta se zhmotni z tlacitka
+ * zvlnenou hranou (clip-path). Po otevreni dostane fokus pole zpravy, po zavreni se fokus vrati na tlacitko.
  */
 export function setAssistantOpen(open: boolean, returnFocus = false) {
   update({ assistantOpen: open }, false);
   const panel = document.getElementById("assistant");
-  if (!panel) return;
+  const card = panel?.querySelector<HTMLElement>(".assistant-card");
+  const stage = document.getElementById("stage") ?? document.querySelector<HTMLElement>(".stage");
+  if (!panel || !card) return;
   const toggle = document.querySelector<HTMLElement>("[data-global='assistant-toggle']");
   toggle?.setAttribute("aria-expanded", String(open));
-  window.clearTimeout(closeTimer);
-  document.body.classList.toggle("assistant-open", open);
+  cancelAnimations();
+  const phone = window.matchMedia("(max-width: 64.06rem)").matches;
+  const animate = !reducedMotion();
+  const before = stage?.getBoundingClientRect();
+  const btn = toggle?.getBoundingClientRect();
+  const duration = tokenMs("--dur-slow", 440);
+  const easing = "cubic-bezier(0.3, 0.7, 0.2, 1)";
+
   if (open) {
     panel.hidden = false;
     renderLog();
-    placeAssistant(); // vynuti vypocet vychoziho (zavreneho) stavu, aby prechod mel odkud startovat
+    panel.classList.remove("is-closing");
+    document.body.classList.add("assistant-open");
     panel.classList.add("is-open");
     panel.removeAttribute("inert");
-    document.getElementById("chatInput")?.focus({ preventScroll: true });
-    return;
+  } else {
+    panel.classList.remove("is-open");
+    panel.setAttribute("inert", "");
+    document.body.classList.remove("assistant-open");
+    if (animate) panel.classList.add("is-closing");
   }
-  placeAssistant();
-  panel.classList.remove("is-open");
-  panel.setAttribute("inert", "");
-  if (returnFocus) toggle?.focus({ preventScroll: true });
-  if (reducedMotion()) panel.hidden = true;
-  else closeTimer = window.setTimeout(() => (panel.hidden = true), CLOSE_MS);
+  const flip = () => {
+    if (!animate) {
+      if (!open) panel.hidden = true;
+      return;
+    }
+    const after = stage?.getBoundingClientRect(); // jedno cteni layoutu po prepnuti sloupce
+    const c = card.getBoundingClientRect();
+    if (stage && before && after && !phone && after.width > 0) {
+      const dx = before.left - after.left;
+      const sx = before.width / after.width;
+      animations.push(stage.animate([{ transform: `translate3d(${dx}px, 0, 0) scale(${sx}, 1)` }, { transform: "none" }], { duration, easing }));
+    }
+    const cx = btn ? btn.left + btn.width / 2 - c.left : c.width;
+    const cy = btn ? btn.top + btn.height / 2 - c.top : 0;
+    let frames = blobFrames(Math.min(Math.max(cx, 0), c.width), Math.min(Math.max(cy, 0), c.height), c.width, c.height);
+    if (!open) frames = [...frames].reverse().map((f, i, arr) => ({ ...f, offset: i / (arr.length - 1) }));
+    const anim = card.animate(frames, { duration, easing, fill: open ? "none" : "forwards" });
+    animations.push(anim);
+    if (!open) {
+      finishClose = () => {
+        panel.hidden = true;
+        panel.classList.remove("is-closing");
+      };
+      anim.onfinish = () => {
+        finishClose?.();
+        finishClose = null;
+      };
+    }
+  };
+  flip();
+  if (open) document.getElementById("chatInput")?.focus({ preventScroll: true });
+  else if (returnFocus) toggle?.focus({ preventScroll: true });
+}
+
+export function watchAssistantLayout() {
+  // Rozlozeni se pocita pri kazdem otevreni z aktualnich rozmeru, neni treba nic sledovat.
 }
 
 export async function sendPrompt(prompt: string) {

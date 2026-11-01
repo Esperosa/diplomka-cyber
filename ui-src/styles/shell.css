@@ -10,12 +10,14 @@
     "dock err as"
     "dock stage as";
   overflow: hidden;
-  /* zavirani: plocha se roztahuje o chlup rychleji a bez dojezdu */
-  transition: --as-col var(--dur-base) var(--ease-inout);
 }
+/* Sloupec asistenta se prepne okamzite na konecnou sirku (jedno prepocitani layoutu).
+   Plynuly pohyb zajisti assistant.ts technikou FLIP: transform hlavni plochy a clip-path karty. */
 .assistant-open .shell {
   --as-col: calc(var(--as-w) + 1rem);
-  transition: --as-col var(--dur-slow) var(--ease-out);
+}
+.stage {
+  transform-origin: 0 0;
 }
 
 .bar {
@@ -504,14 +506,14 @@
   min-height: 0;
 }
 
-/* Asistent je treti sloupec obrazovky: sloupec se plynule rozevre (--as-col na .shell, viz vyse),
-   hlavni plocha se zuzi a karta chatu se zhmotni z mista tlacitka (clip-path + posun zprava).
-   Karta ma pevnou sirku, takze se text pri animaci nepreskupuje. --c-* nastavuje assistant.ts. */
+/* Asistent je treti sloupec obrazovky. Sloupec se prepne hned; hlavni plocha se do nove sirky
+   animuje pres transform (FLIP) a karta chatu se zhmotni z mista tlacitka zvlnenou hranou
+   (clip-path polygon z assistant.ts). Karta ma pevnou sirku, takze se text nepreskupuje. */
 .assistant {
   grid-area: as;
   position: relative;
   min-width: 0;
-  overflow: hidden;
+  z-index: 6;
 }
 .assistant-card {
   position: absolute;
@@ -526,25 +528,11 @@
   border-radius: var(--r-pane);
   overflow: hidden;
   visibility: hidden;
-  opacity: 0;
-  transform: translate3d(2rem, 0, 0);
-  clip-path: inset(var(--c-t, 0) var(--c-r, 0) var(--c-b, 100%) var(--c-l, 100%) round 50%);
-  transition:
-    clip-path var(--dur-base) var(--ease-inout),
-    transform var(--dur-base) var(--ease-inout),
-    opacity var(--dur-fast) linear var(--dur-fast),
-    visibility 0s linear var(--dur-base);
+  will-change: clip-path;
 }
-.assistant.is-open .assistant-card {
+.assistant.is-open .assistant-card,
+.assistant.is-closing .assistant-card {
   visibility: visible;
-  opacity: 1;
-  transform: none;
-  clip-path: inset(0 0 0 0 round 0%);
-  transition:
-    clip-path var(--dur-slow) var(--ease-out),
-    transform var(--dur-slow) var(--ease-out),
-    opacity var(--dur-fast) linear,
-    visibility 0s;
 }
 .assistant-card > * {
   opacity: 0;
@@ -555,14 +543,7 @@
   transition: opacity var(--dur-base) linear calc(var(--dur-fast) + var(--stagger));
 }
 @media (prefers-reduced-motion: reduce) {
-  .assistant-card,
-  .assistant.is-open .assistant-card,
   .assistant-card > * {
-    transition: none !important;
-    clip-path: none;
-    transform: none;
-  }
-  .shell {
     transition: none !important;
   }
 }
@@ -757,10 +738,6 @@
     width: auto;
     border: 0;
     border-radius: 0;
-    transform: translate3d(100%, 0, 0);
-  }
-  .assistant.is-open .assistant-card {
-    transform: none;
   }
 }
 
