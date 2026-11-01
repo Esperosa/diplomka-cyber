@@ -254,6 +254,91 @@ pub fn execute_plans(
     results
 }
 
+// --- stavova fronta planu (krok 2B, audit A23/A24) -------------------------------
+
+/// Fronta ověřovacích plánů mezi cykly: plán, na který nezbyl rozpočet, se nezahodí,
+/// ale počká na další cyklus (dřív `skipped_budget` = navždy neověřeno, 90,6 % plánů
+/// v2b). Idempotence: stejná dvojice (typ hypotézy, assety) je ve frontě nejvýš
+/// jednou. Ohraničení: při přeplnění se zahodí nejstarší (a započítá jako mimo rozpočet).
+#[derive(Debug, Default)]
+pub struct PlanQueue {
+    queue: std::collections::VecDeque<HypothesisVerificationPlan>,
+    keys: std::collections::HashSet<(String, Vec<String>)>,
+    pub dropped: u64,
+    pub deferred: u64,
+}
+
+impl PlanQueue {
+    pub const MAX: usize = 5_000;
+
+    fn key(plan: &HypothesisVerificationPlan) -> (String, Vec<String>) {
+        (plan.hypothesis_type.clone(), plan.in_scope_assets.clone())
+    }
+
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+
+    /// Přidá plán, pokud už stejný nečeká. Vrací `true` při přidání.
+    pub fn push(&mut self, plan: HypothesisVerificationPlan) -> bool {
+        let key = Self::key(&plan);
+        if self.keys.contains(&key) {
+            return false;
+        }
+        if self.queue.len() >= Self::MAX {
+            if let Some(old) = self.queue.pop_front() {
+                self.keys.remove(&Self::key(&old));
+                self.dropped += 1;
+            }
+        }
+        self.keys.insert(key);
+        self.queue.push_back(plan);
+        true
+    }
+
+    /// Vykoná plány z čela fronty v rozpočtu; plány, které narazily na rozpočet,
+    /// se vrátí do fronty (na čelo, aby neztratily pořadí).
+    pub fn run(
+        &mut self,
+        hosts: &[HostReport],
+        scope: &ScopePolicy,
+        budget: &ExecutionBudget,
+        runner: &dyn CheckRunner,
+    ) -> Vec<VerificationResult> {
+        let batch: Vec<HypothesisVerificationPlan> = self.queue.drain(..).collect();
+        self.keys.clear();
+        let results = execute_plans(&batch, hosts, scope, budget, runner);
+        let mut retry: Vec<HypothesisVerificationPlan> = Vec::new();
+        let mut done: Vec<VerificationResult> = Vec::new();
+        let mut cursor = 0usize;
+        for plan in batch {
+            if plan.plan.chosen.is_none() {
+                continue;
+            }
+            let n = plan.in_scope_assets.len();
+            let mine = &results[cursor..(cursor + n).min(results.len())];
+            cursor += n;
+            if mine.iter().any(|r| r.status == "skipped_budget") {
+                self.deferred += 1;
+                retry.push(plan);
+            }
+            done.extend(
+                mine.iter()
+                    .filter(|r| r.status != "skipped_budget")
+                    .cloned(),
+            );
+        }
+        for plan in retry {
+            self.push(plan);
+        }
+        done
+    }
+}
+
 // --- uceni z vysledku: Case Memory + historie vykonani -------------------------
 
 /// Co se z behu naucilo (jen pocty, pro log/testy).
@@ -572,6 +657,41 @@ mod tests {
             &Recording::new(false),
         );
         assert!(results.is_empty());
+    }
+
+    /// Krok 2B: plán bez rozpočtu se nezahodí, počká na další cyklus; stejný plán
+    /// je ve frontě jednou.
+    #[test]
+    fn plan_queue_defers_instead_of_dropping_and_is_idempotent() {
+        let runner = Recording::new(false);
+        let budget = ExecutionBudget {
+            max_checks_per_run: 1,
+            ..fast_budget()
+        };
+        let mut queue = PlanQueue::default();
+        for ip in ["192.168.1.10", "192.168.1.11", "192.168.1.12"] {
+            assert!(queue.push(plan(
+                "new_exposed_service",
+                "cve_intel_relookup",
+                false,
+                &[ip]
+            )));
+        }
+        assert!(!queue.push(plan(
+            "new_exposed_service",
+            "cve_intel_relookup",
+            false,
+            &["192.168.1.10"]
+        )));
+        let first = queue.run(&[], &scope(), &budget, &runner);
+        assert_eq!(first.len(), 1);
+        assert_eq!(queue.len(), 2, "zbytek ceka");
+        let second = queue.run(&[], &scope(), &budget, &runner);
+        let third = queue.run(&[], &scope(), &budget, &runner);
+        assert_eq!(second.len() + third.len(), 2);
+        assert!(queue.is_empty());
+        assert_eq!(queue.dropped, 0);
+        assert_eq!(runner.calls.lock().unwrap().len(), 3);
     }
 }
 

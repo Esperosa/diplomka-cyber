@@ -42,6 +42,10 @@ use crate::{
     flow_history::Recurrence,
 };
 
+/// Výchozí apriorní pravděpodobnost útoku u behaviorálního nálezu bez naučeného
+/// odhadu (volba autora; v kroku 2C ji nahrazuje kalibrovaný odhad Case Memory).
+pub const DEFAULT_PRIOR: f64 = 0.15;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Level {
     L0,
@@ -212,6 +216,13 @@ pub struct Case {
     deferred: u32,
     pub status: Status,
     benign_evidence: bool,
+    /// Cykly po otevření, ve kterých se nález znovu objevil (L2 přetrvání).
+    #[serde(default)]
+    seen_after_open: u32,
+    #[serde(default)]
+    same_source_seen: bool,
+    #[serde(default)]
+    last_seen_cycle: u64,
 }
 
 impl Case {
@@ -234,6 +245,10 @@ pub struct Decision {
     pub reason: String,
     pub checks: usize,
     pub budget_escalation: bool,
+    /// Vysoký dopad: zobrazeno už při otevření.
+    pub high_impact: bool,
+    /// Provedené kontroly a značka výsledku (pro měření a učení LR, krok 2C).
+    pub steps: Vec<(CheckId, &'static str)>,
 }
 
 /// Věrohodnostní poměry (volba autora, kvalitativní síla důkazu; měří se v A/B).
@@ -286,7 +301,8 @@ pub struct LadderPolicy {
     pub p_refute: f64,
     /// Přísnější mez vyvrácení pro vysoký dopad (Dodatek A.2 c).
     pub p_refute_high_impact: f64,
-    /// Strop počtu provedených kontrol na případ (RQ3 Překlad bod 2: 3 až 10).
+    /// Strop počtu provedených kontrol na případ (RQ3 Překlad bod 2: 3 až 10; plán
+    /// má nejvýš 9 kontrol, většina jsou levné pasivní dotazy).
     pub max_checks: usize,
     /// Rozpočet ceny kontrol za cyklus a strop aktivních kontrol.
     pub budget_per_cycle: f64,
@@ -309,8 +325,8 @@ impl Default for LadderPolicy {
             p_confirm: 0.9,
             p_refute: 0.03,
             p_refute_high_impact: 0.01,
-            max_checks: 6,
-            budget_per_cycle: 25.0,
+            max_checks: 8,
+            budget_per_cycle: 500.0,
             active_per_cycle: 10,
             explore: 0.15,
             persistence_wait: 2,
@@ -342,7 +358,6 @@ pub trait LadderEvidence {
     fn device(&self, ip: &str) -> Option<DeviceClass>;
     /// (zasažení peer členové se stejným typem nálezu, velikost peer skupiny).
     fn peers(&self, case: &CaseInput) -> Option<(usize, usize)>;
-    fn persistence(&self, case: &CaseInput, since_cycle: u64) -> Persistence;
     fn liveness(&mut self, case: &CaseInput) -> Liveness;
     fn neighbors(&self, ip: &str) -> Vec<String>;
     fn in_scope(&self, ip: &str) -> bool;
@@ -448,19 +463,33 @@ fn checks_for(input: &CaseInput) -> Vec<CheckId> {
 }
 
 /// Plán kontrol: po úrovních (nejlevnější první), uvnitř úrovně náhodně podle tajného
-/// klíče a klíče případu (RQ3 Z11). L2 přetrvání je až za ostatními kontrolami L2.
+/// klíče a klíče případu (RQ3 Z11). Přetrvání (L2) je úplně poslední: stojí čas, ne
+/// zdroje, a okamžité kontroly (L3 dostupnost služby při výpadku) by po čekání
+/// viděly už jiný stav.
 fn plan_for(input: &CaseInput, secret: u64) -> VecDeque<CheckId> {
     let mut checks = checks_for(input);
     let salt = mix(secret ^ hash_text(&input.finding_id));
     checks.sort_by_key(|check| {
         let wait_last = (*check == CheckId::Persistence) as u8;
         (
-            check.level(),
             wait_last,
+            check.level(),
             mix(salt ^ hash_text(check.label())),
         )
     });
     checks.into_iter().collect()
+}
+
+/// Značka výsledku kontroly pro měření a učení (`benign`, `malicious`, `undetermined`,
+/// `unavailable`).
+pub fn outcome_tag(outcome: &Outcome) -> &'static str {
+    match outcome {
+        Outcome::Evidence { lr, .. } if *lr < 1.0 => "benign",
+        Outcome::Evidence { .. } => "malicious",
+        Outcome::Undetermined(_) => "undetermined",
+        Outcome::Unavailable(_) => "unavailable",
+        Outcome::Wait(_) => "wait",
+    }
 }
 
 fn is_fragile(class: &Option<DeviceClass>) -> bool {
@@ -555,10 +584,28 @@ impl Ladder {
                 deferred: 0,
                 status: Status::Open,
                 benign_evidence: false,
+                seen_after_open: 0,
+                same_source_seen: false,
+                last_seen_cycle: cycle,
             },
         );
         self.stats.cases_opened += 1;
         true
+    }
+
+    /// Nález s otevřeným případem se v cyklu znovu objevil (vstup pro L2 přetrvání).
+    pub fn observe(&mut self, key: &FindingKey, sources: &[String], cycle: u64) {
+        let Some(case) = self.cases.get_mut(key) else {
+            return;
+        };
+        if cycle <= case.last_seen_cycle {
+            return;
+        }
+        case.last_seen_cycle = cycle;
+        case.seen_after_open += 1;
+        if sources.iter().any(|s| case.input.sources.contains(s)) {
+            case.same_source_seen = true;
+        }
     }
 
     /// Zruší případ (nález uzavřel člověk nebo kontext).
@@ -672,10 +719,18 @@ impl Ladder {
         let case = self.cases.get(key)?;
         let input = case.input.clone();
         let opened = case.opened;
+        let persistence = if case.seen_after_open == 0 {
+            Persistence::Gone
+        } else {
+            Persistence::Recurring {
+                cycles: case.seen_after_open,
+                same_source: case.same_source_seen,
+            }
+        };
         let outcome = evaluate(
             check,
             &input,
-            opened,
+            (opened, persistence),
             cycle,
             env,
             &lr,
@@ -687,13 +742,7 @@ impl Ladder {
             .checks_by_level
             .entry(check.level().label().to_string())
             .or_default() += 1;
-        let tag = match &outcome {
-            Outcome::Evidence { lr, .. } if *lr < 1.0 => "benign",
-            Outcome::Evidence { .. } => "malicious",
-            Outcome::Undetermined(_) => "undetermined",
-            Outcome::Unavailable(_) => "unavailable",
-            Outcome::Wait(_) => "wait",
-        };
+        let tag = outcome_tag(&outcome);
         *self
             .stats
             .outcomes
@@ -798,6 +847,12 @@ impl Ladder {
             },
             checks: case.steps.len(),
             budget_escalation: budget,
+            high_impact: case.input.high_impact,
+            steps: case
+                .steps
+                .iter()
+                .map(|step| (step.check, outcome_tag(&step.outcome)))
+                .collect(),
         })
     }
 }
@@ -806,7 +861,7 @@ impl Ladder {
 fn evaluate(
     check: CheckId,
     input: &CaseInput,
-    opened: u64,
+    (opened, persistence): (u64, Persistence),
     cycle: u64,
     env: &mut dyn LadderEvidence,
     lr: &LrTable,
@@ -915,7 +970,7 @@ fn evaluate(
             if cycle < opened + policy.persistence_wait {
                 return Outcome::Wait(opened + policy.persistence_wait);
             }
-            match env.persistence(input, opened) {
+            match persistence {
                 Persistence::Recurring {
                     cycles,
                     same_source: true,
@@ -1008,6 +1063,29 @@ fn evaluate(
     }
 }
 
+/// Klíč metriky v historii toků pro typ nálezu (L0). `service` = `ip/proto/port`.
+pub fn history_key_for(
+    finding_type: &str,
+    service: Option<&str>,
+    entity_ip: &str,
+    sources: &[String],
+) -> Option<String> {
+    use crate::flow_history::{Metric, key};
+    match finding_type {
+        "inductive_volume_anomaly"
+        | "packet_rate_spike"
+        | "service_overload_risk"
+        | "unexpected_traffic" => service.map(|s| key(s, Metric::ServiceFlows)),
+        "connection_timeout_burst" | "service_unreachable" => {
+            service.map(|s| key(s, Metric::ServiceFailures))
+        }
+        "scan_attempts" => sources.first().map(|s| key(s, Metric::SourceAttempts)),
+        "multi_target_pattern" => Some(key(entity_ip, Metric::SourceFanout)),
+        "source_volume_outlier" => sources.first().map(|s| key(s, Metric::SourceFlows)),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1019,7 +1097,6 @@ mod tests {
         context: Option<String>,
         bad: HashSet<String>,
         peers: Option<(usize, usize)>,
-        persistence: Option<Persistence>,
         liveness: Option<Liveness>,
         device: Option<DeviceClass>,
         edges: HashMap<String, Vec<String>>,
@@ -1056,9 +1133,6 @@ mod tests {
         fn peers(&self, _: &CaseInput) -> Option<(usize, usize)> {
             self.peers
         }
-        fn persistence(&self, _: &CaseInput, _: u64) -> Persistence {
-            self.persistence.unwrap_or(Persistence::Gone)
-        }
         fn liveness(&mut self, _: &CaseInput) -> Liveness {
             self.liveness_calls += 1;
             self.liveness.clone().unwrap_or(Liveness::Up)
@@ -1090,7 +1164,19 @@ mod tests {
     }
 
     fn run_until_decided(ladder: &mut Ladder, env: &mut Env) -> Decision {
+        run_observed(ladder, env, &[])
+    }
+
+    /// Jako `run_until_decided`, ale nález se každý cyklus znovu objeví se `sources`.
+    fn run_observed(ladder: &mut Ladder, env: &mut Env, sources: &[&str]) -> Decision {
+        let sources: Vec<String> = sources.iter().map(|s| s.to_string()).collect();
+        let keys: Vec<FindingKey> = ladder.cases.keys().cloned().collect();
         for cycle in 0..20 {
+            if !sources.is_empty() {
+                for key in &keys {
+                    ladder.observe(key, &sources, cycle);
+                }
+            }
             if let Some(d) = ladder.step(cycle, env).into_iter().next() {
                 return d;
             }
@@ -1134,17 +1220,13 @@ mod tests {
         let mut env = Env {
             recurrence: Some(Recurrence::New { history_days: 5 }),
             bad: ["203.0.113.9".to_string()].into_iter().collect(),
-            persistence: Some(Persistence::Recurring {
-                cycles: 3,
-                same_source: true,
-            }),
             ..Env::default()
         };
         ladder.open(
             input("source_volume_outlier", "10.0.0.5", &["203.0.113.9"]),
             0,
         );
-        let decision = run_until_decided(&mut ladder, &mut env);
+        let decision = run_observed(&mut ladder, &mut env, &["203.0.113.9"]);
         assert_eq!(decision.status, Status::Escalated, "{}", decision.reason);
         assert!(decision.posterior > 0.8);
 
@@ -1153,17 +1235,13 @@ mod tests {
             kev: true,
             recurrence: Some(Recurrence::New { history_days: 5 }),
             bad: ["203.0.113.9".to_string()].into_iter().collect(),
-            persistence: Some(Persistence::Recurring {
-                cycles: 3,
-                same_source: true,
-            }),
             ..Env::default()
         };
         ladder.open(
             input("source_volume_outlier", "10.0.0.5", &["203.0.113.9"]),
             0,
         );
-        let decision = run_until_decided(&mut ladder, &mut env);
+        let decision = run_observed(&mut ladder, &mut env, &["203.0.113.9"]);
         assert_eq!(decision.status, Status::Confirmed, "{}", decision.reason);
         assert!(decision.posterior >= 0.9);
     }
@@ -1225,7 +1303,7 @@ mod tests {
         let out = evaluate(
             CheckId::Pivot,
             &case,
-            0,
+            (0, Persistence::Gone),
             0,
             &mut env,
             &policy.lr,
@@ -1272,7 +1350,13 @@ mod tests {
             plan_for(&case, secret).into_iter().collect::<Vec<_>>()
         };
         assert_eq!(order(1), order(1));
-        let levels: Vec<Level> = order(1).iter().map(|c| c.level()).collect();
+        let plan = order(1);
+        assert_eq!(
+            plan.last(),
+            Some(&CheckId::Persistence),
+            "cekani az nakonec"
+        );
+        let levels: Vec<Level> = plan[..plan.len() - 1].iter().map(|c| c.level()).collect();
         let mut sorted = levels.clone();
         sorted.sort();
         assert_eq!(levels, sorted, "urovne od nejlevnejsi");

@@ -40,10 +40,20 @@ pub struct V3Runtime {
     sources: SourceMap,
     /// IP -> peer skupina (typ zarizeni + podsit), obnovuje se po kazdem skenu (krok 2D).
     pub peer_groups: std::collections::HashMap<String, String>,
+    /// IP -> typ zarizeni z posledniho skenu (krok 2D).
+    pub device_classes: std::collections::HashMap<String, crate::device_class::DeviceClass>,
+    /// Ulozena historie toku (L0, krok 2B).
+    pub history: crate::flow_history::FlowHistory,
+    /// Zebrik overovani (krok 2B).
+    pub ladder: crate::verify_ladder::Ladder,
+    /// Nalez otevreneho pripadu (jen mereni: pozdni zobrazeni po rozhodnuti).
+    pub case_findings:
+        std::collections::HashMap<crate::finding_memory::FindingKey, crate::model::Finding>,
 }
 
 impl V3Runtime {
-    pub fn new(engine: EngineConfig) -> Result<Self> {
+    /// `secret` = tajny klic zebriku (nahodne poradi kontrol, RQ3 Z11).
+    pub fn new(engine: EngineConfig, secret: u64) -> Result<Self> {
         Ok(Self {
             engine,
             store: EngineStateStore::open_in_memory()?,
@@ -57,6 +67,13 @@ impl V3Runtime {
             identity: IdentityResolverV3::new(),
             sources: SourceMap::new(),
             peer_groups: Default::default(),
+            device_classes: Default::default(),
+            history: Default::default(),
+            ladder: crate::verify_ladder::Ladder::new(
+                crate::verify_ladder::LadderPolicy::default(),
+                secret,
+            ),
+            case_findings: Default::default(),
         })
     }
 
@@ -68,6 +85,8 @@ impl V3Runtime {
         self.store.save("detector", &self.detector)?;
         self.store.save("inventory", &self.inventory)?;
         self.store.save("identity", &self.identity)?;
+        self.store.save("ladder", &self.ladder)?;
+        self.history.flush(self.store.conn_mut())?;
         if self.memory.is_some() {
             let stats = self
                 .memory
@@ -81,6 +100,10 @@ impl V3Runtime {
         self.detector = self.store.load("detector")?.unwrap_or_default();
         self.inventory = self.store.load("inventory")?.unwrap_or_default();
         self.identity = self.store.load("identity")?.unwrap_or_default();
+        if let Some(ladder) = self.store.load("ladder")? {
+            self.ladder = ladder;
+        }
+        self.history = crate::flow_history::FlowHistory::load(self.store.conn())?;
         self.sources.clear();
         Ok(())
     }

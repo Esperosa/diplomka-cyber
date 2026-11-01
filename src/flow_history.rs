@@ -391,6 +391,50 @@ impl FlowHistory {
     }
 }
 
+/// Správcovské porty pro metriku rozptylu zdroje (stejné jako detektor v3).
+const ADMIN_PORTS: &[u16] = &[22, 23, 135, 139, 445, 3389, 5900, 5985, 5986];
+
+/// Souhrn okna toků pro historii: toky a selhání na službu, toky, rozptyl a pokusy
+/// zdroje (jen vnitřní zdroje = známé hosty), hrany mezi vnitřními hosty.
+pub(crate) fn summarize(
+    observations: &[crate::passive::ConnectionObservation],
+    known_hosts: &HashSet<String>,
+) -> WindowSummary {
+    let mut summary = WindowSummary::default();
+    let mut fanout: HashMap<&str, HashSet<&str>> = HashMap::new();
+    for o in observations {
+        let Some(port) = o.dst_port else { continue };
+        let service = format!("{}/{}/{port}", o.dst_ip, o.proto);
+        summary.add(key(&service, Metric::ServiceFlows), 1.0);
+        let state = o.conn_state.as_deref().unwrap_or_default();
+        let failed = matches!(state, "S0" | "REJ" | "RSTOS0" | "RSTRH" | "SH")
+            && o.resp_bytes.unwrap_or(0) == 0;
+        if failed {
+            summary.add(key(&service, Metric::ServiceFailures), 1.0);
+        }
+        let Some(src) = o.src_ip.as_deref() else {
+            continue;
+        };
+        if !known_hosts.contains(src) {
+            continue;
+        }
+        summary.add(key(src, Metric::SourceFlows), 1.0);
+        if failed {
+            summary.add(key(src, Metric::SourceAttempts), 1.0);
+        }
+        if ADMIN_PORTS.contains(&port) && src != o.dst_ip {
+            fanout.entry(src).or_default().insert(o.dst_ip.as_str());
+        }
+        if known_hosts.contains(&o.dst_ip) && summary.edges.len() < 200_000 {
+            summary.edges.insert((src.to_string(), o.dst_ip.clone()));
+        }
+    }
+    for (src, targets) in fanout {
+        summary.max(key(src, Metric::SourceFanout), targets.len() as f64);
+    }
+    summary
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

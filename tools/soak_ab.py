@@ -372,6 +372,100 @@ def main():
         hb = sum(get(b_rows[k], f"families.{fam}.placebo_hits_displayed") for k in common)
         lines.append(f"| {fam} | {n} | {ha / n * 100:.1f} % | {hb / n * 100:.1f} % |")
     lines.append("")
+    # zebrik overovani (krok 2B) a planovani
+    lines.append("**overovani: plany, rozpocet, zebrik (krok 2B)**")
+    lines.append("")
+    lines.append("Mimo rozpocet = plan, ktery se nikdy neprovedl (zahozeny plan, pripad eskalovany pro rozpocet); "
+                 "odlozeni na dalsi cyklus se pocita zvlast.")
+    lines.append("")
+    lines.append("| rameno | plany+pripady / sit-den | mimo rozpocet (95% CI) | kontroly / sit-den | potvrzeno | vyvraceno | eskalovano | eskalace pro rozpocet | latence rozhodnuti (cykly, prumer / max) |")
+    lines.append("|---|---:|---|---:|---:|---:|---:|---:|---|")
+    for side, rows in (("A", a_rows), ("B", b_rows)):
+        s = lambda m: sum(get(rows[k], m) for k in common)
+        plans = s("verification_plans") + s("output.ladder_cases")
+        over = s("verification_skipped_budget") + s("output.ladder_escalated_budget")
+        p, lo, hi = wilson(over, plans)
+        decided = s("output.ladder_confirmed") + s("output.ladder_refuted") + s("output.ladder_escalated")
+        lat = s("output.ladder_latency_sum") / decided if decided else 0.0
+        lmax = max((get(rows[k], "output.ladder_latency_max") for k in common), default=0)
+        lines.append(f"| {side} | {num(plans / days)} | {p * 100:.1f} % ({lo * 100:.1f} az {hi * 100:.1f}) | "
+                     f"{num(s('output.ladder_checks') / days)} | {s('output.ladder_confirmed')} | {s('output.ladder_refuted')} | "
+                     f"{s('output.ladder_escalated')} | {s('output.ladder_escalated_budget')} | {lat:.2} / {lmax} |")
+    lines.append("")
+    for side, rows in (("A", a_rows), ("B", b_rows)):
+        s = lambda m: sum(get(rows[k], m) for k in common)
+        ref = s("output.ladder_refuted")
+        if not ref and not s("output.ladder_cases"):
+            continue
+        wrong = s("output.ladder_refuted_wrong_cf")
+        causal = s("output.ladder_refuted_wrong_causal")
+        conf = s("output.ladder_confirmed")
+        conf_ok = s("output.ladder_confirmed_attack")
+        esc = s("output.ladder_escalated")
+        esc_att = s("output.ladder_escalated_attack")
+        aud_n, aud_w = s("output.ladder_audit_sampled"), s("output.ladder_audit_wrong")
+        p1, l1, h1 = wilson(wrong, ref)
+        p2, l2, h2 = wilson(causal, ref)
+        p3, l3, h3 = wilson(conf_ok, conf)
+        p4, l4, h4 = wilson(aud_w, aud_n)
+        states_b = s("output.states_behavioral")
+        auto_states = s("output.states_auto_resolved")
+        p5, l5, h5 = wilson(auto_states, s("output.states_captured"))
+        lines.append(f"Zebrik {side}: vyvraceno {ref}, z toho omylem (nalez kontrafaktualne zpusobil utok) {wrong} = "
+                     f"{p1 * 100:.2f} % (95% CI {l1 * 100:.2f} az {h1 * 100:.2f}), pricinne {causal} = {p2 * 100:.2f} % "
+                     f"({l2 * 100:.2f} az {h2 * 100:.2f}); audit 10% vzorku {aud_w}/{aud_n} = {p4 * 100:.2f} % "
+                     f"({l4 * 100:.2f} az {h4 * 100:.2f}). Potvrzeno {conf}, z toho utok {conf_ok} = presnost "
+                     f"{p3 * 100:.1f} % ({l3 * 100:.1f} az {h3 * 100:.1f}). Eskalovano {esc}, z toho utok {esc_att}. "
+                     f"Automaticky vyresene stavy {auto_states} z {s('output.states_captured')} = {p5 * 100:.1f} % "
+                     f"({l5 * 100:.1f} az {h5 * 100:.1f}); behavioralnich stavu {states_b}.")
+        by_level = defaultdict(int)
+        outcomes = defaultdict(int)
+        refuted_types = defaultdict(int)
+        wrong_detail = defaultdict(int)
+        for k in common:
+            for key, v in get(rows[k], "output.ladder_checks_by_level").items():
+                by_level[key] += v
+            for key, v in get(rows[k], "output.ladder_outcomes").items():
+                outcomes[key] += v
+            for key, v in get(rows[k], "output.ladder_refuted_by_type").items():
+                refuted_types[key] += v
+            for key, v in get(rows[k], "output.ladder_refuted_wrong_detail").items():
+                wrong_detail[key] += v
+        lines.append("")
+        lines.append(f"- kontroly podle urovne ({side}): " + ", ".join(f"{k} {v}" for k, v in sorted(by_level.items())))
+        lines.append(f"- vysledky kontrol ({side}): " + ", ".join(f"{k} {v}" for k, v in sorted(outcomes.items(), key=lambda kv: -kv[1])))
+        lines.append(f"- vyvraceno podle typu ({side}): " + ", ".join(f"{k} {v}" for k, v in sorted(refuted_types.items(), key=lambda kv: -kv[1])))
+        if wrong_detail:
+            lines.append(f"- vyvraceno omylem typ|rodina ({side}): " + ", ".join(f"{k} {v}" for k, v in sorted(wrong_detail.items(), key=lambda kv: -kv[1])))
+        truth = defaultdict(int)
+        for k in common:
+            for key, v in get(rows[k], "output.ladder_outcome_truth").items():
+                truth[key] += v
+        n_att, n_ben = truth.get("_cases|attack", 0), truth.get("_cases|benign", 0)
+        if n_att and n_ben:
+            lines.append("")
+            lines.append(f"Empiricke LR vysledku kontrol ({side}; rozhodnute pripady, utok {n_att}, neskodne {n_ben}; "
+                         "LR = P(vysledek|utok)/P(vysledek|neskodne), Laplace +0,5):")
+            lines.append("")
+            lines.append("| kontrola:vysledek | utok | neskodne | empiricke LR |")
+            lines.append("|---|---:|---:|---:|")
+            tags = sorted({key.split("|")[0] for key in truth if not key.startswith("_")})
+            for tag in tags:
+                a = truth.get(f"{tag}|attack", 0)
+                b = truth.get(f"{tag}|benign", 0)
+                lr = ((a + 0.5) / (n_att + 1)) / ((b + 0.5) / (n_ben + 1))
+                lines.append(f"| {tag} | {a} | {b} | {lr:.2f} |")
+        lines.append("")
+    for side, rows in (("A", a_rows), ("B", b_rows)):
+        n = sum(get(rows[k], "output.device_classified") for k in common)
+        if not n:
+            continue
+        ok = sum(get(rows[k], "output.device_class_correct") for k in common)
+        conf = sum(get(rows[k], "output.device_class_confident") for k in common)
+        p, lo, hi = wilson(ok, n)
+        lines.append(f"Rozpoznani typu zarizeni {side}: spravne {p * 100:.1f} % (95% CI {lo * 100:.1f} az {hi * 100:.1f}, "
+                     f"n = {n} klasifikaci pri skenech), se stredni a vyssi jistotou {conf / n * 100:.1f} %.")
+    lines.append("")
     # identita
     for side, rows in (("A", a_rows), ("B", b_rows)):
         dev = sum(get(rows[k], "identity_devices") for k in common)

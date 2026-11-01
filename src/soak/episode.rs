@@ -26,7 +26,10 @@ use crate::{
     enforcement::{BlockIpRequest, ProtectedRanges},
     engine::{EngineConfig, EngineMode},
     error::{BakulaError, Result},
-    finding_memory::{Disposition, Escalation, Observation, key_for_finding, split_service_key},
+    finding_memory::{
+        Disposition, Escalation, FindingKey, FindingState, Observation, key_for_finding,
+        split_service_key,
+    },
     findings, fusion,
     identity::{IdentityMatch, IdentityResolver},
     model::{Finding, HostReport, NormalizedEvent, PassiveWindow, RunReport, SourceMetadata},
@@ -39,6 +42,9 @@ use crate::{
     scope_policy::ScopePolicy,
     soak::{
         kernel::SimKernel,
+        ladder_env::{
+            ReputationCoverage, SimReputation, SoakEvidence, group_index, is_suspicious_type,
+        },
         netmodel::{Archetype, NetworkModel},
         rng::{Rng, derive, mix},
         scoring::{InventoryView, Seen, StateTracker, placebo_window, unexpected_cause},
@@ -231,6 +237,28 @@ struct Shown {
     /// Cile (ip, port) a dominantni zdroje nalezu (jen u automaticky zavrenych, mereni).
     targets: Vec<(String, u16)>,
     sources: Vec<String>,
+    /// Stav nalezu vyvratil zebrik overovani (automaticky vyreseno, krok 2B).
+    ladder_refuted: bool,
+}
+
+/// Vystup zebriku v cyklu (krok 2B): klice nalezu, otevrene pripady, rozhodnuti.
+#[derive(Default)]
+struct LadderCycle {
+    keys: Vec<Option<FindingKey>>,
+    sources: Vec<Vec<String>>,
+    opened: HashSet<usize>,
+    decisions: Vec<crate::verify_ladder::Decision>,
+    late: Vec<(Finding, Shown)>,
+}
+
+/// Pravda o pripadu zebriku zjistena pri otevreni (jen mereni).
+#[derive(Debug, Clone, Copy)]
+struct CaseTruth {
+    /// Nalez kontrafaktualne zpusobil utok (chybi ve svete bez utoku).
+    cf: bool,
+    /// Utok v cyklu otevreni posilal toky na cil nalezu nebo z jeho zdroje.
+    causal: bool,
+    family: Option<&'static str>,
 }
 
 fn key_ips(truth: &Truth, ips: &[String], rogue: &Option<(String, String)>) -> Vec<String> {
@@ -475,10 +503,15 @@ fn run_episode_inner(
     let scope = ScopePolicy::new(scope_nets.clone());
     let mut resolver = IdentityResolver::new();
     let mut v3 = match cfg.engine.mode {
-        EngineMode::V3 => Some(V3Runtime::new(cfg.engine)?),
+        EngineMode::V3 => Some(V3Runtime::new(cfg.engine, derive(model.seed, 0x1ADD_E7))?),
         EngineMode::Legacy => None,
     };
     let coverage = ContextCoverage::default();
+    let reputation = SimReputation::new(&model, &truths, ReputationCoverage::default());
+    let ladder_on = cfg.engine.ladder();
+    let severe_types = crate::context_gate::GatePolicy::default().most_severe;
+    let mut case_truth: HashMap<FindingKey, CaseTruth> = HashMap::new();
+    let mut plan_queue = verification_exec::PlanQueue::default();
     let phantoms = if cfg.engine.context_gate() {
         phantom_windows(&model, cycles, &coverage)
     } else {
@@ -670,6 +703,9 @@ fn run_episode_inner(
             if let Some(runtime) = v3.as_mut() {
                 runtime.restart()?;
             }
+            // fronta planu je v pameti procesu: pri restartu se ztrati (mimo rozpocet)
+            agg.verification.skipped_budget += plan_queue.len() as u64;
+            plan_queue = verification_exec::PlanQueue::default();
             // legacy: inventar zil jen v pameti procesu (A09); v3 ho ma perzistentni
             if !cfg.engine.unexpected_v3() {
                 hosts_cache.clear();
@@ -769,14 +805,35 @@ fn run_episode_inner(
             {
                 // peer skupiny podle typu zarizeni a podsite (krok 2D)
                 let tables = crate::device_class::ClassifierTables::default();
-                runtime.peer_groups = hosts
+                runtime.device_classes = hosts
                     .iter()
-                    .filter_map(|host| {
-                        let class = crate::device_class::classify(host, None, &tables);
-                        crate::device_class::peer_group_key(&host.ip, &class)
-                            .map(|group| (host.ip.clone(), group))
+                    .map(|host| {
+                        (
+                            host.ip.clone(),
+                            crate::device_class::classify(host, None, &tables),
+                        )
                     })
                     .collect();
+                runtime.peer_groups = runtime
+                    .device_classes
+                    .iter()
+                    .filter_map(|(ip, class)| {
+                        crate::device_class::peer_group_key(ip, class).map(|g| (ip.clone(), g))
+                    })
+                    .collect();
+                // presnost klasifikace proti roli v modelu (jen mereni)
+                for host in &hosts {
+                    let Some(device) = model.device_by_ip(&host.ip) else {
+                        continue;
+                    };
+                    let role = model.devices[device as usize].role;
+                    let class = &runtime.device_classes[&host.ip];
+                    agg.output.device_classified += 1;
+                    agg.output.device_class_correct +=
+                        crate::soak::ladder_env::role_matches(role, class.kind) as u64;
+                    agg.output.device_class_confident +=
+                        (class.confidence >= crate::device_class::ClassConfidence::Medium) as u64;
+                }
             }
             restart_cold = false;
             hosts_cache = hosts;
@@ -928,7 +985,8 @@ fn run_episode_inner(
             .map(|s| (s.service_key.as_str(), s))
             .collect();
         let memory_started = Instant::now();
-        let shown: Vec<Shown> = match v3.as_mut() {
+        let mut lc = LadderCycle::default();
+        let mut shown: Vec<Shown> = match v3.as_mut() {
             None => run_report
                 .findings
                 .iter()
@@ -938,6 +996,7 @@ fn run_episode_inner(
                     auto: None,
                     targets: Vec::new(),
                     sources: Vec::new(),
+                    ladder_refuted: false,
                 })
                 .collect(),
             Some(runtime) => {
@@ -957,7 +1016,7 @@ fn run_episode_inner(
                 let at = ts(t0);
                 let memory_on = runtime.memory.is_some();
                 let mut out = Vec::with_capacity(run_report.findings.len());
-                for finding in &run_report.findings {
+                for (finding_index, finding) in run_report.findings.iter().enumerate() {
                     let service_key = finding.service_key.as_deref().unwrap_or("-");
                     let (_, key_ip) = split_service_key(service_key);
                     let host_ip = finding
@@ -977,6 +1036,7 @@ fn run_episode_inner(
                     );
                     // pokusy (sken) jsou stav ZDROJE: jeden stav na skener, ne na kazdy cil
                     let key = key_for_finding(finding, &entity_host, &sources);
+                    let key_copy = key.clone();
                     let explanation = context.as_ref().and_then(|ctx| {
                         let ids = [host_ip.clone(), entity_host.clone()];
                         runtime.gate.explain(
@@ -1010,6 +1070,7 @@ fn run_episode_inner(
                         },
                     };
                     let auto_closed = matches!(disposition, Disposition::AutoResolved(_));
+                    let new_state = disposition.displayed();
                     let mut shown_item = match disposition {
                         Disposition::First => Shown {
                             displayed: true,
@@ -1017,6 +1078,7 @@ fn run_episode_inner(
                             auto: None,
                             targets: Vec::new(),
                             sources: Vec::new(),
+                            ladder_refuted: false,
                         },
                         Disposition::Reopened => Shown {
                             displayed: true,
@@ -1024,6 +1086,7 @@ fn run_episode_inner(
                             auto: None,
                             targets: Vec::new(),
                             sources: Vec::new(),
+                            ladder_refuted: false,
                         },
                         Disposition::Escalated(cause) => Shown {
                             displayed: true,
@@ -1035,6 +1098,7 @@ fn run_episode_inner(
                             auto: None,
                             targets: Vec::new(),
                             sources: Vec::new(),
+                            ladder_refuted: false,
                         },
                         Disposition::Suppressed => Shown {
                             displayed: false,
@@ -1042,6 +1106,7 @@ fn run_episode_inner(
                             auto: None,
                             targets: Vec::new(),
                             sources: Vec::new(),
+                            ladder_refuted: false,
                         },
                         Disposition::AutoResolved(_) => Shown {
                             displayed: false,
@@ -1049,6 +1114,7 @@ fn run_episode_inner(
                             auto: explanation.as_ref().map(|e| e.kind),
                             targets: Vec::new(),
                             sources: Vec::new(),
+                            ladder_refuted: false,
                         },
                     };
                     if auto_closed {
@@ -1066,11 +1132,169 @@ fn run_episode_inner(
                             .unwrap_or_default();
                         shown_item.sources = sources.clone();
                     }
+                    // krok 2B: novy stav behavioralniho nalezu jde do zebriku; zobrazi se
+                    // az po overeni (vysoky dopad hned), vyvraceny se nezobrazi
+                    if ladder_on && !is_static_exposure(&finding.finding_type) && !auto_closed {
+                        if new_state {
+                            let high = finding.severity == crate::model::Severity::High
+                                || severe_types.contains(&finding.finding_type);
+                            let (service, _) = split_service_key(service_key);
+                            let port = service.rsplit('/').next().and_then(|p| p.parse().ok());
+                            let target = service_key.contains('/').then_some(service_key);
+                            let input = crate::verify_ladder::CaseInput {
+                                key: key_copy.clone(),
+                                finding_id: finding.finding_id.clone(),
+                                finding_type: finding.finding_type.clone(),
+                                host_ip: host_ip.clone(),
+                                port,
+                                sources: sources.clone(),
+                                volume: count as f64,
+                                history_key: crate::verify_ladder::history_key_for(
+                                    &finding.finding_type,
+                                    target,
+                                    &host_ip,
+                                    &sources,
+                                ),
+                                high_impact: high,
+                                prior: crate::verify_ladder::DEFAULT_PRIOR,
+                            };
+                            if runtime.ladder.open(input, cycle as u64) {
+                                lc.opened.insert(finding_index);
+                                runtime
+                                    .case_findings
+                                    .insert(key_copy.clone(), finding.clone());
+                            }
+                            if !high {
+                                shown_item.displayed = false;
+                                shown_item.reason = "verifying";
+                            }
+                        } else {
+                            runtime.ladder.observe(&key_copy, &sources, cycle as u64);
+                            shown_item.ladder_refuted = runtime
+                                .memory
+                                .as_ref()
+                                .and_then(|m| m.get(&key_copy))
+                                .is_some_and(|e| e.state == FindingState::Refuted);
+                        }
+                    }
+                    lc.keys.push(Some(key_copy));
+                    lc.sources.push(sources.clone());
                     out.push(shown_item);
+                }
+                if ladder_on {
+                    // index cyklu pro L2 peer srovnani a L4 pivot
+                    let mut typed_hosts: HashSet<(String, String)> = HashSet::new();
+                    let mut suspicious: HashMap<String, usize> = HashMap::new();
+                    for (index, finding) in run_report.findings.iter().enumerate() {
+                        if is_static_exposure(&finding.finding_type) {
+                            continue;
+                        }
+                        if let Some(host) = &finding.host_key {
+                            typed_hosts.insert((finding.finding_type.clone(), host.clone()));
+                            if is_suspicious_type(&finding.finding_type) {
+                                *suspicious.entry(host.clone()).or_default() += 1;
+                            }
+                        }
+                        if is_suspicious_type(&finding.finding_type) {
+                            for source in &lc.sources[index] {
+                                *suspicious.entry(source.clone()).or_default() += 1;
+                            }
+                        }
+                    }
+                    let (group_sizes, group_hits) = group_index(&runtime.peer_groups, &typed_hosts);
+                    let mut env = SoakEvidence {
+                        history: &runtime.history,
+                        at,
+                        gate: &runtime.gate,
+                        context: context.as_ref(),
+                        reputation: &reputation,
+                        services: &report_services,
+                        devices: &runtime.device_classes,
+                        groups: &runtime.peer_groups,
+                        group_sizes: &group_sizes,
+                        group_hits: &group_hits,
+                        suspicious: &suspicious,
+                        scope: &scope,
+                        model: &model,
+                        cycle,
+                        liveness_runs: 0,
+                        liveness_failures: 0,
+                    };
+                    let decisions = runtime.ladder.step(cycle as u64, &mut env);
+                    agg.output.ladder_liveness_runs += env.liveness_runs;
+                    agg.output.ladder_liveness_failures += env.liveness_failures;
+                    for decision in &decisions {
+                        use crate::verify_ladder::Status;
+                        let index = lc
+                            .keys
+                            .iter()
+                            .position(|k| k.as_ref() == Some(&decision.key));
+                        if let Some(memory) = runtime.memory.as_mut() {
+                            match decision.status {
+                                Status::Refuted => {
+                                    memory.refute(&decision.key, &decision.reason, at);
+                                }
+                                Status::Confirmed => {
+                                    memory.confirm(&decision.key, "verify_ladder", at);
+                                    memory.note(
+                                        &decision.key,
+                                        "verify_confirm",
+                                        &decision.reason,
+                                        at,
+                                    );
+                                }
+                                Status::Escalated | Status::Open => {
+                                    memory.note(
+                                        &decision.key,
+                                        "verify_escalate",
+                                        &decision.reason,
+                                        at,
+                                    );
+                                }
+                            }
+                        }
+                        let finding = runtime.case_findings.remove(&decision.key);
+                        let reason = match decision.status {
+                            Status::Refuted => None,
+                            Status::Confirmed => Some("ladder_confirmed"),
+                            _ => Some("ladder_escalated"),
+                        };
+                        match (index, reason) {
+                            (Some(i), None) => out[i].ladder_refuted = true,
+                            (Some(i), Some(reason)) if !out[i].displayed => {
+                                out[i].displayed = true;
+                                out[i].reason = reason;
+                            }
+                            (None, Some(reason)) if !decision.high_impact => {
+                                if let Some(finding) = finding {
+                                    lc.late.push((
+                                        finding,
+                                        Shown {
+                                            displayed: true,
+                                            reason,
+                                            auto: None,
+                                            targets: Vec::new(),
+                                            sources: Vec::new(),
+                                            ladder_refuted: false,
+                                        },
+                                    ));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    lc.decisions = decisions;
                 }
                 out
             }
         };
+        // pozdni zobrazeni (rozhodnuti zebriku o nalezu, ktery v tomto cyklu neni)
+        for (finding, show) in std::mem::take(&mut lc.late) {
+            lc.keys.push(None);
+            lc.sources.push(Vec::new());
+            run_report.findings.push(finding);
+            shown.push(show);
+        }
         agg.perf_record("memory_context", memory_started.elapsed().as_secs_f64());
 
         // --- 4. hypotezy, plany, vykonani kontrol ---
@@ -1092,6 +1316,8 @@ fn run_episode_inner(
                     .iter()
                     .enumerate()
                     .filter(|(index, _)| shown.get(*index).is_none_or(|s| s.displayed))
+                    // krok 2B: behavioralni nalezy overuje zebrik (stavove, jen otevrene)
+                    .filter(|(_, h)| !ladder_on || is_static_exposure(&h.hypothesis_type))
                     .filter_map(|(_, h)| verification_planner::plan_for_hypothesis(h, &scope))
                     .collect();
                 let runner = SimRunner {
@@ -1099,13 +1325,25 @@ fn run_episode_inner(
                     cycle,
                     seed: model.seed,
                 };
-                let results = verification_exec::execute_plans(
-                    &plans,
-                    &run_report.hosts,
-                    &scope,
-                    &budget,
-                    &runner,
-                );
+                let results = if ladder_on {
+                    // krok 2B: stavova fronta, plan bez rozpoctu ceka na dalsi cyklus
+                    let mut accepted = Vec::new();
+                    for plan in &plans {
+                        if plan_queue.push(plan.clone()) {
+                            accepted.push(plan.clone());
+                        }
+                    }
+                    let results = plan_queue.run(&run_report.hosts, &scope, &budget, &runner);
+                    return (accepted, results, bad_probability, hypotheses);
+                } else {
+                    verification_exec::execute_plans(
+                        &plans,
+                        &run_report.hosts,
+                        &scope,
+                        &budget,
+                        &runner,
+                    )
+                };
                 (plans, results, bad_probability, hypotheses)
             });
         if let Some(p) = bad_probability {
@@ -1325,6 +1563,39 @@ fn run_episode_inner(
                     }
                 }
             }
+            if lc.opened.contains(&finding_index)
+                && let Some(Some(key)) = lc.keys.get(finding_index)
+            {
+                let targets: Vec<(String, u16)> = report_services
+                    .get(finding.service_key.as_deref().unwrap_or("-"))
+                    .map(|svc| {
+                        svc.events
+                            .iter()
+                            .filter_map(|e| e.event.dst_port.map(|p| (e.event.dst_ip.clone(), p)))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let sources = &lc.sources[finding_index];
+                let causal = truths.iter().any(|truth| {
+                    matches!(truth.kind, Kind::Attack(_))
+                        && cycle + ATTRIBUTION_LATENCY >= truth.start_cycle
+                        && cycle <= truth.end_cycle + ATTRIBUTION_LATENCY
+                        && (targets.iter().any(|t| truth.cycle_targets.contains(t))
+                            || sources.iter().any(|s| truth.cycle_sources.contains(s)))
+                });
+                let cf_caused = attacked
+                    && cf
+                        .as_deref()
+                        .is_none_or(|c| c.all.absent(cycle, fhash, false));
+                case_truth.insert(
+                    key.clone(),
+                    CaseTruth {
+                        cf: cf_caused,
+                        causal,
+                        family: attack_family,
+                    },
+                );
+            }
             if show.displayed {
                 agg.output.displayed += 1;
                 agg.output.displayed_behavioral += is_behavioral as u64;
@@ -1388,12 +1659,73 @@ fn run_episode_inner(
                     behavioral: is_behavioral,
                     attributed,
                     displayed: show.displayed,
-                    auto_resolved: show.auto.is_some(),
+                    auto_resolved: show.auto.is_some() || show.ladder_refuted,
                 },
                 &mut agg.output,
             );
         }
         agg.behavioral_tp += attributed_to_attack as u64;
+        for decision in &lc.decisions {
+            use crate::verify_ladder::Status;
+            let truth = case_truth.remove(&decision.key);
+            let caused = truth.is_some_and(|t| t.cf);
+            let out = &mut agg.output;
+            out.ladder_latency_sum += decision.decided - decision.opened;
+            out.ladder_latency_max = out
+                .ladder_latency_max
+                .max(decision.decided - decision.opened);
+            out.ladder_decided_attack += caused as u64;
+            for (check, tag) in &decision.steps {
+                *out.ladder_outcome_truth
+                    .entry(format!(
+                        "{}:{tag}|{}",
+                        check.label(),
+                        if caused { "attack" } else { "benign" }
+                    ))
+                    .or_default() += 1;
+            }
+            *out.ladder_outcome_truth
+                .entry(format!(
+                    "_cases|{}",
+                    if caused { "attack" } else { "benign" }
+                ))
+                .or_default() += 1;
+            match decision.status {
+                Status::Refuted => {
+                    out.ladder_refuted += 1;
+                    *out.ladder_refuted_by_type
+                        .entry(decision.finding_type.clone())
+                        .or_default() += 1;
+                    out.ladder_refuted_wrong_cf += caused as u64;
+                    out.ladder_refuted_wrong_causal += truth.is_some_and(|t| t.causal) as u64;
+                    if caused {
+                        *out.ladder_refuted_wrong_detail
+                            .entry(format!(
+                                "{}|{}",
+                                decision.finding_type,
+                                truth.and_then(|t| t.family).unwrap_or("-")
+                            ))
+                            .or_default() += 1;
+                    }
+                    // nahodny audit 10 % vyvracenych (simulovany clovek, H-A3)
+                    let roll =
+                        mix(finding_hash(&decision.finding_id) ^ model.seed ^ cycle as u64) % 10;
+                    if roll == 0 {
+                        out.ladder_audit_sampled += 1;
+                        out.ladder_audit_wrong += caused as u64;
+                    }
+                }
+                Status::Confirmed => {
+                    out.ladder_confirmed += 1;
+                    out.ladder_confirmed_attack += caused as u64;
+                }
+                Status::Escalated | Status::Open => {
+                    out.ladder_escalated += 1;
+                    out.ladder_escalated_attack += caused as u64;
+                    out.ladder_escalated_budget += decision.budget_escalation as u64;
+                }
+            }
+        }
         for (index, count) in &attributed_to_lookalike {
             lookalike_with_fp.insert(*index);
             if let Kind::Benign(look) = truths[*index].kind {
@@ -1719,6 +2051,26 @@ fn run_episode_inner(
         agg.perf_record("enforcement", enforcement_started.elapsed().as_secs_f64());
 
         if let Some(runtime) = v3.as_mut() {
+            if ladder_on {
+                // L0: zapsat okno do historie; klice s alarmem v tomto cyklu se neuci
+                let mut frozen: HashSet<String> = HashSet::new();
+                for (index, finding) in run_report.findings.iter().enumerate() {
+                    if is_static_exposure(&finding.finding_type) {
+                        continue;
+                    }
+                    if let Some(service) = finding.service_key.as_deref() {
+                        frozen.insert(service.to_string());
+                    }
+                    if let Some(host) = &finding.host_key {
+                        frozen.insert(host.clone());
+                    }
+                    for source in lc.sources.get(index).into_iter().flatten() {
+                        frozen.insert(source.clone());
+                    }
+                }
+                let summary = crate::flow_history::summarize(&in_scope_obs, &known_hosts);
+                runtime.history.ingest(&summary, &frozen, ts(t0));
+            }
             runtime.end_cycle(ts(t0 + CYCLE_SECS))?;
         }
         if cycle % 48 == 47 {
@@ -1853,6 +2205,25 @@ fn run_episode_inner(
     if let Some(memory) = v3.as_ref().and_then(|runtime| runtime.memory.as_ref()) {
         agg.output.memory_peak_entries = memory.stats.peak_entries;
         agg.output.memory_evicted = memory.stats.evicted;
+    }
+    agg.verification.skipped_budget += plan_queue.dropped;
+    agg.verification.deferred += plan_queue.deferred;
+    if let Some(runtime) = v3.as_ref().filter(|_| ladder_on) {
+        let st = &runtime.ladder.stats;
+        let out = &mut agg.output;
+        out.ladder_cases += st.cases_opened;
+        out.ladder_merged += st.cases_merged;
+        out.ladder_checks += st.checks_by_level.values().sum::<u64>();
+        out.ladder_checks_deferred += st.checks_deferred;
+        out.ladder_cases_deferred += st.cases_deferred;
+        out.ladder_needs_approval += st.needs_approval;
+        out.ladder_open_at_end += runtime.ladder.open_cases() as u64;
+        for (level, n) in &st.checks_by_level {
+            *out.ladder_checks_by_level.entry(level.clone()).or_default() += n;
+        }
+        for (outcome, n) in &st.outcomes {
+            *out.ladder_outcomes.entry(outcome.clone()).or_default() += n;
+        }
     }
     // occurrences_with_fp: lookalike s alespon jednim pripsanym FP nalezem
     // (prepocet z fp_findings by byl nepresny; zde pocitame per-udalost v ledgeru nize)
@@ -2194,6 +2565,55 @@ mod engine_v3_tests {
         assert!(
             n.asset_ids_false_merge < l.asset_ids_false_merge,
             "{l:?} vs {n:?}"
+        );
+    }
+
+    /// Krok 2B: žebřík otevírá případy jen pro nové stavy, rozhoduje s auditem a nic
+    /// neporuší; bez žebříku (krok 1) se nic z toho neděje.
+    #[test]
+    fn ladder_opens_stateful_cases_and_decides_without_violations() {
+        let step1 = EngineConfig {
+            mode: EngineMode::V3,
+            v3: crate::engine::V3Features::step1(),
+        };
+        let off = run(9, 48, step1);
+        let on = run(9, 48, EngineConfig::v3());
+        assert_eq!(off.agg.output.ladder_cases, 0);
+        let o = &on.agg.output;
+        assert!(o.ladder_cases > 0, "{o:?}");
+        assert!(o.ladder_confirmed + o.ladder_refuted + o.ladder_escalated <= o.ladder_cases);
+        assert!(o.ladder_checks > 0);
+        assert!(
+            on.agg.invariant_violations.is_empty(),
+            "{:?}",
+            on.agg.violation_samples
+        );
+        assert!(
+            on.agg.verification.plans < off.agg.verification.plans,
+            "plany jen pro staticke expozice"
+        );
+        assert!(o.device_classified > 0 && o.device_class_correct <= o.device_classified);
+    }
+
+    #[test]
+    #[ignore]
+    fn debug_ladder_stats() {
+        let mut cfg = EngineConfig::v3();
+        cfg.v3.learning = false;
+        let on = run(3, 72, cfg);
+        let o = &on.agg.output;
+        println!(
+            "cases {} merged {} checks {} deferred {} cases_deferred {} open_end {}",
+            o.ladder_cases,
+            o.ladder_merged,
+            o.ladder_checks,
+            o.ladder_checks_deferred,
+            o.ladder_cases_deferred,
+            o.ladder_open_at_end
+        );
+        println!(
+            "plans {} skipped {}",
+            on.agg.verification.plans, on.agg.verification.skipped_budget
         );
     }
 }

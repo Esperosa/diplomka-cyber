@@ -5,6 +5,7 @@ pub mod alloc;
 pub mod episode;
 pub mod hist;
 pub mod kernel;
+pub mod ladder_env;
 pub mod legs;
 pub mod netmodel;
 pub mod report;

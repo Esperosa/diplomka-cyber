@@ -93,6 +93,8 @@ pub enum FindingState {
     Confirmed,
     Closed,
     Reopened,
+    /// Vyvráceno ověřením (žebřík, krok 2B): opakování se nezobrazuje, eskalace ano.
+    Refuted,
 }
 
 impl FindingState {
@@ -104,6 +106,7 @@ impl FindingState {
             FindingState::Confirmed => "confirmed",
             FindingState::Closed => "closed",
             FindingState::Reopened => "reopened",
+            FindingState::Refuted => "refuted",
         }
     }
 
@@ -115,6 +118,7 @@ impl FindingState {
             "confirmed" => FindingState::Confirmed,
             "closed" => FindingState::Closed,
             "reopened" => FindingState::Reopened,
+            "refuted" => FindingState::Refuted,
             _ => return None,
         })
     }
@@ -127,6 +131,7 @@ impl FindingState {
                 | FindingState::Open
                 | FindingState::Confirmed
                 | FindingState::Reopened
+                | FindingState::Refuted
         )
     }
 }
@@ -643,6 +648,9 @@ impl FindingMemory {
                     // potvrzeny utok se automaticky nezavira
                     (S::Confirmed, _, Some(cause)) => (S::Confirmed, Disposition::Escalated(cause)),
                     (S::Confirmed, _, None) => (S::Confirmed, Disposition::Suppressed),
+                    // vyvraceno overenim: totez se nezobrazi, zmena priznaku ano
+                    (S::Refuted, _, Some(cause)) => (S::Reopened, Disposition::Escalated(cause)),
+                    (S::Refuted, _, None) => (S::Refuted, Disposition::Suppressed),
                     (S::Closed, None, _) | (S::Closed, Some(_), Some(_)) => {
                         (S::Reopened, Disposition::Reopened)
                     }
@@ -734,7 +742,7 @@ impl FindingMemory {
             .map(|(key, entry)| {
                 let class = match entry.state {
                     FindingState::Closed => 0,
-                    FindingState::AutoResolved => 1,
+                    FindingState::AutoResolved | FindingState::Refuted => 1,
                     FindingState::Confirmed => 3,
                     _ => 2,
                 };
@@ -779,6 +787,36 @@ impl FindingMemory {
     /// Člověk uzavře (vyřešeno). Další výskyt → znovuotevřeno.
     pub fn close(&mut self, key: &FindingKey, actor: &str, at: DateTime<Utc>) -> bool {
         self.operator_transition(key, FindingState::Closed, actor, "close", at)
+    }
+
+    /// Ověření vyvrátilo hypotézu (žebřík, krok 2B): stav `Refuted` s důvodem v auditu.
+    /// Vratné (`reopen`), změna příznaků se zobrazí jako eskalace.
+    pub fn refute(&mut self, key: &FindingKey, reason: &str, at: DateTime<Utc>) -> bool {
+        let Some(entry) = self.entries.get_mut(key) else {
+            return false;
+        };
+        if entry.state == FindingState::Confirmed {
+            return false; // potvrzeny utok automaticky nevyvracet
+        }
+        let previous = entry.state;
+        entry.state = FindingState::Refuted;
+        entry.auto_reason = Some(clip(reason));
+        entry.dirty = true;
+        self.log(
+            at,
+            "verify_ladder",
+            "verify_refute",
+            key,
+            format!("z {}: {}", previous.label(), clip(reason)),
+        );
+        true
+    }
+
+    /// Záznam rozhodnutí žebříku bez změny stavu (eskalace člověku, potvrzení).
+    pub fn note(&mut self, key: &FindingKey, action: &str, detail: &str, at: DateTime<Utc>) {
+        if self.entries.contains_key(key) {
+            self.log(at, "verify_ladder", action, key, clip(detail));
+        }
     }
 
     /// Vrácení automatického zavření (vratnost, Dodatek A.2 a).
@@ -1131,5 +1169,38 @@ mod tests {
         let b = key_for_finding(&finding("200"), "asset:1", &[]);
         assert_ne!(a, b);
         assert_eq!(a.service, "tcp/80#100");
+    }
+
+    /// Krok 2B: vyvrácený nález se při opakování nezobrazí, při změně příznaků ano;
+    /// potvrzený útok vyvrátit nejde; vše je v auditu a přežije restart.
+    #[test]
+    fn refuted_state_suppresses_repeats_but_shows_escalation() {
+        let mut memory = FindingMemory::new(MemoryConfig::default());
+        let k = key("asset:3", "inductive_volume_anomaly");
+        memory.observe(&obs(&k, 0, Severity::Medium, 30, &[]), None);
+        assert!(memory.refute(&k, "L0 history: totez kazdy den", at(1)));
+        assert_eq!(memory.get(&k).unwrap().state, FindingState::Refuted);
+        assert_eq!(
+            memory.observe(&obs(&k, 30, Severity::Medium, 30, &[]), None),
+            Disposition::Suppressed
+        );
+        assert_eq!(
+            memory.observe(&obs(&k, 60, Severity::High, 30, &[]), None),
+            Disposition::Escalated(Escalation::Severity)
+        );
+        let c = key("asset:4", "scan_attempts");
+        memory.observe(&obs(&c, 0, Severity::Medium, 9, &[]), None);
+        memory.confirm(&c, "verify_ladder", at(1));
+        assert!(!memory.refute(&c, "x", at(2)), "potvrzene nevyvracet");
+        let mut conn = Connection::open_in_memory().unwrap();
+        memory.flush(&mut conn).unwrap();
+        let audit = read_audit(&conn).unwrap();
+        assert!(
+            audit
+                .iter()
+                .any(|(_, action, _, _)| action == "verify_refute")
+        );
+        let back = FindingMemory::load(&conn, MemoryConfig::default()).unwrap();
+        assert_eq!(back.get(&k).unwrap().state, FindingState::Reopened);
     }
 }

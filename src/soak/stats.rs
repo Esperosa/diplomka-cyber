@@ -163,6 +163,40 @@ pub struct OutputStats {
     pub audit_wrong: u64,
     pub memory_peak_entries: u64,
     pub memory_evicted: u64,
+    /// Žebřík ověřování (krok 2B): případy, kontroly, rozpočet, rozhodnutí a jejich
+    /// správnost proti kontrafaktuálu (`_attack` = nález způsobil útok).
+    pub ladder_cases: u64,
+    pub ladder_merged: u64,
+    pub ladder_checks: u64,
+    pub ladder_checks_deferred: u64,
+    pub ladder_cases_deferred: u64,
+    pub ladder_needs_approval: u64,
+    pub ladder_open_at_end: u64,
+    pub ladder_liveness_runs: u64,
+    pub ladder_liveness_failures: u64,
+    pub ladder_confirmed: u64,
+    pub ladder_refuted: u64,
+    pub ladder_escalated: u64,
+    pub ladder_escalated_budget: u64,
+    pub ladder_refuted_wrong_cf: u64,
+    pub ladder_refuted_wrong_causal: u64,
+    pub ladder_confirmed_attack: u64,
+    pub ladder_escalated_attack: u64,
+    pub ladder_decided_attack: u64,
+    pub ladder_latency_sum: u64,
+    pub ladder_audit_sampled: u64,
+    pub ladder_audit_wrong: u64,
+    pub ladder_latency_max: u64,
+    /// Výsledky kontrol rozhodnutých případů podle pravdy: "kontrola:značka|attack|benign".
+    pub ladder_outcome_truth: BTreeMap<String, u64>,
+    /// Rozpoznání typu zařízení proti roli v modelu (krok 2D, jen při skenu).
+    pub device_classified: u64,
+    pub device_class_correct: u64,
+    pub device_class_confident: u64,
+    pub ladder_checks_by_level: BTreeMap<String, u64>,
+    pub ladder_outcomes: BTreeMap<String, u64>,
+    pub ladder_refuted_by_type: BTreeMap<String, u64>,
+    pub ladder_refuted_wrong_detail: BTreeMap<String, u64>,
 }
 
 impl OutputStats {
@@ -198,6 +232,39 @@ impl OutputStats {
         self.audit_wrong += o.audit_wrong;
         self.memory_peak_entries = self.memory_peak_entries.max(o.memory_peak_entries);
         self.memory_evicted += o.memory_evicted;
+        self.ladder_cases += o.ladder_cases;
+        self.ladder_merged += o.ladder_merged;
+        self.ladder_checks += o.ladder_checks;
+        self.ladder_checks_deferred += o.ladder_checks_deferred;
+        self.ladder_cases_deferred += o.ladder_cases_deferred;
+        self.ladder_needs_approval += o.ladder_needs_approval;
+        self.ladder_open_at_end += o.ladder_open_at_end;
+        self.ladder_liveness_runs += o.ladder_liveness_runs;
+        self.ladder_liveness_failures += o.ladder_liveness_failures;
+        self.ladder_confirmed += o.ladder_confirmed;
+        self.ladder_refuted += o.ladder_refuted;
+        self.ladder_escalated += o.ladder_escalated;
+        self.ladder_escalated_budget += o.ladder_escalated_budget;
+        self.ladder_refuted_wrong_cf += o.ladder_refuted_wrong_cf;
+        self.ladder_refuted_wrong_causal += o.ladder_refuted_wrong_causal;
+        self.ladder_confirmed_attack += o.ladder_confirmed_attack;
+        self.ladder_escalated_attack += o.ladder_escalated_attack;
+        self.ladder_decided_attack += o.ladder_decided_attack;
+        self.ladder_latency_sum += o.ladder_latency_sum;
+        self.ladder_audit_sampled += o.ladder_audit_sampled;
+        self.ladder_audit_wrong += o.ladder_audit_wrong;
+        self.ladder_latency_max = self.ladder_latency_max.max(o.ladder_latency_max);
+        merge_map(&mut self.ladder_outcome_truth, &o.ladder_outcome_truth);
+        self.device_classified += o.device_classified;
+        self.device_class_correct += o.device_class_correct;
+        self.device_class_confident += o.device_class_confident;
+        merge_map(&mut self.ladder_checks_by_level, &o.ladder_checks_by_level);
+        merge_map(&mut self.ladder_outcomes, &o.ladder_outcomes);
+        merge_map(&mut self.ladder_refuted_by_type, &o.ladder_refuted_by_type);
+        merge_map(
+            &mut self.ladder_refuted_wrong_detail,
+            &o.ladder_refuted_wrong_detail,
+        );
     }
 }
 
@@ -245,6 +312,9 @@ pub struct VerificationStats {
     pub reused: u64,
     pub needs_approval: u64,
     pub skipped_budget: u64,
+    /// Plány odložené na další cyklus (stavová fronta, krok 2B).
+    #[serde(default)]
+    pub deferred: u64,
     pub skipped_scope: u64,
     pub failed: u64,
     pub budget_violations: u64,
@@ -597,6 +667,7 @@ impl Aggregate {
         v.reused += w.reused;
         v.needs_approval += w.needs_approval;
         v.skipped_budget += w.skipped_budget;
+        v.deferred += w.deferred;
         v.skipped_scope += w.skipped_scope;
         v.failed += w.failed;
         v.budget_violations += w.budget_violations;
@@ -677,6 +748,8 @@ pub struct NetworkSummary {
     pub identity_asset_ids: u64,
     pub identity_false_merge: u64,
     pub verification_plans: u64,
+    pub verification_skipped_budget: u64,
+    pub verification_executed: u64,
     pub panics: u64,
     pub violations: u64,
     pub cycle_p99_s: f64,
@@ -747,6 +820,8 @@ impl NetworkSummary {
             identity_asset_ids: agg.identity.asset_ids,
             identity_false_merge: agg.identity.asset_ids_false_merge,
             verification_plans: agg.verification.plans,
+            verification_skipped_budget: agg.verification.skipped_budget,
+            verification_executed: agg.verification.executed,
             panics: agg.panics,
             violations: agg.invariant_violations.values().sum(),
             cycle_p99_s: agg
