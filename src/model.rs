@@ -12,6 +12,8 @@ pub struct AppConfig {
     pub retention: RetentionConfig,
     pub security: SecurityConfig,
     pub platform: PlatformConfig,
+    /// Prepinac jadra (`[engine] mode = "legacy" | "v3"`), vychozi legacy.
+    pub engine: crate::engine::EngineConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +78,7 @@ impl Default for AppConfig {
             retention: RetentionConfig::default(),
             security: SecurityConfig::default(),
             platform: PlatformConfig::default(),
+            engine: crate::engine::EngineConfig::default(),
         }
     }
 }
