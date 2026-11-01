@@ -86,6 +86,7 @@ impl V3Runtime {
         self.store.save("inventory", &self.inventory)?;
         self.store.save("identity", &self.identity)?;
         self.store.save("ladder", &self.ladder)?;
+        let calibrator = self.ladder.calibrator.take();
         self.history.flush(self.store.conn_mut())?;
         if self.memory.is_some() {
             let stats = self
@@ -103,6 +104,8 @@ impl V3Runtime {
         if let Some(ladder) = self.store.load("ladder")? {
             self.ladder = ladder;
         }
+        // kalibrace je konfigurace (soubor), ne stav: po restartu se znovu nacte
+        self.ladder.calibrator = calibrator;
         self.history = crate::flow_history::FlowHistory::load(self.store.conn())?;
         self.sources.clear();
         Ok(())

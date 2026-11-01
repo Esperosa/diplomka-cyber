@@ -189,6 +189,11 @@ pub struct OutputStats {
     pub ladder_latency_max: u64,
     /// Výsledky kontrol rozhodnutých případů podle pravdy: "kontrola:značka|attack|benign".
     pub ladder_outcome_truth: BTreeMap<String, u64>,
+    /// Kalibrační koše (20) posteriory rozhodnutých behaviorálních případů proti
+    /// kontrafaktuální pravdě: surová a použitá (po kalibraci) posteriora;
+    /// [n, pozitivní, součet p, součet p²] na koš.
+    pub calib_raw: Vec<[f64; 4]>,
+    pub calib_used: Vec<[f64; 4]>,
     /// Rozpoznání typu zařízení proti roli v modelu (krok 2D, jen při skenu).
     pub device_classified: u64,
     pub device_class_correct: u64,
@@ -255,6 +260,8 @@ impl OutputStats {
         self.ladder_audit_wrong += o.ladder_audit_wrong;
         self.ladder_latency_max = self.ladder_latency_max.max(o.ladder_latency_max);
         merge_map(&mut self.ladder_outcome_truth, &o.ladder_outcome_truth);
+        merge_bins(&mut self.calib_raw, &o.calib_raw);
+        merge_bins(&mut self.calib_used, &o.calib_used);
         self.device_classified += o.device_classified;
         self.device_class_correct += o.device_class_correct;
         self.device_class_confident += o.device_class_confident;
@@ -265,6 +272,34 @@ impl OutputStats {
             &mut self.ladder_refuted_wrong_detail,
             &o.ladder_refuted_wrong_detail,
         );
+    }
+}
+
+fn merge_bins(mine: &mut Vec<[f64; 4]>, theirs: &[[f64; 4]]) {
+    if mine.len() < theirs.len() {
+        mine.resize(theirs.len(), [0.0; 4]);
+    }
+    for (index, bin) in theirs.iter().enumerate() {
+        for k in 0..4 {
+            mine[index][k] += bin[k];
+        }
+    }
+}
+
+impl OutputStats {
+    /// Zapíše predikci (surová a použitá posteriora) a výsledek do kalibračních košů.
+    pub fn record_calibration(&mut self, raw: f64, used: f64, label: bool) {
+        for (bins, p) in [(&mut self.calib_raw, raw), (&mut self.calib_used, used)] {
+            if bins.len() < 20 {
+                bins.resize(20, [0.0; 4]);
+            }
+            let p = p.clamp(0.0, 1.0);
+            let bin = ((p * 20.0) as usize).min(19);
+            bins[bin][0] += 1.0;
+            bins[bin][1] += label as u8 as f64;
+            bins[bin][2] += p;
+            bins[bin][3] += p * p;
+        }
     }
 }
 
@@ -359,6 +394,11 @@ pub struct LearningStats {
     pub poison_quarantined: u64,
     pub flagged_sources: u64,
     pub honest_quarantined: u64,
+    /// Verdikty člověka k rozhodnutým případům žebříku (krok 2C) a z nich přijaté.
+    #[serde(default)]
+    pub ladder_verdicts: u64,
+    #[serde(default)]
+    pub ladder_verdicts_accepted: u64,
 }
 
 impl LearningStats {
@@ -422,6 +462,8 @@ impl LearningStats {
         self.poison_quarantined += other.poison_quarantined;
         self.flagged_sources += other.flagged_sources;
         self.honest_quarantined += other.honest_quarantined;
+        self.ladder_verdicts += other.ladder_verdicts;
+        self.ladder_verdicts_accepted += other.ladder_verdicts_accepted;
     }
 }
 

@@ -113,6 +113,9 @@ struct SoakRunArgs {
     /// Pocet leave-one-out svetu na sit (validace kontrafaktualu).
     #[arg(long, default_value_t = 0)]
     cf_loo: usize,
+    /// Kalibrace posteriory zebriku overovani (JSON z tools/soak_calib.py).
+    #[arg(long)]
+    calibration: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -933,6 +936,7 @@ fn main() -> anyhow::Result<()> {
             cfg.feedback = !args.no_feedback;
             cfg.counterfactual = args.counterfactual;
             cfg.cf_loo = args.cf_loo;
+            cfg.calibration = args.calibration.clone();
             bakula_program::soak::runner::run(cfg, args.resume)?;
         }
         Command::Soak(SoakCommand::Verify(args)) => {

@@ -79,6 +79,8 @@ pub struct EpisodeConfig {
     pub mask: WorldMask,
     /// Kontrafaktualni svety (bez utoku) pro atribuci nalezu tohoto (faktickeho) behu.
     pub counterfactual: Option<Arc<Counterfactual>>,
+    /// Kalibrace posteriory zebriku (krok 2C), fit na jinych sitich nez tato.
+    pub calibration: Option<Arc<crate::calibration::IsotonicCalibrator>>,
 }
 
 /// Maska udalosti sveta. Kontrafaktual = stejny seed, stejny svet, jen bez utoku.
@@ -356,6 +358,7 @@ pub fn run_with_counterfactual(cfg: &EpisodeConfig, loo: usize) -> EpisodeResult
     let background = run_episode(&EpisodeConfig {
         mask: WorldMask::AllAttacks,
         counterfactual: None,
+        calibration: None,
         ..cfg.clone()
     });
     let mut cf = Counterfactual {
@@ -366,6 +369,7 @@ pub fn run_with_counterfactual(cfg: &EpisodeConfig, loo: usize) -> EpisodeResult
         let world = run_episode(&EpisodeConfig {
             mask: WorldMask::Only(vec![id]),
             counterfactual: None,
+            calibration: None,
             ..cfg.clone()
         })
         .world;
@@ -512,6 +516,13 @@ fn run_episode_inner(
     let severe_types = crate::context_gate::GatePolicy::default().most_severe;
     let mut case_truth: HashMap<FindingKey, CaseTruth> = HashMap::new();
     let mut plan_queue = verification_exec::PlanQueue::default();
+    let learning_on = ladder_on && cfg.engine.learning();
+    if let Some(runtime) = v3.as_mut() {
+        if learning_on {
+            runtime.ladder.learner = Some(Default::default());
+        }
+        runtime.ladder.calibrator = cfg.calibration.as_deref().cloned();
+    }
     let phantoms = if cfg.engine.context_gate() {
         phantom_windows(&model, cycles, &coverage)
     } else {
@@ -1156,7 +1167,15 @@ fn run_episode_inner(
                                     &sources,
                                 ),
                                 high_impact: high,
-                                prior: crate::verify_ladder::DEFAULT_PRIOR,
+                                prior: if learning_on {
+                                    learned_prior(
+                                        &memory,
+                                        &finding.finding_type,
+                                        runtime.device_classes.get(&host_ip),
+                                    )
+                                } else {
+                                    crate::verify_ladder::DEFAULT_PRIOR
+                                },
                             };
                             if runtime.ladder.open(input, cycle as u64) {
                                 lc.opened.insert(finding_index);
@@ -1723,6 +1742,80 @@ fn run_episode_inner(
                     out.ladder_escalated += 1;
                     out.ladder_escalated_attack += caused as u64;
                     out.ladder_escalated_budget += decision.budget_escalation as u64;
+                }
+            }
+            // kalibracni kose: surova a pouzita posteriora proti pravde (kontrafaktual)
+            out.record_calibration(decision.raw_posterior, decision.posterior, caused);
+            // krok 2C: verdikt cloveka (eskalovano/potvrzeno: posoudi s p = 0,5;
+            // vyvraceno: audit 10 %) jde pres Case Memory (ochrana proti otraveni)
+            if learning_on && let Some(runtime) = v3.as_mut() {
+                let audited = matches!(decision.status, Status::Refuted)
+                    && mix(finding_hash(&decision.finding_id) ^ model.seed ^ cycle as u64) % 10
+                        == 0;
+                let reviewed = match decision.status {
+                    Status::Refuted => audited,
+                    _ => eval_rng.chance(0.5),
+                };
+                let kind = runtime
+                    .device_classes
+                    .get(&decision.host_ip)
+                    .map(|c| c.kind.label())
+                    .unwrap_or("unknown");
+                let now = ts(t0 + CYCLE_SECS);
+                let mut submit = |actor: &str, verdict: bool, memory: &mut CaseMemory| {
+                    let outcome = if verdict {
+                        Outcome::Confirmed
+                    } else {
+                        Outcome::Refuted
+                    };
+                    let source = CaseSource::Operator {
+                        actor: actor.to_string(),
+                    };
+                    let source_key = source.key();
+                    let typed = CaseRecord::new(
+                        &format!("ladder:{}", decision.finding_type),
+                        Some(&decision.host_ip),
+                        outcome,
+                        source.clone(),
+                        1.0,
+                        now,
+                    );
+                    let accepted = matches!(memory.record(typed), RecordOutcome::Accepted);
+                    let context = CaseRecord::new(
+                        &format!("ladder:{}@{kind}", decision.finding_type),
+                        Some(&decision.host_ip),
+                        outcome,
+                        source,
+                        1.0,
+                        now,
+                    );
+                    let _ = memory.record(context);
+                    if accepted && let Some(learner) = runtime.ladder.learner.as_mut() {
+                        learner.record(&source_key, &decision.steps, verdict, 1.0);
+                    }
+                    accepted
+                };
+                if reviewed {
+                    let verdict = if eval_rng.chance(0.05) {
+                        !caused
+                    } else {
+                        caused
+                    };
+                    agg.learning.ladder_verdicts += 1;
+                    if submit("op-sim", verdict, &mut memory) {
+                        agg.learning.ladder_verdicts_accepted += 1;
+                    }
+                }
+                if poisoned && cycle >= 10 {
+                    agg.learning.poison_submitted += 1;
+                    if !submit("mallory", !caused, &mut memory) {
+                        agg.learning.poison_quarantined += 1;
+                    }
+                }
+                if let Some(learner) = runtime.ladder.learner.as_mut() {
+                    for source in memory.flagged_sources() {
+                        learner.exclude(source);
+                    }
                 }
             }
         }
@@ -2300,6 +2393,21 @@ fn run_episode_inner(
     Ok(())
 }
 
+/// Apriorní pravděpodobnost případu z Case Memory (krok 2C): kontext (typ nálezu a
+/// typ zařízení), jinak typ, jinak výchozí. Hierarchický ústup (R12b, A21).
+fn learned_prior(
+    memory: &CaseMemory,
+    finding_type: &str,
+    class: Option<&crate::device_class::DeviceClass>,
+) -> f64 {
+    let kind = class.map(|c| c.kind.label()).unwrap_or("unknown");
+    memory
+        .estimate(&format!("ladder:{finding_type}@{kind}"))
+        .or_else(|| memory.estimate(&format!("ladder:{finding_type}")))
+        .map(|e| e.probability.clamp(0.01, 0.99))
+        .unwrap_or(crate::verify_ladder::DEFAULT_PRIOR)
+}
+
 /// Poradi zdroju podle `score_source_hosts` (sestupne, deterministicky pri shode).
 fn rank_sources(observations: &[ConnectionObservation]) -> Vec<String> {
     let mut scored: Vec<(String, f64)> = score_source_hosts(observations).into_iter().collect();
@@ -2330,6 +2438,7 @@ mod tests {
             feedback: true,
             mask: WorldMask::None,
             counterfactual: None,
+            calibration: None,
         }
     }
 
@@ -2402,6 +2511,7 @@ mod tests {
                     feedback: true,
                     mask: WorldMask::None,
                     counterfactual: None,
+                    calibration: None,
                 })
             });
             assert!(result.is_ok(), "sit {id} spadla");
@@ -2462,6 +2572,7 @@ mod engine_v3_tests {
             feedback: false,
             mask: WorldMask::None,
             counterfactual: None,
+            calibration: None,
         })
     }
 
@@ -2519,6 +2630,7 @@ mod engine_v3_tests {
                 feedback: false,
                 mask: WorldMask::None,
                 counterfactual: None,
+                calibration: None,
             };
             let background = run_episode(&EpisodeConfig {
                 mask: WorldMask::AllAttacks,
@@ -2595,25 +2707,22 @@ mod engine_v3_tests {
         assert!(o.device_classified > 0 && o.device_class_correct <= o.device_classified);
     }
 
+    /// Krok 2C: verdikty k rozhodnutým případům jdou přes Case Memory a plní kalibrační
+    /// koše; bez učení zůstává autorský prior.
     #[test]
-    #[ignore]
-    fn debug_ladder_stats() {
-        let mut cfg = EngineConfig::v3();
-        cfg.v3.learning = false;
-        let on = run(3, 72, cfg);
-        let o = &on.agg.output;
-        println!(
-            "cases {} merged {} checks {} deferred {} cases_deferred {} open_end {}",
-            o.ladder_cases,
-            o.ladder_merged,
-            o.ladder_checks,
-            o.ladder_checks_deferred,
-            o.ladder_cases_deferred,
-            o.ladder_open_at_end
-        );
-        println!(
-            "plans {} skipped {}",
-            on.agg.verification.plans, on.agg.verification.skipped_budget
+    fn learning_records_verdicts_through_case_memory_and_fills_calibration_bins() {
+        let on = run(9, 96, EngineConfig::v3());
+        assert!(on.agg.learning.ladder_verdicts > 0);
+        assert!(on.agg.learning.ladder_verdicts_accepted <= on.agg.learning.ladder_verdicts);
+        let n: f64 = on.agg.output.calib_raw.iter().map(|b| b[0]).sum();
+        let decided = on.agg.output.ladder_confirmed
+            + on.agg.output.ladder_refuted
+            + on.agg.output.ladder_escalated;
+        assert_eq!(n as u64, decided);
+        assert!(
+            on.agg.invariant_violations.is_empty(),
+            "{:?}",
+            on.agg.violation_samples
         );
     }
 }

@@ -238,7 +238,11 @@ pub struct Decision {
     pub finding_id: String,
     pub finding_type: String,
     pub status: Status,
+    pub host_ip: String,
+    /// Pravděpodobnost útoku při rozhodnutí (po kalibraci, pokud je zapnutá).
     pub posterior: f64,
+    /// Surová posteriora (bez kalibrace), pro kalibrační křivku.
+    pub raw_posterior: f64,
     pub opened: u64,
     pub decided: u64,
     /// Proč (kontroly s výsledkem), pro audit a UI.
@@ -498,6 +502,111 @@ fn is_fragile(class: &Option<DeviceClass>) -> bool {
     })
 }
 
+/// Učení věrohodnostních poměrů z ověřených případů (krok 2C). Štítky přicházejí jen
+/// přes Case Memory (verdikt člověka nebo audit, s ochranou proti otrávení), počty se
+/// drží po (kontrola, značka výsledku). Naučený LR je smrštěný k autorskému
+/// (váha `n / (n + 20)`) a má bezpečnostní meze: neškodný důkaz smí jen snižovat
+/// (0,02 až 1), podezřelý jen zvyšovat (1 až 50); „nezjištěno“ a „neprovedeno“ se
+/// neučí vůbec a zůstávají bez vlivu (RQ6 Z3: prázdný výsledek není důkaz).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct LadderLearner {
+    /// zdroj štítku -> (kontrola:značka -> (útok, neškodné)); po zdrojích, aby šlo
+    /// vyřadit zdroj, který Case Memory označí za otrávený (i zpětně).
+    counts: BTreeMap<String, BTreeMap<String, (f64, f64)>>,
+    totals: BTreeMap<String, (f64, f64)>,
+    #[serde(default)]
+    excluded: std::collections::BTreeSet<String>,
+}
+
+impl LadderLearner {
+    const SHRINK: f64 = 20.0;
+    const MIN_PER_CLASS: f64 = 10.0;
+
+    /// Zapíše výsledek ověřeného případu (`attack` = verdikt útok) od zdroje `source`.
+    pub fn record(
+        &mut self,
+        source: &str,
+        steps: &[(CheckId, &'static str)],
+        attack: bool,
+        weight: f64,
+    ) {
+        let weight = weight.clamp(0.0, 1.0);
+        let totals = self.totals.entry(source.to_string()).or_default();
+        if attack {
+            totals.0 += weight;
+        } else {
+            totals.1 += weight;
+        }
+        let counts = self.counts.entry(source.to_string()).or_default();
+        let mut seen = HashSet::new();
+        for (check, tag) in steps {
+            if !seen.insert((*check, *tag)) {
+                continue;
+            }
+            let entry = counts
+                .entry(format!("{}:{tag}", check.label()))
+                .or_default();
+            if attack {
+                entry.0 += weight;
+            } else {
+                entry.1 += weight;
+            }
+        }
+    }
+
+    /// Vyřadí zdroj (Case Memory ho označila za otrávený); jeho štítky přestanou platit.
+    pub fn exclude(&mut self, source: &str) {
+        self.excluded.insert(source.to_string());
+    }
+
+    fn sum<'a>(
+        &'a self,
+        pick: impl Fn(&'a BTreeMap<String, (f64, f64)>) -> Option<&'a (f64, f64)>,
+    ) -> Option<(f64, f64)> {
+        let mut out: Option<(f64, f64)> = None;
+        for (source, counts) in &self.counts {
+            if self.excluded.contains(source) {
+                continue;
+            }
+            if let Some((a, b)) = pick(counts) {
+                let entry = out.get_or_insert((0.0, 0.0));
+                entry.0 += a;
+                entry.1 += b;
+            }
+        }
+        out
+    }
+
+    pub fn cases(&self) -> (f64, f64) {
+        self.totals
+            .iter()
+            .filter(|(source, _)| !self.excluded.contains(*source))
+            .fold((0.0, 0.0), |acc, (_, t)| (acc.0 + t.0, acc.1 + t.1))
+    }
+
+    /// Naučený LR pro výsledek kontroly; `author` = výchozí LR z `LrTable`.
+    pub fn lr(&self, check: CheckId, tag: &str, author: f64) -> f64 {
+        let (bounds_lo, bounds_hi) = match tag {
+            "benign" => (0.02, 1.0),
+            "malicious" => (1.0, 50.0),
+            _ => return author,
+        };
+        let (attack_total, benign_total) = self.cases();
+        let name = format!("{}:{tag}", check.label());
+        let Some((a, b)) = self.sum(|counts| counts.get(&name)) else {
+            return author;
+        };
+        if attack_total < Self::MIN_PER_CLASS || benign_total < Self::MIN_PER_CLASS {
+            return author;
+        }
+        let empirical = ((a + 0.5) / (attack_total + 1.0)) / ((b + 0.5) / (benign_total + 1.0));
+        let n = a + b;
+        let w = n / (n + Self::SHRINK);
+        let blended = (w * empirical.ln() + (1.0 - w) * author.max(1e-6).ln()).exp();
+        blended.clamp(bounds_lo, bounds_hi)
+    }
+}
+
 /// Žebřík: otevřené případy, pořadí a rozpočet napříč případy.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ladder {
@@ -507,6 +616,12 @@ pub struct Ladder {
     cases: HashMap<FindingKey, Case>,
     #[serde(default)]
     pub stats: LadderStats,
+    /// Naučené LR (krok 2C); `None` = autorské LR.
+    #[serde(default)]
+    pub learner: Option<LadderLearner>,
+    /// Kalibrace posteriory před pravidly zastavení (krok 2C); fit offline.
+    #[serde(skip)]
+    pub calibrator: Option<crate::calibration::IsotonicCalibrator>,
 }
 
 /// JSON neumi strukturovane klice map: pripady se ukladaji jako seznam.
@@ -543,6 +658,8 @@ impl Ladder {
             secret,
             cases: HashMap::new(),
             stats: LadderStats::default(),
+            learner: None,
+            calibrator: None,
         }
     }
 
@@ -759,8 +876,12 @@ impl Ladder {
                 return None; // kontrola zustava v planu, vrati se po cekani
             }
             Outcome::Evidence { lr, .. } => {
+                let lr = match &self.learner {
+                    Some(learner) => learner.lr(check, tag, *lr),
+                    None => *lr,
+                };
                 case.log_odds += lr.max(1e-6).ln();
-                if *lr < 1.0 {
+                if lr < 1.0 {
                     case.benign_evidence = true;
                 }
             }
@@ -768,7 +889,11 @@ impl Ladder {
         }
         case.plan.pop_front();
         case.wait_until = None;
-        let posterior = case.posterior();
+        let raw = case.posterior();
+        let posterior = self
+            .calibrator
+            .as_ref()
+            .map_or(raw, |calibrator| calibrator.predict(raw));
         case.steps.push(Step {
             check,
             cycle,
@@ -832,12 +957,19 @@ impl Ladder {
             })
             .collect::<Vec<_>>()
             .join("; ");
+        let raw = case.posterior();
+        let calibrated = self
+            .calibrator
+            .as_ref()
+            .map_or(raw, |calibrator| calibrator.predict(raw));
         Some(Decision {
+            raw_posterior: raw,
+            host_ip: case.input.host_ip.clone(),
             finding_id: case.input.finding_id.clone(),
             finding_type: case.input.finding_type.clone(),
             key: case.input.key.clone(),
             status,
-            posterior: case.posterior(),
+            posterior: calibrated,
             opened: case.opened,
             decided: cycle,
             reason: if budget {
@@ -1375,5 +1507,44 @@ mod tests {
         let json = serde_json::to_string(&ladder).unwrap();
         let back: Ladder = serde_json::from_str(&json).unwrap();
         assert_eq!(back.open_cases(), ladder.open_cases());
+    }
+
+    #[test]
+    fn learner_shrinks_toward_author_respects_bounds_and_drops_poisoned_source() {
+        let mut learner = LadderLearner::default();
+        let steps = [
+            (CheckId::History, "benign"),
+            (CheckId::Context, "undetermined"),
+        ];
+        assert_eq!(
+            learner.lr(CheckId::History, "benign", 0.25),
+            0.25,
+            "bez dat autorsky"
+        );
+        for _ in 0..200 {
+            learner.record("operator:op", &steps, false, 1.0);
+        }
+        for _ in 0..50 {
+            learner.record(
+                "operator:op",
+                &[(CheckId::Context, "undetermined")],
+                true,
+                1.0,
+            );
+        }
+        let lr = learner.lr(CheckId::History, "benign", 0.25);
+        assert!(lr < 0.25 && lr >= 0.02, "{lr}");
+        assert_eq!(
+            learner.lr(CheckId::Context, "undetermined", 1.0),
+            1.0,
+            "prazdny vysledek se neuci"
+        );
+        // benigni znacka nikdy nad 1, i kdyby data rikala opak
+        for _ in 0..500 {
+            learner.record("operator:mallory", &steps, true, 1.0);
+        }
+        assert!(learner.lr(CheckId::History, "benign", 0.25) <= 1.0);
+        learner.exclude("operator:mallory");
+        assert!((learner.lr(CheckId::History, "benign", 0.25) - lr).abs() < 1e-12);
     }
 }

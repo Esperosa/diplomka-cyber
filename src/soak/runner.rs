@@ -67,6 +67,9 @@ pub struct SoakConfig {
     /// Pocet leave-one-out svetu na sit (validace kontrafaktualu bez vsech utoku).
     #[serde(default)]
     pub cf_loo: usize,
+    /// Kalibrace posteriory zebriku (JSON z `tools/soak_calib.py`), krok 2C.
+    #[serde(default)]
+    pub calibration: Option<PathBuf>,
 }
 
 fn default_true() -> bool {
@@ -94,6 +97,7 @@ impl SoakConfig {
             feedback: true,
             counterfactual: false,
             cf_loo: 0,
+            calibration: None,
         }
     }
 }
@@ -164,6 +168,12 @@ pub fn run_block_with_summaries(
     let mut agg = Aggregate::default();
     let mut summaries = Vec::new();
     let mut digest = mix(block);
+    let calibration = cfg.calibration.as_ref().and_then(|path| {
+        crate::calibration::IsotonicCalibrator::load(path)
+            .map_err(|e| eprintln!("soak: kalibraci {} nelze nacist: {e}", path.display()))
+            .ok()
+            .map(std::sync::Arc::new)
+    });
     for offset in 0..cfg.block_size {
         let network_id = block * cfg.block_size + offset;
         let episode = EpisodeConfig {
@@ -175,6 +185,7 @@ pub fn run_block_with_summaries(
             feedback: cfg.feedback,
             mask: WorldMask::None,
             counterfactual: None,
+            calibration: calibration.clone(),
         };
         let run = || {
             if cfg.counterfactual {
