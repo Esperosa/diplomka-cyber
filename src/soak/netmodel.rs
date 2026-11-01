@@ -1082,7 +1082,7 @@ impl NetworkModel {
                 ids.push(d.id);
                 ParsedHost {
                     ip: self.ip_of(d.id),
-                    hostname: Some(format!("{}-{}", d.role.label(), d.id)),
+                    hostname: self.hostname_of(d),
                     mac: (d.subnet < scanned_l2).then(|| d.mac.clone()),
                     vendor: None,
                     services: d
@@ -1106,6 +1106,32 @@ impl NetworkModel {
             })
             .collect();
         (ParsedInventory { hosts }, ids)
+    }
+
+    /// Jmeno hostu, jak by ho videl sken (rDNS/DHCP): realisticky NEUPLNE. Servery a
+    /// spravovane stanice maji vetsinou jedinecne jmeno, telefony casto genericke
+    /// ("iPhone") nebo zadne, IoT jen cast. Deterministicke ze (seed site, id zarizeni).
+    pub fn hostname_of(&self, device: &Device) -> Option<String> {
+        let roll = crate::soak::rng::mix(self.seed ^ 0x4057_0000 ^ device.id as u64) % 100;
+        let unique = || Some(format!("{}-{}", device.role.label(), device.id));
+        match device.role {
+            r if r.is_server() => (roll < 95).then(unique).flatten(),
+            Role::Workstation => (roll < 90).then(unique).flatten(),
+            Role::Mobile => match roll {
+                0..=29 => unique(),
+                30..=59 => Some(
+                    if roll.is_multiple_of(2) {
+                        "iPhone"
+                    } else {
+                        "android"
+                    }
+                    .to_string(),
+                ),
+                _ => None,
+            },
+            Role::VoipPhone => (roll < 60).then(unique).flatten(),
+            _ => (roll < 50).then(unique).flatten(),
+        }
     }
 
     /// CVE zaznamy pro sluzbu (to, co by do reportu doplnil intel provider).

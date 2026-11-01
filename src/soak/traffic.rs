@@ -109,6 +109,8 @@ impl Family {
                 "connection_timeout_burst",
                 "external_flow_observed",
                 "packet_rate_spike",
+                // v3: pokusy bez odpovedi prictene zdroji (A30: typ, ktery engine umi)
+                "scan_attempts",
             ],
             Family::SshBrute => &[
                 "connection_timeout_burst",
@@ -143,6 +145,7 @@ impl Family {
                 "unexpected_traffic",
                 "unmapped_passive_event",
                 "identification_gap",
+                "scan_attempts",
             ],
             Family::Exploit => &[
                 "suricata_alert",
@@ -191,6 +194,7 @@ impl Family {
             ],
             Family::ApChain => &[
                 "unexpected_traffic",
+                "scan_attempts",
                 "multi_target_pattern",
                 "suricata_alert",
                 "external_flow_observed",
@@ -290,6 +294,10 @@ pub struct Truth {
     pub ids_visible: bool,
     // --- behem emise ---
     pub touched_ips: BTreeSet<String>,
+    /// Cile (ip, port) a zdroje toku teto udalosti v AKTUALNIM cyklu (jen mereni:
+    /// pricinna atribuce automatickeho zavreni, krok 1D).
+    pub cycle_targets: std::collections::HashSet<(String, u16)>,
+    pub cycle_sources: std::collections::HashSet<String>,
     pub flows_emitted: u64,
     pub flows_blocked: u64,
     pub first_emit_cycle: Option<u32>,
@@ -779,6 +787,8 @@ pub fn plan_episode(
             target_external,
             ids_visible,
             touched_ips: BTreeSet::new(),
+            cycle_targets: Default::default(),
+            cycle_sources: Default::default(),
             flows_emitted: 0,
             flows_blocked: 0,
             first_emit_cycle: None,
@@ -902,6 +912,8 @@ pub fn plan_episode(
             target_external: Some(public_ip(rng)),
             ids_visible: false,
             touched_ips: BTreeSet::new(),
+            cycle_targets: Default::default(),
+            cycle_sources: Default::default(),
             flows_emitted: 0,
             flows_blocked: 0,
             first_emit_cycle: None,
@@ -977,6 +989,10 @@ pub fn generate_cycle(ctx: &CycleContext<'_>, truths: &mut [Truth], rng: &mut Rn
     let model = ctx.model;
     let t0 = cycle_start_abs(ctx.start_offset_s, ctx.cycle);
     let mut out = CycleOutput::default();
+    for truth in truths.iter_mut() {
+        truth.cycle_targets.clear();
+        truth.cycle_sources.clear();
+    }
     let mut flow_id: u64 = (ctx.cycle as u64) << 32;
     let cycle_h = CYCLE_SECS as f64 / 3600.0;
 
@@ -1089,9 +1105,23 @@ pub fn generate_cycle(ctx: &CycleContext<'_>, truths: &mut [Truth], rng: &mut Rn
         let factor = diurnal(Role::Web, model.archetype, t0, model.tz_hours).max(0.3);
         let n = rng.poisson(45.0 * factor * sampling);
         let dst = &ctx.ips[device.id as usize];
+        // Oprava harnessu (krok 1A): kontejner posloucha na svem webovem portu (8080),
+        // ne na 80/443; drive sem chodila USPESNA spojeni na zavrene porty, coz je
+        // vnitrne sporne (port, ktery sken nevidi, by odpovedel RST) a vyrabelo to
+        // `unexpected_traffic` v kazdem cyklu u kazdeho kontejneru (Cloud, Datacenter).
+        let container_port = (device.role == Role::Container).then(|| {
+            device
+                .services
+                .iter()
+                .find(|s| s.web)
+                .or(device.services.first())
+                .map(|s| s.port)
+                .unwrap_or(8080)
+        });
         for _ in 0..n {
             let at = t0 + rng.range(0, CYCLE_SECS as u64 - 1) as i64;
-            let port = if rng.chance(0.6) { 443 } else { 80 };
+            let web_port = if rng.chance(0.6) { 443 } else { 80 };
+            let port = container_port.unwrap_or(web_port);
             let client = public_ip(rng);
             push(
                 &mut out,
@@ -1206,6 +1236,11 @@ fn push(
             item.flows_emitted += 1;
             item.touched_ips.insert(src.clone());
             item.touched_ips.insert(observation.dst_ip.clone());
+            if let Some(port) = observation.dst_port {
+                item.cycle_targets
+                    .insert((observation.dst_ip.clone(), port));
+            }
+            item.cycle_sources.insert(src.clone());
             if item.first_emit_cycle.is_none() {
                 item.first_emit_cycle = Some(ctx.cycle);
             }
@@ -2592,6 +2627,8 @@ mod tests {
             target_external: None,
             ids_visible: false,
             touched_ips: BTreeSet::new(),
+            cycle_targets: Default::default(),
+            cycle_sources: Default::default(),
             flows_emitted: 0,
             flows_blocked: 0,
             first_emit_cycle: None,

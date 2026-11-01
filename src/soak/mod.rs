@@ -10,5 +10,7 @@ pub mod netmodel;
 pub mod report;
 pub mod rng;
 pub mod runner;
+pub mod scoring;
 pub mod stats;
 pub mod traffic;
+pub mod v3;

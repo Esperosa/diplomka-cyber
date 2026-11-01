@@ -21,9 +21,12 @@ use crate::{
     case_memory::{
         CaseMemory, CaseRecord, CaseSource, Outcome, RecordOutcome, case_from_verification_result,
     },
+    context_gate::{ContextKind, GateInput},
     correlation, decision,
     enforcement::{BlockIpRequest, ProtectedRanges},
+    engine::{EngineConfig, EngineMode},
     error::{BakulaError, Result},
+    finding_memory::{Disposition, Escalation, Observation, key_for_finding, split_service_key},
     findings, fusion,
     identity::{IdentityMatch, IdentityResolver},
     model::{Finding, HostReport, NormalizedEvent, PassiveWindow, RunReport, SourceMetadata},
@@ -37,12 +40,14 @@ use crate::{
     soak::{
         kernel::SimKernel,
         netmodel::{Archetype, NetworkModel},
-        rng::{Rng, derive},
-        stats::{Aggregate, FamilyStats},
+        rng::{Rng, derive, mix},
+        scoring::{InventoryView, Seen, StateTracker, placebo_window, unexpected_cause},
+        stats::{Aggregate, FamilyStats, NetworkSummary},
         traffic::{
             CYCLE_SECS, CycleContext, Kind, Lookalike, Telemetry, Truth, generate_cycle,
             plan_episode, random_telemetry, seed_for_cycle, ts,
         },
+        v3::{ContextCoverage, SimContext, V3Runtime, phantom_windows},
     },
     verification_exec::{self, CheckRunner, ExecutionBudget, LocalRunner},
     verification_planner,
@@ -59,6 +64,11 @@ pub struct EpisodeConfig {
     /// 0 = delka podle seedu (24/48/72/96 virtualnich hodin).
     pub hours: u32,
     pub scratch: PathBuf,
+    /// Rezim jadra (legacy | v3 s volbami); vychozi legacy.
+    pub engine: EngineConfig,
+    /// Zasahy (blokace) zpetne ovlivnuji generator provozu. Pro parove A/B se vypina
+    /// (`--no-feedback`), jinak ramena dostanou jiny provoz (K20).
+    pub feedback: bool,
 }
 
 /// Typy nalezu odvozene z inventare (ne z provozu): nejsou "poplachy", takze se
@@ -133,6 +143,22 @@ struct Ledger {
     typed: bool,
     ranked_prod: bool,
     ranked_egress: bool,
+    /// Detekce jen ze zobrazenych polozek (co uvidi clovek).
+    displayed_detect: Option<u32>,
+    typed_displayed: bool,
+    placebo: Option<(u32, u32)>,
+    placebo_captured: bool,
+    placebo_displayed: bool,
+}
+
+/// Zobrazeni nalezu v cyklu (legacy: vse, v3: podle pameti a kontextu).
+struct Shown {
+    displayed: bool,
+    reason: &'static str,
+    auto: Option<ContextKind>,
+    /// Cile (ip, port) a dominantni zdroje nalezu (jen u automaticky zavrenych, mereni).
+    targets: Vec<(String, u16)>,
+    sources: Vec<String>,
 }
 
 fn key_ips(truth: &Truth, ips: &[String], rogue: &Option<(String, String)>) -> Vec<String> {
@@ -215,19 +241,28 @@ impl EpisodeDigest {
 pub struct EpisodeResult {
     pub agg: Aggregate,
     pub digest: u64,
+    /// Souhrn site pro parove A/B (networks.jsonl).
+    pub summary: NetworkSummary,
 }
 
 pub fn run_episode(cfg: &EpisodeConfig) -> EpisodeResult {
-    let mut agg = Aggregate::default();
+    let started = Instant::now();
+    let mut agg = Aggregate {
+        engine: cfg.engine.label(),
+        ..Aggregate::default()
+    };
     let mut digest = EpisodeDigest(0x5EED);
     if let Err(error) = run_episode_inner(cfg, &mut agg, &mut digest) {
         agg.violation("episode_error", format!("sit {}: {error}", cfg.network_id));
     }
     agg.networks += 1;
     agg.episodes += 1;
+    let mut summary = NetworkSummary::from_aggregate(&agg, cfg.run_seed, cfg.network_id);
+    summary.wall_s = started.elapsed().as_secs_f64();
     EpisodeResult {
         digest: digest.0 ^ agg.deterministic_digest(),
         agg,
+        summary,
     }
 }
 
@@ -278,7 +313,6 @@ fn run_episode_inner(
         .map(|_| rng.range(1, cycles.saturating_sub(1).max(1) as u64) as u32)
         .collect();
     let mut patched_ids: HashSet<u32> = HashSet::new();
-    let mut hosts_devices: Vec<u32> = Vec::new();
     let mut lookalike_with_fp: HashSet<usize> = HashSet::new();
 
     let clock = Arc::new(AtomicI64::new(
@@ -305,8 +339,26 @@ fn run_episode_inner(
     let scope_nets = model.scope();
     let scope = ScopePolicy::new(scope_nets.clone());
     let mut resolver = IdentityResolver::new();
+    let mut v3 = match cfg.engine.mode {
+        EngineMode::V3 => Some(V3Runtime::new(cfg.engine)?),
+        EngineMode::Legacy => None,
+    };
+    let coverage = ContextCoverage::default();
+    let phantoms = if cfg.engine.context_gate() {
+        phantom_windows(&model, cycles, &coverage)
+    } else {
+        Vec::new()
+    };
+    let mut tracker = StateTracker::default();
+    let mut scan_device_of_ip: HashMap<String, u32> = HashMap::new();
+    let mut scan_devices: HashSet<u32> = HashSet::new();
+    let mut restart_cold = false;
     let mut memory = CaseMemory::in_memory();
     let poisoned = rng.chance(0.03);
+    // Oddeleny nahodny proud pro vyhodnoceni (verdikty operatora, otrava, chyby
+    // operatora): jeho spotreba zavisi na nalezech enginu, takze nesmi posouvat
+    // proud sveta (churn, pady), jinak by ramena A/B dostala jiny provoz (krok 1A).
+    let mut eval_rng = Rng::new(derive(model.seed, 0xE7A1_5EED));
     if poisoned {
         agg.learning.poison_episodes += 1;
     }
@@ -320,8 +372,44 @@ fn run_episode_inner(
             typed: false,
             ranked_prod: false,
             ranked_egress: false,
+            displayed_detect: None,
+            typed_displayed: false,
+            placebo: None,
+            placebo_captured: false,
+            placebo_displayed: false,
         })
         .collect();
+    // placebo okna: posunuty cas, stejna klicova zarizeni, bez jineho utoku na ne
+    {
+        let devices_of = |t: &Truth| -> BTreeSet<u32> {
+            t.victim_devices
+                .iter()
+                .copied()
+                .chain(t.attacker_device)
+                .collect()
+        };
+        for (index, truth) in truths.iter().enumerate() {
+            if !matches!(truth.kind, Kind::Attack(_)) {
+                continue;
+            }
+            let Some((ps, pe)) = placebo_window(truth.start_cycle, truth.end_cycle, cycles) else {
+                continue;
+            };
+            let mine = devices_of(truth);
+            let clash = truths.iter().any(|other| {
+                matches!(other.kind, Kind::Attack(_))
+                    && other.id != truth.id
+                    && other.start_cycle <= pe + 2 * ATTRIBUTION_LATENCY
+                    && other.end_cycle + 2 * ATTRIBUTION_LATENCY >= ps
+                    && (!devices_of(other).is_disjoint(&mine)
+                        || (other.attacker_external.is_some()
+                            && other.attacker_external == truth.attacker_external))
+            });
+            if !clash {
+                ledgers[index].placebo = Some((ps, pe));
+            }
+        }
+    }
     let mut pending: Vec<(i64, u32)> = Vec::new(); // (action id, cycle proposed)
     let mut attributed_noise_cycles = 0u64;
     let mut active_attack_cycles: HashSet<u32> = HashSet::new();
@@ -431,8 +519,14 @@ fn run_episode_inner(
                 .map_err(|e| BakulaError::Processing(format!("serializace identity: {e}")))?;
             resolver = serde_json::from_str(&json)
                 .map_err(|e| BakulaError::Processing(format!("obnova identity: {e}")))?;
-            hosts_cache.clear();
-            hosts_devices.clear();
+            if let Some(runtime) = v3.as_mut() {
+                runtime.restart()?;
+            }
+            // legacy: inventar zil jen v pameti procesu (A09); v3 ho ma perzistentni
+            if !cfg.engine.unexpected_v3() {
+                hosts_cache.clear();
+            }
+            restart_cold = true;
             agg.ops.engine_restarts += 1;
         }
 
@@ -455,7 +549,7 @@ fn run_episode_inner(
                 cycle >= truths[*index].start_cycle && cycle <= truths[*index].end_cycle
             })
             .map(|(_, info)| info.clone());
-        if kernel.inject_faults(&mut rng).is_some() {
+        if kernel.inject_faults(&mut eval_rng).is_some() {
             agg.enforcement.kernel_faults += 1;
         }
 
@@ -468,7 +562,11 @@ fn run_episode_inner(
                 cycle,
                 start_offset_s,
                 telemetry: &telemetry,
-                oracle: kernel.as_ref(),
+                oracle: if cfg.feedback {
+                    kernel.as_ref()
+                } else {
+                    &crate::soak::traffic::NoBlocks
+                },
                 rogue: rogue.clone(),
             };
             generate_cycle(&ctx, &mut truths, &mut cycle_rng)
@@ -502,10 +600,22 @@ fn run_episode_inner(
                     }
                 }
             }
+            scan_devices = output.inventory_devices.iter().copied().collect();
+            for (host, device) in hosts.iter().zip(&output.inventory_devices) {
+                scan_device_of_ip.insert(host.ip.clone(), *device);
+            }
+            if let Some(runtime) = v3.as_mut()
+                && cfg.engine.unexpected_v3()
+            {
+                runtime.inventory.merge_scan(&hosts);
+            }
+            restart_cold = false;
             hosts_cache = hosts;
-            hosts_devices = output.inventory_devices.clone();
         }
-        let mut hosts = hosts_cache.clone();
+        let mut hosts = match v3.as_ref() {
+            Some(runtime) if cfg.engine.unexpected_v3() => runtime.inventory.hosts(),
+            _ => hosts_cache.clone(),
+        };
 
         // --- 2. detekce (produkcni cesta: dst musi byt v scope, viz zeek.rs) ---
         let in_scope_obs: Vec<ConnectionObservation> = output
@@ -523,9 +633,18 @@ fn run_episode_inner(
                     .map(move |s| (h.ip.clone(), s.proto.clone(), s.port))
             })
             .collect();
-        let mut events: Vec<NormalizedEvent> = stage(agg, "detect", || {
-            LegacyAnomalyDetector.detect(in_scope_obs.clone(), &known)
-        });
+        let known_hosts: HashSet<String> = hosts.iter().map(|h| h.ip.clone()).collect();
+        let mut events: Vec<NormalizedEvent> = match v3.as_mut() {
+            Some(runtime) if cfg.engine.v3_detector() => {
+                let started = Instant::now();
+                let events = runtime.detect(&in_scope_obs, &known, &known_hosts, ts(t0));
+                agg.perf_record("detect", started.elapsed().as_secs_f64());
+                events
+            }
+            _ => stage(agg, "detect", || {
+                LegacyAnomalyDetector.detect(in_scope_obs.clone(), &known)
+            }),
+        };
         let window_start = ts(t0 - 3600);
         let window_end = ts(t0 + CYCLE_SECS + 3600);
         if !output.alerts.is_empty() {
@@ -545,7 +664,15 @@ fn run_episode_inner(
             let correlated = correlation::correlate_events(&hosts, events.clone(), 3600);
             let unmapped = report::attach_events(&mut hosts, correlated);
             report::score_services(&mut hosts);
-            let matches: Vec<IdentityMatch> = hosts.iter().map(|h| resolver.resolve(h)).collect();
+            let matches: Vec<IdentityMatch> = match v3.as_mut() {
+                Some(runtime) if cfg.engine.identity_v3() => {
+                    let inventory = &runtime.inventory;
+                    runtime
+                        .identity
+                        .resolve_snapshot_with(&hosts, |ip| inventory.is_stale(ip))
+                }
+                _ => hosts.iter().map(|h| resolver.resolve(h)).collect(),
+            };
             let identity_map: HashMap<String, IdentityMatch> = hosts
                 .iter()
                 .map(|h| h.host_key.clone())
@@ -579,6 +706,14 @@ fn run_episode_inner(
             run_report
                 .findings
                 .dedup_by(|l, r| l.finding_id == r.finding_id);
+            if cfg.engine.unexpected_v3() {
+                let mut list = std::mem::take(&mut run_report.findings);
+                list.extend(findings::v3_extra_findings(&run_report));
+                findings::aggregate_unmapped_findings(&mut list, &run_report);
+                list.sort_by(|l, r| l.finding_id.cmp(&r.finding_id));
+                list.dedup_by(|l, r| l.finding_id == r.finding_id);
+                run_report.findings = list;
+            }
             (run_report, identity_map)
         });
         agg.findings += run_report.findings.len() as u64;
@@ -589,12 +724,12 @@ fn run_episode_inner(
         // identita proti ground truth
         // `hosts` ma poradi inventare (= poradi zarizeni v modelu), proto index = zarizeni;
         // `run_report.hosts` je serazene podle IP, ne podle zarizeni.
-        for (index, host) in hosts.iter().enumerate() {
-            let Some(device) = hosts_devices
-                .get(index)
+        for host in hosts.iter() {
+            let Some(device) = scan_device_of_ip
+                .get(&host.ip)
                 .and_then(|id| model.devices.get(*id as usize))
             else {
-                continue; // rogue host pripojeny na konec inventare
+                continue; // rogue host (neni v modelu)
             };
             let mac = &device.mac;
             match identity_map.get(&host.host_key) {
@@ -613,6 +748,177 @@ fn run_episode_inner(
             }
         }
 
+        // --- 3b. pamet nalezu a kontextove vylouceni (v3) ---
+        let report_services: HashMap<&str, &crate::model::ServiceReport> = run_report
+            .hosts
+            .iter()
+            .flat_map(|h| h.services.iter())
+            .map(|s| (s.service_key.as_str(), s))
+            .collect();
+        let memory_started = Instant::now();
+        let shown: Vec<Shown> = match v3.as_mut() {
+            None => run_report
+                .findings
+                .iter()
+                .map(|_| Shown {
+                    displayed: true,
+                    reason: "legacy",
+                    auto: None,
+                    targets: Vec::new(),
+                    sources: Vec::new(),
+                })
+                .collect(),
+            Some(runtime) => {
+                runtime.gate.begin_cycle();
+                let context = cfg.engine.context_gate().then(|| {
+                    SimContext::for_cycle(
+                        &truths,
+                        &model,
+                        &ips,
+                        start_offset_s,
+                        cycles,
+                        &coverage,
+                        &phantoms,
+                        cycle,
+                    )
+                });
+                let at = ts(t0);
+                let memory_on = runtime.memory.is_some();
+                let mut out = Vec::with_capacity(run_report.findings.len());
+                for finding in &run_report.findings {
+                    let service_key = finding.service_key.as_deref().unwrap_or("-");
+                    let (_, key_ip) = split_service_key(service_key);
+                    let host_ip = finding
+                        .host_key
+                        .clone()
+                        .unwrap_or_else(|| key_ip.to_string());
+                    let entity_host = finding
+                        .host_key
+                        .as_ref()
+                        .and_then(|k| identity_map.get(k))
+                        .map(|m| m.asset_id().to_string())
+                        .unwrap_or_else(|| host_ip.clone());
+                    let mut sources: Vec<String> = Vec::new();
+                    let mut count = 1u32;
+                    if let Some(service_report) = report_services.get(service_key) {
+                        for item in service_report
+                            .events
+                            .iter()
+                            .filter(|e| e.event.event_type == finding.finding_type)
+                        {
+                            count = count.max(item.event.count);
+                            if let Some(port) = item.event.dst_port {
+                                for source in runtime.sources_of(
+                                    &item.event.dst_ip,
+                                    &item.event.proto,
+                                    port,
+                                    &item.event.event_type,
+                                ) {
+                                    if !sources.contains(source) {
+                                        sources.push(source.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // pokusy (sken) jsou stav ZDROJE: jeden stav na skener, ne na kazdy cil
+                    let key = key_for_finding(finding, &entity_host, &sources);
+                    let explanation = context.as_ref().and_then(|ctx| {
+                        let ids = [host_ip.clone(), entity_host.clone()];
+                        runtime.gate.explain(
+                            ctx,
+                            &GateInput {
+                                finding_type: &finding.finding_type,
+                                host_ids: &ids,
+                                sources: &sources,
+                                severity: finding.severity,
+                                at,
+                            },
+                        )
+                    });
+                    let disposition = match runtime.memory.as_mut() {
+                        Some(memory) => memory.observe(
+                            &Observation {
+                                key,
+                                severity: finding.severity,
+                                count,
+                                sources: &sources,
+                                at,
+                                volume_explained: explanation
+                                    .as_ref()
+                                    .is_some_and(|e| e.kind.explains_volume()),
+                            },
+                            explanation.as_ref().map(|e| e.reason.as_str()),
+                        ),
+                        None => match &explanation {
+                            Some(e) => Disposition::AutoResolved(e.reason.clone()),
+                            None => Disposition::First,
+                        },
+                    };
+                    let auto_closed = matches!(disposition, Disposition::AutoResolved(_));
+                    let mut shown_item = match disposition {
+                        Disposition::First => Shown {
+                            displayed: true,
+                            reason: if memory_on { "first" } else { "no_memory" },
+                            auto: None,
+                            targets: Vec::new(),
+                            sources: Vec::new(),
+                        },
+                        Disposition::Reopened => Shown {
+                            displayed: true,
+                            reason: "reopened",
+                            auto: None,
+                            targets: Vec::new(),
+                            sources: Vec::new(),
+                        },
+                        Disposition::Escalated(cause) => Shown {
+                            displayed: true,
+                            reason: match cause {
+                                Escalation::Severity => "escalated_severity",
+                                Escalation::NewSource => "escalated_source",
+                                Escalation::Volume => "escalated_volume",
+                            },
+                            auto: None,
+                            targets: Vec::new(),
+                            sources: Vec::new(),
+                        },
+                        Disposition::Suppressed => Shown {
+                            displayed: false,
+                            reason: "suppressed",
+                            auto: None,
+                            targets: Vec::new(),
+                            sources: Vec::new(),
+                        },
+                        Disposition::AutoResolved(_) => Shown {
+                            displayed: false,
+                            reason: "auto_resolved",
+                            auto: explanation.as_ref().map(|e| e.kind),
+                            targets: Vec::new(),
+                            sources: Vec::new(),
+                        },
+                    };
+                    if auto_closed {
+                        shown_item.targets = report_services
+                            .get(service_key)
+                            .map(|svc| {
+                                svc.events
+                                    .iter()
+                                    .filter(|e| e.event.event_type == finding.finding_type)
+                                    .filter_map(|e| {
+                                        e.event.dst_port.map(|p| (e.event.dst_ip.clone(), p))
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        shown_item.sources = sources.clone();
+                    }
+                    out.push(shown_item);
+                }
+                out
+            }
+        };
+        agg.perf_record("memory_context", memory_started.elapsed().as_secs_f64());
+
         // --- 4. hypotezy, plany, vykonani kontrol ---
         let (plans, results, bad_probability, hypotheses) =
             stage(agg, "hypothesis_plan_exec", || {
@@ -626,9 +932,13 @@ fn run_episode_inner(
                     .iter()
                     .filter_map(|h| h.probability)
                     .find(|p| !(0.0..=1.0).contains(p));
+                // v3: overuje se jen to, co se zobrazuje (novy/eskalovany stav), ne
+                // tentyz otevreny nalez v kazdem cyklu znovu (audit A24)
                 let plans: Vec<verification_planner::HypothesisVerificationPlan> = hypotheses
                     .iter()
-                    .filter_map(|h| verification_planner::plan_for_hypothesis(h, &scope))
+                    .enumerate()
+                    .filter(|(index, _)| shown.get(*index).is_none_or(|s| s.displayed))
+                    .filter_map(|(_, h)| verification_planner::plan_for_hypothesis(h, &scope))
                     .collect();
                 let runner = SimRunner {
                     model: &model,
@@ -703,56 +1013,189 @@ fn run_episode_inner(
         let mut attributed_to_lookalike: BTreeMap<usize, usize> = BTreeMap::new();
         let ranks_prod = rank_sources(&in_scope_obs);
         let ranks_egress = rank_sources(&output.observations);
-        for finding in &behavioral {
+        let inventory_ips: HashSet<&str> = hosts.iter().map(|h| h.ip.as_str()).collect();
+        let unmapped_by_id: HashMap<&str, &NormalizedEvent> = run_report
+            .unmapped_events
+            .iter()
+            .map(|e| (e.event.event_id.as_str(), &e.event))
+            .collect();
+        for (finding_index, finding) in run_report.findings.iter().enumerate() {
+            let show = &shown[finding_index];
+            let is_behavioral = !is_static_exposure(&finding.finding_type);
             let mut attributed = false;
             let mut attacked = false;
-            for (index, truth) in truths.iter().enumerate() {
-                let window_ok = cycle + ATTRIBUTION_LATENCY >= truth.start_cycle
-                    && cycle <= truth.end_cycle + ATTRIBUTION_LATENCY;
-                if !window_ok || !finding_mentions(finding, &truth_keys[index]) {
-                    continue;
-                }
-                attributed = true;
-                match truth.kind {
-                    Kind::Attack(family) => {
-                        attributed_to_attack += 1;
-                        attacked = true;
-                        let ledger = &mut ledgers[index];
-                        if ledger.first_detect.is_none() {
-                            ledger.first_detect = Some(cycle);
-                        }
-                        if family
-                            .expected_types()
-                            .contains(&finding.finding_type.as_str())
-                        {
-                            ledger.typed = true;
-                        }
-                    }
-                    Kind::Benign(_) => *attributed_to_lookalike.entry(index).or_default() += 1,
-                }
-            }
-            if !attributed {
-                // udalosti bez klicovych IP (vypadek senzoru, poskozene logy, replay)
+            let mut attack_family: Option<&'static str> = None;
+            if is_behavioral {
                 for (index, truth) in truths.iter().enumerate() {
-                    if let Kind::Benign(look) = truth.kind {
-                        if look.window_scoped()
-                            && cycle >= truth.start_cycle
-                            && cycle <= truth.end_cycle
-                        {
-                            attributed = true;
-                            *attributed_to_lookalike.entry(index).or_default() += 1;
-                            break;
+                    if let Some((ps, pe)) = ledgers[index].placebo
+                        && cycle + ATTRIBUTION_LATENCY >= ps
+                        && cycle <= pe + ATTRIBUTION_LATENCY
+                        && finding_mentions(finding, &truth_keys[index])
+                    {
+                        ledgers[index].placebo_captured = true;
+                        ledgers[index].placebo_displayed |= show.displayed;
+                    }
+                    let window_ok = cycle + ATTRIBUTION_LATENCY >= truth.start_cycle
+                        && cycle <= truth.end_cycle + ATTRIBUTION_LATENCY;
+                    if !window_ok || !finding_mentions(finding, &truth_keys[index]) {
+                        continue;
+                    }
+                    attributed = true;
+                    match truth.kind {
+                        Kind::Attack(family) => {
+                            attributed_to_attack += 1;
+                            attacked = true;
+                            attack_family.get_or_insert(family.label());
+                            let ledger = &mut ledgers[index];
+                            if ledger.first_detect.is_none() {
+                                ledger.first_detect = Some(cycle);
+                            }
+                            let typed = family
+                                .expected_types()
+                                .contains(&finding.finding_type.as_str());
+                            ledger.typed |= typed;
+                            if show.displayed {
+                                ledger.displayed_detect.get_or_insert(cycle);
+                                ledger.typed_displayed |= typed;
+                            }
+                        }
+                        Kind::Benign(_) => *attributed_to_lookalike.entry(index).or_default() += 1,
+                    }
+                }
+                if !attributed {
+                    // udalosti bez klicovych IP (vypadek senzoru, poskozene logy, replay)
+                    for (index, truth) in truths.iter().enumerate() {
+                        if let Kind::Benign(look) = truth.kind {
+                            if look.window_scoped()
+                                && cycle >= truth.start_cycle
+                                && cycle <= truth.end_cycle
+                            {
+                                attributed = true;
+                                *attributed_to_lookalike.entry(index).or_default() += 1;
+                                break;
+                            }
                         }
                     }
                 }
+                labels.insert(finding.finding_id.clone(), attacked);
+                if !attributed {
+                    agg.fp_noise += 1;
+                    *agg.fp_noise_by_type
+                        .entry(finding.finding_type.clone())
+                        .or_default() += 1;
+                    if show.displayed {
+                        agg.output.displayed_fp += 1;
+                        *agg.displayed_fp_by_type
+                            .entry(finding.finding_type.clone())
+                            .or_default() += 1;
+                    }
+                    if matches!(
+                        finding.finding_type.as_str(),
+                        "unexpected_traffic" | "unmapped_passive_event" | "scan_attempts"
+                    ) {
+                        let target = report_services
+                            .get(finding.service_key.as_deref().unwrap_or("-"))
+                            .and_then(|svc| {
+                                svc.events
+                                    .iter()
+                                    .find(|e| e.event.event_type == finding.finding_type)
+                                    .map(|e| &e.event)
+                            })
+                            .or_else(|| {
+                                finding
+                                    .finding_id
+                                    .strip_prefix("finding:unmapped_passive_event:-:")
+                                    .and_then(|id| unmapped_by_id.get(id).copied())
+                            })
+                            .map(|e| {
+                                format!(
+                                    "{}/{}/{}",
+                                    e.dst_ip,
+                                    e.proto,
+                                    e.dst_port.map(|p| p.to_string()).unwrap_or_default()
+                                )
+                            })
+                            .or_else(|| finding.service_key.clone())
+                            .unwrap_or_default();
+                        let view = InventoryView {
+                            ips: &inventory_ips,
+                            services: &known,
+                            devices: &scan_devices,
+                        };
+                        let cause = unexpected_cause(&model, &view, &target, restart_cold);
+                        *agg.unexpected_causes
+                            .entry(format!("{}|{cause}", finding.finding_type))
+                            .or_default() += 1;
+                    }
+                }
             }
-            labels.insert(finding.finding_id.clone(), attacked);
-            if !attributed {
-                agg.fp_noise += 1;
-                *agg.fp_noise_by_type
-                    .entry(finding.finding_type.clone())
+            if show.displayed {
+                agg.output.displayed += 1;
+                agg.output.displayed_behavioral += is_behavioral as u64;
+                *agg.output
+                    .displayed_by_reason
+                    .entry(show.reason.to_string())
                     .or_default() += 1;
             }
+            if let Some(kind) = show.auto {
+                let causal = truths.iter().any(|truth| {
+                    matches!(truth.kind, Kind::Attack(_))
+                        && cycle + ATTRIBUTION_LATENCY >= truth.start_cycle
+                        && cycle <= truth.end_cycle + ATTRIBUTION_LATENCY
+                        && (show.targets.iter().any(|t| truth.cycle_targets.contains(t))
+                            || show.sources.iter().any(|s| truth.cycle_sources.contains(s)))
+                });
+                agg.output.auto_closures_wrong_causal += causal as u64;
+                let reason = kind.label().to_string();
+                agg.output.auto_closures += 1;
+                *agg.output
+                    .auto_closures_by_reason
+                    .entry(reason.clone())
+                    .or_default() += 1;
+                if attacked {
+                    agg.output.auto_closures_wrong += 1;
+                    *agg.output
+                        .auto_closures_wrong_detail
+                        .entry(format!(
+                            "{reason}|{}|{}",
+                            finding.finding_type,
+                            attack_family.unwrap_or("-")
+                        ))
+                        .or_default() += 1;
+                    *agg.output
+                        .auto_closures_wrong_by_reason
+                        .entry(reason)
+                        .or_default() += 1;
+                }
+                // nahodny audit vzorku zavrenych (simulovany clovek, 10 %), H-A3
+                let roll = mix(finding
+                    .finding_id
+                    .bytes()
+                    .fold(model.seed ^ cycle as u64, |a, b| {
+                        a.wrapping_mul(131).wrapping_add(b as u64)
+                    }))
+                    % 10;
+                if roll == 0 {
+                    // clovek u vzorku posoudi, zda zavreni skrylo utok (pricinne)
+                    agg.output.audit_sampled += 1;
+                    agg.output.audit_wrong += attacked as u64;
+                    agg.output.audit_wrong_causal += causal as u64;
+                    if let Some(runtime) = v3.as_mut() {
+                        runtime.gate.record_audit(kind, causal);
+                    }
+                }
+            }
+            tracker.observe(
+                &finding.finding_id,
+                cycle,
+                Seen {
+                    behavioral: is_behavioral,
+                    attributed,
+                    displayed: show.displayed,
+                    auto_resolved: show.auto.is_some(),
+                },
+                &mut agg.output,
+            );
         }
         agg.behavioral_tp += attributed_to_attack as u64;
         for (index, count) in &attributed_to_lookalike {
@@ -825,11 +1268,11 @@ fn run_episode_inner(
                 let Some(label) = label_of(finding) else {
                     continue;
                 };
-                if !rng.chance(0.10) {
+                if !eval_rng.chance(0.10) {
                     continue;
                 }
                 sampled += 1;
-                let verdict = if rng.chance(0.05) { !label } else { label };
+                let verdict = if eval_rng.chance(0.05) { !label } else { label };
                 let case = CaseRecord::new(
                     &finding.finding_type,
                     finding.host_key.as_deref(),
@@ -859,7 +1302,7 @@ fn run_episode_inner(
                 if !labelled.is_empty() {
                     for _ in 0..20 {
                         let (finding, label) =
-                            labelled[rng.range(0, labelled.len() as u64 - 1) as usize];
+                            labelled[eval_rng.range(0, labelled.len() as u64 - 1) as usize];
                         let case = CaseRecord::new(
                             &finding.finding_type,
                             finding.host_key.as_deref(),
@@ -957,7 +1400,7 @@ fn run_episode_inner(
                     still_pending.push((id, proposed_cycle));
                     continue;
                 }
-                if rng.chance(0.85) {
+                if eval_rng.chance(0.85) {
                     ops.decide(id, true, "operator-bot")?;
                     agg.enforcement.approved += 1;
                     ops.apply_approved(
@@ -1023,9 +1466,9 @@ fn run_episode_inner(
             }
 
             // 6c. chyba operatora: navrh zablokovat nahodnou VNITRNI adresu
-            if rng.chance(0.004) {
+            if eval_rng.chance(0.004) {
                 agg.enforcement.operator_error_attempts += 1;
-                let victim = ips[rng.range(0, ips.len() as u64 - 1) as usize].clone();
+                let victim = ips[eval_rng.range(0, ips.len() as u64 - 1) as usize].clone();
                 let request = BlockIpRequest {
                     ip: victim.clone(),
                     ttl_seconds: 3600,
@@ -1079,8 +1522,15 @@ fn run_episode_inner(
         })()?;
         agg.perf_record("enforcement", enforcement_started.elapsed().as_secs_f64());
 
+        if let Some(runtime) = v3.as_mut() {
+            runtime.end_cycle(ts(t0 + CYCLE_SECS))?;
+        }
+        if cycle % 48 == 47 {
+            tracker.sweep(cycle, &mut agg.output);
+        }
         digest.feed(output.observations.len() as u64);
         digest.feed(events.len() as u64);
+        digest.feed(shown.iter().filter(|s| s.displayed).count() as u64);
         digest.feed(run_report.findings.len() as u64);
         for finding in &run_report.findings {
             digest.feed(crate::soak::rng::mix(
@@ -1118,6 +1568,22 @@ fn run_episode_inner(
                 }
                 if ledger.typed {
                     stats.detected_typed += 1;
+                }
+                if ledger.displayed_detect.is_some() && truth.first_emit_cycle.is_some() {
+                    stats.detected_displayed += 1;
+                }
+                if ledger.typed_displayed {
+                    stats.typed_displayed += 1;
+                }
+                if ledger.placebo.is_some() {
+                    stats.placebo_windows += 1;
+                    stats.placebo_hits_captured += ledger.placebo_captured as u64;
+                    stats.placebo_hits_displayed += ledger.placebo_displayed as u64;
+                    let emitted = truth.first_emit_cycle.is_some();
+                    stats.placebo_detected_displayed +=
+                        (emitted && ledger.displayed_detect.is_some()) as u64;
+                    stats.placebo_detected_captured +=
+                        (emitted && ledger.first_detect.is_some()) as u64;
                 }
                 if let (Some(blocked), Some(first)) =
                     (truth.blocked_at_cycle, truth.first_emit_cycle)
@@ -1166,6 +1632,11 @@ fn run_episode_inner(
                 }
             }
         }
+    }
+    tracker.finish(&mut agg.output);
+    if let Some(memory) = v3.as_ref().and_then(|runtime| runtime.memory.as_ref()) {
+        agg.output.memory_peak_entries = memory.stats.peak_entries;
+        agg.output.memory_evicted = memory.stats.evicted;
     }
     // occurrences_with_fp: lookalike s alespon jednim pripsanym FP nalezem
     // (prepocet z fp_findings by byl nepresny; zde pocitame per-udalost v ledgeru nize)
@@ -1268,6 +1739,8 @@ mod tests {
             scratch: std::env::temp_dir()
                 .join("bakula-soak-test")
                 .join(format!("n{id}")),
+            engine: EngineConfig::legacy(),
+            feedback: true,
         }
     }
 
@@ -1336,6 +1809,8 @@ mod tests {
                     network_id: id,
                     hours: 0,
                     scratch: std::env::temp_dir().join(format!("bakula-soak-regr-{id}")),
+                    engine: EngineConfig::legacy(),
+                    feedback: true,
                 })
             });
             assert!(result.is_ok(), "sit {id} spadla");
@@ -1379,5 +1854,78 @@ mod tests {
         );
         assert!(total.families.values().map(|f| f.truth).sum::<u64>() > 0);
         assert_eq!(total.networks, 30);
+    }
+}
+
+#[cfg(test)]
+mod engine_v3_tests {
+    use super::*;
+
+    fn run(id: u64, hours: u32, engine: EngineConfig) -> EpisodeResult {
+        run_episode(&EpisodeConfig {
+            run_seed: 20261102,
+            network_id: id,
+            hours,
+            scratch: std::env::temp_dir().join("bakula-soak-v3-test"),
+            engine,
+            feedback: false,
+        })
+    }
+
+    /// Parove A/B (krok 1A): bez zpetne vazby a s oddelenym proudem vyhodnoceni
+    /// dostanou obe ramena IDENTICKY svet (provoz, utoky, churn), at engine dela cokoli.
+    #[test]
+    fn paired_arms_see_identical_world() {
+        let legacy = run(9, 48, EngineConfig::legacy());
+        let v3 = run(9, 48, EngineConfig::v3());
+        assert_eq!(legacy.agg.observations, v3.agg.observations);
+        assert_eq!(
+            legacy.agg.identity.churn_events,
+            v3.agg.identity.churn_events
+        );
+        let truths = |r: &EpisodeResult| -> Vec<(String, u64)> {
+            r.agg
+                .families
+                .iter()
+                .map(|(k, f)| (k.clone(), f.truth))
+                .collect()
+        };
+        assert_eq!(truths(&legacy), truths(&v3));
+        assert!(
+            v3.agg.invariant_violations.is_empty(),
+            "{:?}",
+            v3.agg.violation_samples
+        );
+        assert!(
+            v3.agg.output.displayed < legacy.agg.output.displayed,
+            "v3 zobrazuje {} vs legacy {}",
+            v3.agg.output.displayed,
+            legacy.agg.output.displayed
+        );
+        assert_eq!(
+            legacy.agg.output.displayed, legacy.agg.findings,
+            "legacy zobrazi vse"
+        );
+        assert!(v3.agg.output.memory_peak_entries > 0);
+        assert_eq!(v3.summary.engine, v3.agg.engine);
+    }
+
+    /// Regrese v2b (35 % falesne rozdeleno): v3 identita (jmeno hostu, drzene hosty
+    /// inventare) snizi falesne rozdeleni na velke siti s podsitemi mimo L2 dosah.
+    #[test]
+    #[ignore]
+    fn v3_identity_reduces_false_split_on_large_network() {
+        let legacy = run(5, 96, EngineConfig::legacy());
+        let v3 = run(5, 96, EngineConfig::v3());
+        let (l, n) = (&legacy.agg.identity, &v3.agg.identity);
+        assert_eq!(l.devices, n.devices);
+        assert!(
+            n.devices_false_split * 3 < l.devices_false_split * 2,
+            "{l:?} vs {n:?}"
+        );
+        assert!(
+            n.asset_ids_false_merge < l.asset_ids_false_merge,
+            "{l:?} vs {n:?}"
+        );
     }
 }

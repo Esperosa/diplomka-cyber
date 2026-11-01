@@ -24,6 +24,24 @@ pub struct FamilyStats {
     pub ttc_cycles: Vec<u64>,
     pub ids_visible: u64,
     pub ids_visible_detected: u64,
+    /// Detekce jen ze ZOBRAZENYCH polozek (co skutecne uvidi clovek); legacy = vse.
+    #[serde(default)]
+    pub detected_displayed: u64,
+    #[serde(default)]
+    pub typed_displayed: u64,
+    /// Placebo okna (stejne klicove IP, posunuty cas bez utoku): mira nahodne shody.
+    #[serde(default)]
+    pub placebo_windows: u64,
+    #[serde(default)]
+    pub placebo_hits_captured: u64,
+    #[serde(default)]
+    pub placebo_hits_displayed: u64,
+    /// Detekce (zobrazene) jen u utoku, ktere maji placebo okno: stejna podmnozina
+    /// jako `placebo_hits_*`, takze rozdil = detekce nad pozadim.
+    #[serde(default)]
+    pub placebo_detected_displayed: u64,
+    #[serde(default)]
+    pub placebo_detected_captured: u64,
 }
 
 impl FamilyStats {
@@ -54,6 +72,13 @@ impl FamilyStats {
         self.contained += other.contained;
         self.ids_visible += other.ids_visible;
         self.ids_visible_detected += other.ids_visible_detected;
+        self.detected_displayed += other.detected_displayed;
+        self.typed_displayed += other.typed_displayed;
+        self.placebo_windows += other.placebo_windows;
+        self.placebo_hits_captured += other.placebo_hits_captured;
+        self.placebo_hits_displayed += other.placebo_hits_displayed;
+        self.placebo_detected_displayed += other.placebo_detected_displayed;
+        self.placebo_detected_captured += other.placebo_detected_captured;
         merge_vec(&mut self.ttd_cycles, &other.ttd_cycles);
         merge_vec(&mut self.ttc_cycles, &other.ttc_cycles);
     }
@@ -65,6 +90,85 @@ fn merge_vec(mine: &mut Vec<u64>, theirs: &[u64]) {
     }
     for (index, value) in theirs.iter().enumerate() {
         mine[index] += value;
+    }
+}
+
+/// Zobrazene polozky a "tri skupiny vystupu" (00-zaver Dodatek A.1):
+/// zachyceno / automaticky vyreseno / ceka na cloveka; plus mira "zavreno omylem".
+/// Stav = odlisny nalez (stejne `finding_id`, mezera bez vyskytu <= 12 cyklu), ne nalez x cyklus.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct OutputStats {
+    /// Polozky zobrazene cloveku (legacy: kazdy nalez v kazdem cyklu).
+    pub displayed: u64,
+    pub displayed_behavioral: u64,
+    /// Zobrazene behavioralni polozky bez pripsatelne priciny (falesny poplach).
+    pub displayed_fp: u64,
+    pub displayed_by_reason: BTreeMap<String, u64>,
+    pub states_captured: u64,
+    pub states_behavioral: u64,
+    pub states_fp: u64,
+    pub states_auto_resolved: u64,
+    pub states_awaiting_human: u64,
+    pub states_awaiting_human_fp: u64,
+    pub states_collected_only: u64,
+    /// Automaticka zavreni (pozorovani) a z nich zavreno omylem (pripsano utoku).
+    pub auto_closures: u64,
+    pub auto_closures_wrong: u64,
+    pub auto_closures_by_reason: BTreeMap<String, u64>,
+    pub auto_closures_wrong_by_reason: BTreeMap<String, u64>,
+    /// Zavreno omylem PRICINNE: utok v tomto cyklu posilal toky na cil nalezu nebo z jeho
+    /// dominantniho zdroje (sirsi `auto_closures_wrong` = nalez jen zminuje klicovou IP).
+    pub auto_closures_wrong_causal: u64,
+    pub audit_wrong_causal: u64,
+    /// Zavreno omylem podle `duvod|typ nalezu|rodina utoku` (diagnostika).
+    pub auto_closures_wrong_detail: BTreeMap<String, u64>,
+    /// Nahodny audit vzorku automaticky zavrenych (simulovany clovek, 10 %).
+    pub audit_sampled: u64,
+    pub audit_wrong: u64,
+    pub memory_peak_entries: u64,
+    pub memory_evicted: u64,
+}
+
+impl OutputStats {
+    fn merge(&mut self, o: &OutputStats) {
+        self.displayed += o.displayed;
+        self.displayed_behavioral += o.displayed_behavioral;
+        self.displayed_fp += o.displayed_fp;
+        merge_map(&mut self.displayed_by_reason, &o.displayed_by_reason);
+        self.states_captured += o.states_captured;
+        self.states_behavioral += o.states_behavioral;
+        self.states_fp += o.states_fp;
+        self.states_auto_resolved += o.states_auto_resolved;
+        self.states_awaiting_human += o.states_awaiting_human;
+        self.states_awaiting_human_fp += o.states_awaiting_human_fp;
+        self.states_collected_only += o.states_collected_only;
+        self.auto_closures += o.auto_closures;
+        self.auto_closures_wrong += o.auto_closures_wrong;
+        merge_map(
+            &mut self.auto_closures_by_reason,
+            &o.auto_closures_by_reason,
+        );
+        merge_map(
+            &mut self.auto_closures_wrong_by_reason,
+            &o.auto_closures_wrong_by_reason,
+        );
+        merge_map(
+            &mut self.auto_closures_wrong_detail,
+            &o.auto_closures_wrong_detail,
+        );
+        self.audit_sampled += o.audit_sampled;
+        self.auto_closures_wrong_causal += o.auto_closures_wrong_causal;
+        self.audit_wrong_causal += o.audit_wrong_causal;
+        self.audit_wrong += o.audit_wrong;
+        self.memory_peak_entries = self.memory_peak_entries.max(o.memory_peak_entries);
+        self.memory_evicted += o.memory_evicted;
+    }
+}
+
+pub fn merge_map(mine: &mut BTreeMap<String, u64>, theirs: &BTreeMap<String, u64>) {
+    for (key, value) in theirs {
+        *mine.entry(key.clone()).or_default() += value;
     }
 }
 
@@ -322,6 +426,17 @@ pub struct Aggregate {
     /// Pocet sluzeb podle nazvu (pokryti serveru/protokolu).
     pub services: BTreeMap<String, u64>,
     pub ops: OpsStats,
+    /// Rezim jadra, ktery tento agregat vyrobil (`legacy`, `v3[...]`).
+    #[serde(default)]
+    pub engine: String,
+    #[serde(default)]
+    pub output: OutputStats,
+    /// Zobrazene falesne poplachy podle typu.
+    #[serde(default)]
+    pub displayed_fp_by_type: BTreeMap<String, u64>,
+    /// Diagnostika R13: pricina FP `unexpected_traffic` / `unmapped_passive_event`.
+    #[serde(default)]
+    pub unexpected_causes: BTreeMap<String, u64>,
 }
 
 const SAMPLE_CAP: usize = 100;
@@ -395,6 +510,14 @@ impl Aggregate {
             *self.services.entry(key.clone()).or_default() += value;
         }
         self.ops.merge(&other.ops);
+        if self.engine.is_empty() {
+            self.engine = other.engine.clone();
+        } else if !other.engine.is_empty() && other.engine != self.engine {
+            self.engine = format!("SMISENO({}|{})", self.engine, other.engine);
+        }
+        self.output.merge(&other.output);
+        merge_map(&mut self.displayed_fp_by_type, &other.displayed_fp_by_type);
+        merge_map(&mut self.unexpected_causes, &other.unexpected_causes);
         for (key, value) in &other.perf {
             self.perf.entry(key.clone()).or_default().merge(value);
         }
@@ -462,6 +585,114 @@ impl Aggregate {
             hash = hash.wrapping_mul(0x100_0000_01b3);
         }
         hash
+    }
+}
+
+/// Pocty jedne rodiny v jedne siti (pro parove A/B po sitich).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FamilyCounts {
+    pub truth: u64,
+    pub detected: u64,
+    pub detected_displayed: u64,
+    pub typed: u64,
+    pub typed_displayed: u64,
+    pub placebo_windows: u64,
+    pub placebo_hits_displayed: u64,
+    pub placebo_hits_captured: u64,
+    pub placebo_detected_displayed: u64,
+    pub placebo_detected_captured: u64,
+}
+
+/// Souhrn jedne site (radek `networks.jsonl`): jednotka paroveho A/B a bootstrapu.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct NetworkSummary {
+    pub run_seed: u64,
+    pub network_id: u64,
+    pub engine: String,
+    pub archetype: String,
+    pub size_class: String,
+    pub devices: u64,
+    pub virtual_days: f64,
+    pub findings: u64,
+    pub fp_noise: u64,
+    pub output: OutputStats,
+    pub fp_by_type: BTreeMap<String, u64>,
+    pub displayed_fp_by_type: BTreeMap<String, u64>,
+    pub families: BTreeMap<String, FamilyCounts>,
+    pub identity_devices: u64,
+    pub identity_false_split: u64,
+    pub identity_asset_ids: u64,
+    pub identity_false_merge: u64,
+    pub verification_plans: u64,
+    pub panics: u64,
+    pub violations: u64,
+    pub cycle_p99_s: f64,
+    /// Nedeterministicke (cas behu), mimo otisk.
+    pub wall_s: f64,
+}
+
+impl NetworkSummary {
+    pub fn from_aggregate(agg: &Aggregate, run_seed: u64, network_id: u64) -> Self {
+        let size = agg
+            .segments
+            .iter()
+            .find_map(|(key, seg)| {
+                key.strip_prefix("size|")
+                    .map(|k| (k.to_string(), seg.devices))
+            })
+            .unwrap_or_default();
+        let families = agg
+            .families
+            .iter()
+            .filter(|(name, _)| !name.ends_with("__ranked"))
+            .map(|(name, f)| {
+                (
+                    name.clone(),
+                    FamilyCounts {
+                        truth: f.truth,
+                        detected: f.detected_any,
+                        detected_displayed: f.detected_displayed,
+                        typed: f.detected_typed,
+                        typed_displayed: f.typed_displayed,
+                        placebo_windows: f.placebo_windows,
+                        placebo_hits_displayed: f.placebo_hits_displayed,
+                        placebo_hits_captured: f.placebo_hits_captured,
+                        placebo_detected_displayed: f.placebo_detected_displayed,
+                        placebo_detected_captured: f.placebo_detected_captured,
+                    },
+                )
+            })
+            .collect();
+        Self {
+            run_seed,
+            network_id,
+            engine: agg.engine.clone(),
+            archetype: agg.archetypes.keys().next().cloned().unwrap_or_default(),
+            size_class: size.0,
+            devices: size.1,
+            virtual_days: agg.virtual_hours / 24.0,
+            findings: agg.findings,
+            fp_noise: agg.fp_noise,
+            output: agg.output.clone(),
+            fp_by_type: agg.fp_noise_by_type.clone(),
+            displayed_fp_by_type: agg.displayed_fp_by_type.clone(),
+            families,
+            identity_devices: agg.identity.devices,
+            identity_false_split: agg.identity.devices_false_split,
+            identity_asset_ids: agg.identity.asset_ids,
+            identity_false_merge: agg.identity.asset_ids_false_merge,
+            verification_plans: agg.verification.plans,
+            panics: agg.panics,
+            violations: agg.invariant_violations.values().sum(),
+            cycle_p99_s: agg
+                .perf
+                .get("cycle_total")
+                .map(|h| h.percentile(0.99))
+                .unwrap_or(0.0),
+            wall_s: 0.0,
+        }
     }
 }
 

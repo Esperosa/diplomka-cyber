@@ -55,6 +55,12 @@ pub struct SoakConfig {
     /// Doplnkove nohy (realna data, ops stress, broker). Vychozi zapnuto.
     #[serde(default = "default_true")]
     pub legs: bool,
+    /// Rezim jadra (`--engine legacy|v3`, `--v3-off`).
+    #[serde(default)]
+    pub engine: crate::engine::EngineConfig,
+    /// Zasahy ovlivnuji generator (vychozi ano); `false` = parove A/B bez zpetne vazby.
+    #[serde(default = "default_true")]
+    pub feedback: bool,
 }
 
 fn default_true() -> bool {
@@ -78,6 +84,8 @@ impl SoakConfig {
             report_secs: 600,
             scratch,
             legs: true,
+            engine: crate::engine::EngineConfig::default(),
+            feedback: true,
         }
     }
 }
@@ -86,6 +94,9 @@ impl SoakConfig {
 pub struct PersistedState {
     pub config: SoakConfig,
     pub git_sha: String,
+    /// Strom mel necommitnute zmeny (binarka nemusi odpovidat `git_sha`).
+    #[serde(default)]
+    pub git_dirty: bool,
     pub started_at: String,
     pub elapsed_wall_s: f64,
     pub sessions: u32,
@@ -114,6 +125,15 @@ fn git_sha() -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
+fn git_dirty() -> bool {
+    std::process::Command::new("git")
+        .args(["status", "--porcelain", "--untracked-files=no"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .is_some_and(|o| !o.stdout.is_empty())
+}
+
 fn panic_text(payload: &Box<dyn std::any::Any + Send>) -> String {
     payload
         .downcast_ref::<&str>()
@@ -124,7 +144,17 @@ fn panic_text(payload: &Box<dyn std::any::Any + Send>) -> String {
 
 /// Spusti jeden blok siti. Vraci (agregat bloku, otisk bloku).
 pub fn run_block(cfg: &SoakConfig, block: u64) -> (Aggregate, u64) {
+    let (agg, digest, _) = run_block_with_summaries(cfg, block);
+    (agg, digest)
+}
+
+/// Jako `run_block`, navic souhrny jednotlivych siti (pro `networks.jsonl`).
+pub fn run_block_with_summaries(
+    cfg: &SoakConfig,
+    block: u64,
+) -> (Aggregate, u64, Vec<crate::soak::stats::NetworkSummary>) {
     let mut agg = Aggregate::default();
+    let mut summaries = Vec::new();
     let mut digest = mix(block);
     for offset in 0..cfg.block_size {
         let network_id = block * cfg.block_size + offset;
@@ -133,15 +163,25 @@ pub fn run_block(cfg: &SoakConfig, block: u64) -> (Aggregate, u64) {
             network_id,
             hours: cfg.episode_hours,
             scratch: cfg.scratch.join(format!("w{}", block % 4096)),
+            engine: cfg.engine,
+            feedback: cfg.feedback,
         };
         match catch_unwind(AssertUnwindSafe(|| run_episode(&episode))) {
             Ok(result) => {
                 digest = mix(digest ^ result.digest);
                 agg.merge(&result.agg);
+                summaries.push(result.summary);
             }
             Err(payload) => {
                 agg.panics += 1;
                 agg.networks += 1;
+                summaries.push(crate::soak::stats::NetworkSummary {
+                    run_seed: cfg.run_seed,
+                    network_id,
+                    engine: cfg.engine.label(),
+                    panics: 1,
+                    ..Default::default()
+                });
                 if agg.panic_samples.len() < 20 {
                     agg.panic_samples.push(format!(
                         "run_seed={} network_id={network_id}: {}",
@@ -153,7 +193,7 @@ pub fn run_block(cfg: &SoakConfig, block: u64) -> (Aggregate, u64) {
             }
         }
     }
-    (agg, digest)
+    (agg, digest, summaries)
 }
 
 fn state_path(out: &Path) -> PathBuf {
@@ -199,6 +239,7 @@ pub fn run(mut cfg: SoakConfig, resume: bool) -> Result<()> {
         PersistedState {
             config: cfg.clone(),
             git_sha: git_sha(),
+            git_dirty: git_dirty(),
             started_at: chrono::Utc::now().to_rfc3339(),
             elapsed_wall_s: 0.0,
             sessions: 1,
@@ -268,7 +309,7 @@ pub fn run(mut cfg: SoakConfig, resume: bool) -> Result<()> {
                             block
                         }
                     };
-                    let (agg, digest) = run_block(cfg, block);
+                    let (agg, digest, summaries) = run_block_with_summaries(cfg, block);
                     let mut guard = shared.lock().unwrap();
                     guard.state.aggregate.merge(&agg);
                     guard.committed.insert(block);
@@ -283,6 +324,11 @@ pub fn run(mut cfg: SoakConfig, resume: bool) -> Result<()> {
                         cfg.block_size
                     );
                     let _ = append_line(&cfg.out.join("blocks.jsonl"), &line);
+                    for summary in &summaries {
+                        if let Ok(json) = serde_json::to_string(summary) {
+                            let _ = append_line(&cfg.out.join("networks.jsonl"), &json);
+                        }
+                    }
                 }
             });
         }

@@ -98,6 +98,15 @@ struct SoakRunArgs {
     /// Vypnout doplnkove nohy (realna data, ops stress, broker).
     #[arg(long, default_value_t = false)]
     no_legs: bool,
+    /// Rezim jadra: legacy (vychozi) nebo v3.
+    #[arg(long, default_value = "legacy")]
+    engine: String,
+    /// Vypnout vyjmenovane zmeny v3 (ablace), napr. `rate,volume`.
+    #[arg(long, default_value = "")]
+    v3_off: String,
+    /// Parove A/B: zasahy enginu nezpetnuji generator provozu (stejny provoz v ramenech).
+    #[arg(long, default_value_t = false)]
+    no_feedback: bool,
 }
 
 #[derive(Args, Debug)]
@@ -909,6 +918,13 @@ fn main() -> anyhow::Result<()> {
             cfg.checkpoint_secs = args.checkpoint_secs.max(1);
             cfg.report_secs = args.report_secs.max(1);
             cfg.legs = !args.no_legs;
+            cfg.engine = bakula_program::engine::EngineConfig {
+                mode: args.engine.parse().map_err(anyhow::Error::msg)?,
+                v3: bakula_program::engine::V3Features::all()
+                    .disable_list(&args.v3_off)
+                    .map_err(anyhow::Error::msg)?,
+            };
+            cfg.feedback = !args.no_feedback;
             bakula_program::soak::runner::run(cfg, args.resume)?;
         }
         Command::Soak(SoakCommand::Verify(args)) => {
