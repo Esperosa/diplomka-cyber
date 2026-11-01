@@ -145,3 +145,60 @@ fn v3_memory_shows_first_occurrence_and_suppresses_repeat_across_processes() {
     );
     assert!(!legacy.join("engine-state.sqlite").exists());
 }
+
+/// Krok 3: odchozí IDS alert (zdroj v rozsahu, cíl venku) vytvoří ve v3 nález
+/// `egress_ids_alert` na vnitřním hostu a stav behaviorální vrstvy se uloží; legacy
+/// takový alert zahodí jako dřív (cíl mimo rozsah).
+#[test]
+fn v3_behavior_layer_reports_outbound_ids_alert_and_persists_state() {
+    let temp = TempDir::new().unwrap();
+    let scenarios = temp.path().join("simulace");
+    generate(&scenarios);
+    let eve = scenarios.join("zakladni").join("suricata").join("eve.json");
+    let content = fs::read_to_string(&eve).unwrap();
+    let template = content
+        .lines()
+        .find(|l| l.contains("\"event_type\":\"alert\""))
+        .expect("scenar ma alert");
+    let mut row: Value = serde_json::from_str(template).unwrap();
+    let inside = row["dest_ip"].as_str().unwrap().to_string();
+    row["src_ip"] = Value::String(inside.clone());
+    row["dest_ip"] = Value::String("203.0.113.77".into());
+    row["dest_port"] = Value::from(443);
+    row["alert"]["signature_id"] = Value::from(2027865);
+    row["alert"]["signature"] = Value::String("ET MALWARE Known C2 beacon pattern".into());
+    fs::write(&eve, format!("{content}\n{row}\n")).unwrap();
+
+    let workspace = temp.path().join("ws-v3");
+    fs::create_dir_all(&workspace).unwrap();
+    fs::write(workspace.join("bakula.toml"), "[engine]\nmode = \"v3\"\n").unwrap();
+    run(&workspace, &scenarios, "egress");
+    let runs = reports(&workspace);
+    let egress: Vec<&Value> = runs[0]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["finding_type"] == "egress_ids_alert")
+        .collect();
+    assert_eq!(egress.len(), 1, "jeden odchozi IDS nalez");
+    assert_eq!(egress[0]["host_key"], Value::String(inside));
+    let conn = rusqlite::Connection::open(workspace.join("engine-state.sqlite")).unwrap();
+    let behavior: String = conn
+        .query_row("SELECT value FROM kv WHERE name = 'behavior'", [], |r| {
+            r.get(0)
+        })
+        .expect("stav behavioralni vrstvy ulozen");
+    assert!(behavior.contains("\"profile\""));
+
+    let legacy = temp.path().join("ws-legacy");
+    run(&legacy, &scenarios, "legacy");
+    let runs = reports(&legacy);
+    assert!(
+        runs[0]["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|f| f["finding_type"] != "egress_ids_alert"),
+        "legacy odchozi alert nevidi"
+    );
+}

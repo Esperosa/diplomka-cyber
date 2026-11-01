@@ -35,6 +35,8 @@ pub(crate) struct V3Session {
     sources: SourceMap,
     /// Souhrn okna toků z detekce (pro uloženou historii, L0 žebříku).
     summary: Option<crate::flow_history::WindowSummary>,
+    /// Odchozí a vnitřní toky okna pro behaviorální vrstvu (krok 3).
+    behavior_flows: Option<crate::passive::BehaviorFlows>,
 }
 
 /// Data žebříku v produkčním běhu (krok 2B): historie toků a hrany ze SQLite,
@@ -54,6 +56,11 @@ struct ProdEvidence<'a> {
     scope: &'a crate::scope_policy::ScopePolicy,
     active: bool,
     now: DateTime<Utc>,
+    /// Profil hostu (krok 3E); `None` = vypnuto.
+    profile: Option<(
+        &'a crate::behavior::profile::HostProfiles,
+        &'a crate::behavior::profile::ProfilePolicy,
+    )>,
 }
 
 impl crate::verify_ladder::LadderEvidence for ProdEvidence<'_> {
@@ -166,6 +173,23 @@ impl crate::verify_ladder::LadderEvidence for ProdEvidence<'_> {
     fn suspicious_on(&self, ip: &str) -> usize {
         self.suspicious.get(ip).copied().unwrap_or(0)
     }
+
+    fn profile(
+        &self,
+        case: &crate::verify_ladder::CaseInput,
+    ) -> crate::behavior::profile::ProfileVerdict {
+        use crate::behavior::profile::{ProfileVerdict, case_pair, case_verdict};
+        let Some((profiles, policy)) = self.profile else {
+            return ProfileVerdict::Unknown("profil vypnut".into());
+        };
+        let group = case_pair(case).and_then(|(actor, ..)| {
+            self.groups
+                .get(&actor)
+                .and_then(|g| self.group_sizes.get(g))
+                .copied()
+        });
+        case_verdict(profiles, policy, case, group, self.now.timestamp())
+    }
 }
 
 impl V3Session {
@@ -231,7 +255,18 @@ impl V3Session {
             detector,
             sources: SourceMap::new(),
             summary: None,
+            behavior_flows: None,
         }))
+    }
+
+    /// Běží behaviorální vrstva (v3 s viditelností ven, grafem nebo profilem)?
+    pub(crate) fn behavior_enabled(&self) -> bool {
+        self.engine.behavior()
+    }
+
+    /// Toky okna pro behaviorální vrstvu z pasivního importu.
+    pub(crate) fn set_behavior_flows(&mut self, flows: Option<crate::passive::BehaviorFlows>) {
+        self.behavior_flows = flows;
     }
 
     pub(crate) fn detector(&self) -> Option<&V3StatefulDetector> {
@@ -278,7 +313,49 @@ impl V3Session {
             list.dedup_by(|l, r| l.finding_id == r.finding_id);
             report.findings = list;
         }
+        // krok 3: behavioralni vrstva (stav v kv `behavior`, prezije mezi behy)
+        let mut behavior_state: crate::behavior::BehaviorState = if self.engine.behavior() {
+            self.store.load("behavior")?.unwrap_or_default()
+        } else {
+            Default::default()
+        };
+        let mut behavior_signal: std::collections::HashMap<String, (u32, Vec<String>)> =
+            Default::default();
+        if let Some(flows) = self.behavior_flows.as_ref() {
+            let out = crate::behavior::run_window(
+                &mut behavior_state,
+                crate::behavior::BehaviorSwitches::from_engine(&self.engine),
+                &crate::behavior::BehaviorThresholds::default(),
+                &crate::behavior::BehaviorInput {
+                    outbound: &flows.outbound,
+                    internal: &flows.internal,
+                    outbound_alerts: &flows.outbound_alerts,
+                    now,
+                },
+            );
+            if flows.outbound_dropped > 0 {
+                tracing::info!(
+                    seen = flows.outbound_seen,
+                    dropped = flows.outbound_dropped,
+                    level = flows.sample_level,
+                    "odchozi toky vzorkovany po dvojici"
+                );
+            }
+            for item in out.findings {
+                behavior_signal.insert(item.finding.finding_id.clone(), (item.count, item.sources));
+                report.findings.push(item.finding);
+            }
+            report
+                .findings
+                .sort_by(|l, r| l.finding_id.cmp(&r.finding_id));
+            report
+                .findings
+                .dedup_by(|l, r| l.finding_id == r.finding_id);
+        }
         if !self.engine.memory() {
+            if self.engine.behavior() {
+                self.store.save("behavior", &behavior_state)?;
+            }
             return Ok(());
         }
         let calendar = if self.engine.context_gate() {
@@ -317,6 +394,9 @@ impl V3Session {
         if ladder_on && self.engine.learning() && ladder.learner.is_none() {
             ladder.learner = Some(Default::default());
         }
+        // profil je dukaz zebriku jen ve v3 s profilem (plati i pro ulozeny zebrik)
+        ladder.policy.profile = self.engine.profile();
+        let profile_policy = crate::behavior::profile::ProfilePolicy::default();
         let cycle = (now.timestamp() / 1800).max(0) as u64;
         let severe = GatePolicy::default().most_severe;
         let mut keys: Vec<crate::finding_memory::FindingKey> = Vec::new();
@@ -334,16 +414,19 @@ impl V3Session {
                 .and_then(|k| identity.get(k))
                 .map(|m| m.asset_id().to_string())
                 .unwrap_or_else(|| host_ip.clone());
-            let (count, sources) = findings::finding_signal(
-                finding,
-                services.get(service_key).copied(),
-                |dst, proto, port, kind| {
-                    self.sources
-                        .get(&(dst.to_string(), proto.to_string(), port, kind.to_string()))
-                        .map(Vec::as_slice)
-                        .unwrap_or(&[])
-                },
-            );
+            let (count, sources) = match behavior_signal.get(&finding.finding_id) {
+                Some((count, sources)) => (*count, sources.clone()),
+                None => findings::finding_signal(
+                    finding,
+                    services.get(service_key).copied(),
+                    |dst, proto, port, kind| {
+                        self.sources
+                            .get(&(dst.to_string(), proto.to_string(), port, kind.to_string()))
+                            .map(Vec::as_slice)
+                            .unwrap_or(&[])
+                    },
+                ),
+            };
             let key = key_for_finding(finding, &entity_host, &sources);
             let ids = [host_ip, entity_host];
             let explanation = gate.explain(
@@ -437,7 +520,7 @@ impl V3Session {
                         | "suricata_alert"
                         | "source_volume_outlier"
                         | "connection_timeout_burst"
-                );
+                ) || crate::behavior::is_behavior_type(&finding.finding_type);
                 if let Some(host) = &finding.host_key {
                     typed_hosts.insert((finding.finding_type.clone(), host.clone()));
                     if suspicious_type {
@@ -475,6 +558,10 @@ impl V3Session {
                 scope: &scope,
                 active: execute_verification,
                 now,
+                profile: self
+                    .engine
+                    .profile()
+                    .then_some((&behavior_state.profile, &profile_policy)),
             };
             let decisions = ladder.step(cycle, &mut env);
             for decision in &decisions {
@@ -516,6 +603,33 @@ impl V3Session {
                 history.ingest(&summary, &frozen, now);
                 history.flush(self.store.conn_mut())?;
             }
+        }
+        // krok 3E: profil hostu se uci az po rozhodnuti; dvojice s poplachem ne
+        if self.engine.behavior() {
+            if self.engine.profile()
+                && let Some(flows) = self.behavior_flows.as_ref()
+            {
+                let frozen = crate::behavior::profile::frozen_pairs(
+                    report
+                        .findings
+                        .iter()
+                        .zip(&signal_sources)
+                        .filter(|(f, _)| !crate::finding_kinds::is_static_exposure(&f.finding_type))
+                        .filter_map(|(f, s)| f.host_key.as_deref().map(|h| (h, s.as_slice()))),
+                );
+                crate::behavior::learn_profile(
+                    &mut behavior_state,
+                    &crate::behavior::BehaviorInput {
+                        outbound: &flows.outbound,
+                        internal: &flows.internal,
+                        outbound_alerts: &[],
+                        now,
+                    },
+                    &frozen,
+                    &profile_policy,
+                );
+            }
+            self.store.save("behavior", &behavior_state)?;
         }
         memory.sweep(now);
         memory.flush(self.store.conn_mut())?;

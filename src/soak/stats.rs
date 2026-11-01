@@ -202,6 +202,14 @@ pub struct OutputStats {
     pub ladder_outcomes: BTreeMap<String, u64>,
     pub ladder_refuted_by_type: BTreeMap<String, u64>,
     pub ladder_refuted_wrong_detail: BTreeMap<String, u64>,
+    /// Behaviorální vrstva (krok 3): odchozí toky viděné / zahozené vzorkováním,
+    /// nejvyšší úroveň vzorkování a počet řetězů A→B→C.
+    pub egress_seen: u64,
+    pub egress_dropped: u64,
+    pub egress_sample_level_max: u64,
+    pub behavior_chains: u64,
+    /// Nálezy behaviorální vrstvy podle typu (všechny, ne jen falešné).
+    pub behavior_findings_by_type: BTreeMap<String, u64>,
 }
 
 impl OutputStats {
@@ -209,6 +217,14 @@ impl OutputStats {
         self.displayed += o.displayed;
         self.displayed_behavioral += o.displayed_behavioral;
         self.displayed_fp += o.displayed_fp;
+        self.egress_seen += o.egress_seen;
+        self.egress_dropped += o.egress_dropped;
+        self.egress_sample_level_max = self.egress_sample_level_max.max(o.egress_sample_level_max);
+        self.behavior_chains += o.behavior_chains;
+        merge_map(
+            &mut self.behavior_findings_by_type,
+            &o.behavior_findings_by_type,
+        );
         merge_map(&mut self.displayed_by_reason, &o.displayed_by_reason);
         self.states_captured += o.states_captured;
         self.states_behavioral += o.states_behavioral;

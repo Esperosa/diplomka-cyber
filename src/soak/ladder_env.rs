@@ -124,6 +124,11 @@ pub struct SoakEvidence<'a> {
     pub cycle: u32,
     pub liveness_runs: u64,
     pub liveness_failures: u64,
+    /// Profil hostu (krok 3E); `None` = vypnuto.
+    pub profile: Option<(
+        &'a crate::behavior::profile::HostProfiles,
+        &'a crate::behavior::profile::ProfilePolicy,
+    )>,
 }
 
 impl LadderEvidence for SoakEvidence<'_> {
@@ -237,6 +242,20 @@ impl LadderEvidence for SoakEvidence<'_> {
     fn suspicious_on(&self, ip: &str) -> usize {
         self.suspicious.get(ip).copied().unwrap_or(0)
     }
+
+    fn profile(&self, case: &CaseInput) -> crate::behavior::profile::ProfileVerdict {
+        use crate::behavior::profile::{ProfileVerdict, case_pair, case_verdict};
+        let Some((profiles, policy)) = self.profile else {
+            return ProfileVerdict::Unknown("profil vypnut".into());
+        };
+        let group = case_pair(case).and_then(|(actor, ..)| {
+            self.groups
+                .get(&actor)
+                .and_then(|g| self.group_sizes.get(g))
+                .copied()
+        });
+        case_verdict(profiles, policy, case, group, self.at.timestamp())
+    }
 }
 
 /// Odpovídá rozpoznaný typ roli zařízení v modelu? (Měření přesnosti, krok 2D.)
@@ -279,6 +298,12 @@ pub fn is_suspicious_type(kind: &str) -> bool {
             | "suricata_alert"
             | "source_volume_outlier"
             | "connection_timeout_burst"
+            | "beacon_periodic"
+            | "interactive_session"
+            | "long_lived_tunnel"
+            | "pivot_chain"
+            | "egress_ids_alert"
+            | "egress_volume_anomaly"
     )
 }
 

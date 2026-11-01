@@ -16,6 +16,7 @@
 //!   a den, `max_promotions_per_window` za okno), přebytek čeká na další den,
 //! - každé povýšení jde do auditu (čas, host, zvyk, důvod), audit má strop,
 //! - hystereze: zavedený zvyk zmizí až po `forget_s` bez výskytu.
+//!
 //! Zbytkové riziko: útok přítomný od začátku a pravidelný déle než `min_days` se naučí;
 //! měří se zvlášť (útoky začínající v prvních dnech epizody).
 
@@ -133,7 +134,7 @@ fn is_success(flow: &ConnectionObservation) -> bool {
 
 impl HostProfiles {
     /// Naučí zvyky z toků okna. `frozen` = hosté (`ip`) a dvojice (`ip|peer`) s poplachem.
-    #[allow(private_interfaces)]
+    #[allow(private_interfaces, private_bounds)]
     pub fn learn<'a>(
         &mut self,
         flows: impl Iterator<Item = &'a ConnectionObservation>,
@@ -167,18 +168,17 @@ impl HostProfiles {
                 {
                     habit.tainted = true;
                     self.tainted += 1;
-                } else if !host.habits.contains_key(&key) {
-                    host.habits.insert(
-                        key,
-                        Habit {
-                            first: now,
-                            last: now,
-                            last_day: day,
-                            days: 1,
-                            tainted: true,
-                            ..Default::default()
-                        },
-                    );
+                } else if let std::collections::hash_map::Entry::Vacant(slot) =
+                    host.habits.entry(key)
+                {
+                    slot.insert(Habit {
+                        first: now,
+                        last: now,
+                        last_day: day,
+                        days: 1,
+                        tainted: true,
+                        ..Default::default()
+                    });
                     self.tainted += 1;
                 }
                 continue;
@@ -296,6 +296,7 @@ impl HostProfiles {
 
     /// Verdikt pro dvojici (host, cíl, protokol, port). `group_size` = velikost peer
     /// skupiny hostu (typ zařízení a podsíť), pokud je známá.
+    #[allow(clippy::too_many_arguments)]
     pub fn verdict(
         &self,
         host: &str,
@@ -342,6 +343,57 @@ impl HostProfiles {
             Some(_) => ProfileVerdict::Unknown("profil hostu jeste nezraly".into()),
         }
     }
+}
+
+/// Dvojice (aktér, protistrana, protokol, port) případu žebříku pro dotaz na profil:
+/// behaviorální nález = aktér je entita a protistrana cíl ze služby (`out/<cíl>/..`,
+/// `chain/<další hop>/..`), u flotily první zdroj; nález na službě s jediným zdrojem =
+/// aktér je zdroj a protistrana cílová služba. Jinak `None` (profil nic neříká).
+pub fn case_pair(case: &crate::verify_ladder::CaseInput) -> Option<(String, String, String, u16)> {
+    let service = case.key.service.split('#').next().unwrap_or("");
+    let mut parts = service.rsplit('/');
+    let port: u16 = parts.next()?.parse().ok()?;
+    let proto = parts.next()?.to_string();
+    if crate::behavior::is_behavior_type(&case.finding_type) {
+        let segments: Vec<&str> = service.split('/').collect();
+        let peer = match segments.as_slice() {
+            [_, peer, _, _] if *peer != "fleet" => peer.to_string(),
+            _ => case.sources.first()?.clone(),
+        };
+        Some((case.host_ip.clone(), peer, proto, port))
+    } else if case.sources.len() == 1 {
+        Some((case.sources[0].clone(), case.host_ip.clone(), proto, port))
+    } else {
+        None
+    }
+}
+
+/// Verdikt profilu pro případ žebříku (společné pro soak i produkci).
+pub fn case_verdict(
+    profiles: &HostProfiles,
+    policy: &ProfilePolicy,
+    case: &crate::verify_ladder::CaseInput,
+    group_size: Option<usize>,
+    now: i64,
+) -> ProfileVerdict {
+    let Some((actor, peer, proto, port)) = case_pair(case) else {
+        return ProfileVerdict::Unknown("pripad nema jednu dvojici host-cil".into());
+    };
+    profiles.verdict(&actor, &peer, &proto, port, group_size, now, policy)
+}
+
+/// Dvojice s poplachem v okně (neučí se do profilu, RQ2 Z3): aktér a každý zdroj
+/// nálezu v obou směrech (`ip|peer`).
+pub fn frozen_pairs<'a>(items: impl Iterator<Item = (&'a str, &'a [String])>) -> HashSet<String> {
+    let mut frozen = HashSet::new();
+    for (host, sources) in items {
+        frozen.insert(host.to_string());
+        for source in sources {
+            frozen.insert(format!("{host}|{source}"));
+            frozen.insert(format!("{source}|{host}"));
+        }
+    }
+    frozen
 }
 
 fn decrement(index: &mut HashMap<String, u32>, key: &str) {

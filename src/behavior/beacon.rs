@@ -206,8 +206,9 @@ pub fn detect(
     now: i64,
     first_window: i64,
 ) -> Vec<BehaviorFinding> {
-    // toky okna po dvojicich, serazene podle casu
-    let mut by_pair: BTreeMap<(String, String, String, u16), Vec<(i64, f64)>> = BTreeMap::new();
+    // toky okna po dvojicich (zdroj, cil, protokol, port), serazene podle casu
+    type PairKey = (String, String, String, u16);
+    let mut by_pair: BTreeMap<PairKey, Vec<(i64, f64)>> = BTreeMap::new();
     for flow in outbound {
         let (Some(src), Some(port)) = (flow.src_ip.as_deref(), flow.dst_port) else {
             continue;

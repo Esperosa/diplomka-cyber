@@ -375,7 +375,7 @@ struct MasAgentMetric {
 enum ParallelCollectorOutput {
     Context(context::ContextBundle),
     Lanes(lanes::LaneBundle),
-    Passive(Vec<NormalizedEvent>),
+    Passive((Vec<NormalizedEvent>, Option<passive::BehaviorFlows>)),
 }
 
 fn round_metric(value: f64) -> f64 {
@@ -847,6 +847,12 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     let lane_config_ref = &lane_config;
     let passive_sources_ref = &passive_sources;
     let scope_ref = &args.scope;
+    // krok 3: v3 s behavioralni vrstvou drzi i odchozi toky (zdroj nebo cil v rozsahu)
+    let egress_policy = crate::passive::egress::EgressPolicy::default();
+    let behavior_egress = v3_session
+        .as_ref()
+        .filter(|session| session.behavior_enabled())
+        .map(|_| &egress_policy);
     let parallel_started_at = Instant::now();
     let (context_bundle, lane_bundle, passive_events, parallel_metrics) = thread::scope(|scope| {
         let scheduler_started_at = Instant::now();
@@ -875,13 +881,14 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
                         })?,
                     ),
                     _ => ParallelCollectorOutput::Passive(
-                        passive::load_and_normalize(
+                        passive::load_and_normalize_with_behavior(
                             passive_sources_ref,
                             scope_ref,
                             passive_window.start,
                             passive_window.end,
                             hosts_ref,
                             detector_ref,
+                            behavior_egress,
                         )
                         .map_err(|error| {
                             anyhow::Error::new(error).context("Pasivni import selhal")
@@ -928,7 +935,9 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
             metrics,
         ))
     })?;
+    let (passive_events, behavior_flows) = passive_events;
     if let Some(session) = v3_session.as_mut() {
+        session.set_behavior_flows(behavior_flows);
         session
             .finish_detection()
             .map_err(|error| anyhow::Error::new(error).context("Ulozeni stavu detektoru v3"))?;

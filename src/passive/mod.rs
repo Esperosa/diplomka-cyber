@@ -77,6 +77,80 @@ pub(crate) fn load_and_normalize(
     Ok(events)
 }
 
+/// Toky okna pro behaviorální vrstvu (krok 3; jen v3 s viditelností ven nebo grafem).
+#[derive(Debug, Default)]
+pub(crate) struct BehaviorFlows {
+    pub(crate) outbound: Vec<ConnectionObservation>,
+    pub(crate) internal: Vec<ConnectionObservation>,
+    /// IDS alerty se zdrojem uvnitř a cílem venku.
+    pub(crate) outbound_alerts: Vec<NormalizedEvent>,
+    pub(crate) outbound_seen: u64,
+    pub(crate) outbound_dropped: u64,
+    pub(crate) sample_level: u32,
+}
+
+/// Jako `load_and_normalize`; s `egress = Some(policy)` parsery drží i toky a alerty se
+/// zdrojem v rozsahu (krok 3A) a vrátí je odděleně pro behaviorální vrstvu. Detektor
+/// a korelace dostávají pořád jen záznamy s cílem v rozsahu, takže jejich vstup je
+/// stejný jako v legacy cestě. `egress = None` = přesně `load_and_normalize`.
+pub(crate) fn load_and_normalize_with_behavior(
+    sources: &PassiveSources,
+    scope: &[IpNet],
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    hosts: &[HostReport],
+    detector: &dyn ConnectionDetector,
+    egress: Option<&egress::EgressPolicy>,
+) -> Result<(Vec<NormalizedEvent>, Option<BehaviorFlows>)> {
+    let Some(policy) = egress else {
+        return load_and_normalize(sources, scope, start, end, hosts, detector).map(|e| (e, None));
+    };
+    let mut flows = BehaviorFlows::default();
+    let mut events = Vec::new();
+    if let Some(path) = &sources.suricata_eve {
+        for event in
+            suricata::parse_suricata_mode(path, scope, start, end, egress::ScopeMode::SrcOrDst)?
+        {
+            match egress::direction(scope, event.src_ip.as_deref(), &event.dst_ip) {
+                egress::FlowDirection::Outbound => flows.outbound_alerts.push(event),
+                egress::FlowDirection::External => {}
+                _ => events.push(event),
+            }
+        }
+    }
+    let mut connections = Vec::new();
+    if let Some(path) = &sources.zeek_dir {
+        let parsed =
+            zeek::parse_zeek_dir_mode(path, scope, start, end, egress::ScopeMode::SrcOrDst)?;
+        events.extend(
+            parsed
+                .events
+                .into_iter()
+                .filter(|e| in_scope(scope, &e.dst_ip)),
+        );
+        let split = egress::split_flows(parsed.connections, scope, policy);
+        connections = split.to_scope;
+        flows.outbound = split.outbound;
+        flows.internal = split.internal;
+        flows.outbound_seen = split.outbound_seen;
+        flows.outbound_dropped = split.outbound_dropped;
+        flows.sample_level = split.sample_level;
+    }
+    let known_services = hosts
+        .iter()
+        .flat_map(|host| {
+            host.services
+                .iter()
+                .filter(|service| service.port_state == "open")
+                .map(move |service| (host.ip.clone(), service.proto.clone(), service.port))
+        })
+        .collect::<HashSet<_>>();
+    events.extend(detector.detect(connections, &known_services));
+    let mut events = crate::fusion::fuse_same_flow_events(events);
+    events.sort_by_key(|event| event.timestamp);
+    Ok((events, Some(flows)))
+}
+
 fn in_scope(scope: &[IpNet], value: &str) -> bool {
     value
         .parse::<IpAddr>()

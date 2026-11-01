@@ -189,8 +189,8 @@ pub fn detect(
             ..Default::default()
         });
         host.last = now;
-        if host.edges.contains_key(&dst) {
-            host.edges.insert(dst, now);
+        if let Some(last) = host.edges.get_mut(&dst) {
+            *last = now;
             continue;
         }
         let mature = now - host.first >= t.host_warmup_s;
@@ -243,7 +243,8 @@ pub fn detect(
             .is_some_and(|h| h.new_per_day(now) >= t.hub_new_per_day);
         let factor = if hub { t.hub_factor } else { 1.0 };
         // nejlepsi predchudce: nova hrana X -> src (X != dst) v okne, nebo koren
-        let mut best: Option<(f64, u8, Vec<(String, String, i64)>)> = None;
+        type Path = Vec<(String, String, i64)>;
+        let mut best: Option<(f64, u8, Path)> = None;
         for prev in state.recent.iter() {
             if prev.dst != edge.src || prev.src == edge.dst {
                 continue;

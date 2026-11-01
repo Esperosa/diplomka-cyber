@@ -50,6 +50,12 @@ pub struct V3Runtime {
     /// Nalez otevreneho pripadu (jen mereni: pozdni zobrazeni po rozhodnuti).
     pub case_findings:
         std::collections::HashMap<crate::finding_memory::FindingKey, crate::model::Finding>,
+    /// Behavioralni vrstva kroku 3 (odchozi provoz, beacon, relace, graf, profil).
+    pub behavior: crate::behavior::BehaviorState,
+    pub behavior_thresholds: crate::behavior::BehaviorThresholds,
+    pub profile_policy: crate::behavior::profile::ProfilePolicy,
+    /// Meze objemu odchozich toku okna (vzorkovani po dvojici, krok 3A).
+    pub egress_policy: crate::passive::egress::EgressPolicy,
 }
 
 impl V3Runtime {
@@ -72,10 +78,17 @@ impl V3Runtime {
             device_classes: Default::default(),
             history: Default::default(),
             ladder: crate::verify_ladder::Ladder::new(
-                crate::verify_ladder::LadderPolicy::default(),
+                crate::verify_ladder::LadderPolicy {
+                    profile: engine.profile(),
+                    ..Default::default()
+                },
                 secret,
             ),
             case_findings: Default::default(),
+            behavior: Default::default(),
+            behavior_thresholds: Default::default(),
+            profile_policy: Default::default(),
+            egress_policy: Default::default(),
         })
     }
 
@@ -88,6 +101,7 @@ impl V3Runtime {
         self.store.save("inventory", &self.inventory)?;
         self.store.save("identity", &self.identity)?;
         self.store.save("ladder", &self.ladder)?;
+        self.store.save("behavior", &self.behavior)?;
         let calibrator = self.ladder.calibrator.take();
         self.history.flush(self.store.conn_mut())?;
         if self.memory.is_some() {
@@ -109,6 +123,7 @@ impl V3Runtime {
         // kalibrace je konfigurace (soubor), ne stav: po restartu se znovu nacte
         self.ladder.calibrator = calibrator;
         self.history = crate::flow_history::FlowHistory::load(self.store.conn())?;
+        self.behavior = self.store.load("behavior")?.unwrap_or_default();
         self.sources.clear();
         Ok(())
     }

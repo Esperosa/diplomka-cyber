@@ -36,7 +36,7 @@ use crate::{
     ops::{EnforcementMode, NftExecutor, OpsStore, ProposeError},
     passive::{
         ConnectionDetector, ConnectionObservation, LegacyAnomalyDetector, parse_suricata_str,
-        score_source_hosts,
+        parse_suricata_str_mode, score_source_hosts,
     },
     report,
     scope_policy::ScopePolicy,
@@ -62,6 +62,9 @@ use crate::{
 /// Po kolika cyklech po konci utoku jeste povazujeme nalez za prislusny utoku.
 const ATTRIBUTION_LATENCY: u32 = 2;
 const RANK_TOP_K: usize = 3;
+
+/// finding_id behavioralniho nalezu -> (sila signalu, protistrany, cile toku).
+type BehaviorSignal = HashMap<String, (u32, Vec<String>, Vec<(String, u16)>)>;
 
 #[derive(Debug, Clone)]
 pub struct EpisodeConfig {
@@ -869,14 +872,81 @@ fn run_episode_inner(
         };
         let window_start = ts(t0 - 3600);
         let window_end = ts(t0 + CYCLE_SECS + 3600);
+        // krok 3A: s viditelnosti ven parser drzi i alerty se zdrojem uvnitr a cilem venku;
+        // alerty s cilem v rozsahu jdou dal beze zmeny, odchozi do behavioralni vrstvy
+        let behavior_on = v3.is_some() && cfg.engine.behavior();
+        let mut outbound_alerts: Vec<NormalizedEvent> = Vec::new();
         if !output.alerts.is_empty() {
-            events.extend(parse_suricata_str(
-                &output.alerts.join("\n"),
-                "soak",
+            let joined = output.alerts.join("\n");
+            if behavior_on && cfg.engine.egress() {
+                use crate::passive::egress::{FlowDirection, ScopeMode, direction};
+                for event in parse_suricata_str_mode(
+                    &joined,
+                    "soak",
+                    &scope_nets,
+                    window_start,
+                    window_end,
+                    ScopeMode::SrcOrDst,
+                )? {
+                    match direction(&scope_nets, event.src_ip.as_deref(), &event.dst_ip) {
+                        FlowDirection::Outbound => outbound_alerts.push(event),
+                        FlowDirection::External => {}
+                        _ => events.push(event),
+                    }
+                }
+            } else {
+                events.extend(parse_suricata_str(
+                    &joined,
+                    "soak",
+                    &scope_nets,
+                    window_start,
+                    window_end,
+                )?);
+            }
+        }
+        // krok 3: behavioralni vrstva nad odchozimi a vnitrnimi toky okna
+        let mut behavior_signal: BehaviorSignal = HashMap::new();
+        let mut behavior_findings: Vec<Finding> = Vec::new();
+        let mut behavior_split: Option<crate::passive::egress::SplitFlows> = None;
+        if let Some(runtime) = v3.as_mut().filter(|_| behavior_on) {
+            let started = Instant::now();
+            let split = crate::passive::egress::split_flows(
+                output.observations.iter().cloned(),
                 &scope_nets,
-                window_start,
-                window_end,
-            )?);
+                &runtime.egress_policy,
+            );
+            agg.output.egress_seen += split.outbound_seen;
+            agg.output.egress_dropped += split.outbound_dropped;
+            agg.output.egress_sample_level_max = agg
+                .output
+                .egress_sample_level_max
+                .max(split.sample_level as u64);
+            let input = crate::behavior::BehaviorInput {
+                outbound: &split.outbound,
+                internal: &split.internal,
+                outbound_alerts: &outbound_alerts,
+                now: ts(t0),
+            };
+            let out = crate::behavior::run_window(
+                &mut runtime.behavior,
+                crate::behavior::BehaviorSwitches::from_engine(&cfg.engine),
+                &runtime.behavior_thresholds,
+                &input,
+            );
+            agg.output.behavior_chains += out.chains.len() as u64;
+            for item in out.findings {
+                *agg.output
+                    .behavior_findings_by_type
+                    .entry(item.finding.finding_type.clone())
+                    .or_default() += 1;
+                behavior_signal.insert(
+                    item.finding.finding_id.clone(),
+                    (item.count, item.sources, item.targets),
+                );
+                behavior_findings.push(item.finding);
+            }
+            behavior_split = Some(split);
+            agg.perf_record("behavior", started.elapsed().as_secs_f64());
         }
         let events = fusion::fuse_same_flow_events(events);
         agg.events += events.len() as u64;
@@ -938,6 +1008,15 @@ fn run_episode_inner(
                 list.sort_by(|l, r| l.finding_id.cmp(&r.finding_id));
                 list.dedup_by(|l, r| l.finding_id == r.finding_id);
                 run_report.findings = list;
+            }
+            if !behavior_findings.is_empty() {
+                run_report.findings.append(&mut behavior_findings);
+                run_report
+                    .findings
+                    .sort_by(|l, r| l.finding_id.cmp(&r.finding_id));
+                run_report
+                    .findings
+                    .dedup_by(|l, r| l.finding_id == r.finding_id);
             }
             (run_report, identity_map)
         });
@@ -1027,11 +1106,16 @@ fn run_episode_inner(
                         .and_then(|k| identity_map.get(k))
                         .map(|m| m.asset_id().to_string())
                         .unwrap_or_else(|| host_ip.clone());
-                    let (count, sources) = findings::finding_signal(
-                        finding,
-                        report_services.get(service_key).copied(),
-                        |dst, proto, port, kind| runtime.sources_of(dst, proto, port, kind),
-                    );
+                    let behavior_item = behavior_signal.get(&finding.finding_id);
+                    let (count, sources) = match behavior_item {
+                        // behavioralni nalez: signal a protistrana z vrstvy (krok 3)
+                        Some((count, sources, _)) => (*count, sources.clone()),
+                        None => findings::finding_signal(
+                            finding,
+                            report_services.get(service_key).copied(),
+                            |dst, proto, port, kind| runtime.sources_of(dst, proto, port, kind),
+                        ),
+                    };
                     // pokusy (sken) jsou stav ZDROJE: jeden stav na skener, ne na kazdy cil
                     let key = key_for_finding(finding, &entity_host, &sources);
                     let key_copy = key.clone();
@@ -1115,7 +1199,10 @@ fn run_episode_inner(
                             ladder_refuted: false,
                         },
                     };
-                    if auto_closed {
+                    if auto_closed && let Some((_, _, targets)) = behavior_item {
+                        shown_item.targets = targets.clone();
+                        shown_item.sources = sources.clone();
+                    } else if auto_closed {
                         shown_item.targets = report_services
                             .get(service_key)
                             .map(|svc| {
@@ -1226,6 +1313,10 @@ fn run_episode_inner(
                         cycle,
                         liveness_runs: 0,
                         liveness_failures: 0,
+                        profile: cfg
+                            .engine
+                            .profile()
+                            .then_some((&runtime.behavior.profile, &runtime.profile_policy)),
                     };
                     let decisions = runtime.ladder.step(cycle as u64, &mut env);
                     agg.output.ladder_liveness_runs += env.liveness_runs;
@@ -1291,6 +1382,32 @@ fn run_episode_inner(
                         }
                     }
                     lc.decisions = decisions;
+                }
+                // krok 3E: profil hostu se uci az po rozhodnuti; dvojice s poplachem ne
+                if cfg.engine.profile()
+                    && let Some(split) = behavior_split.as_ref()
+                {
+                    let started = Instant::now();
+                    let frozen = crate::behavior::profile::frozen_pairs(
+                        run_report
+                            .findings
+                            .iter()
+                            .zip(&lc.sources)
+                            .filter(|(f, _)| !is_static_exposure(&f.finding_type))
+                            .filter_map(|(f, s)| f.host_key.as_deref().map(|h| (h, s.as_slice()))),
+                    );
+                    crate::behavior::learn_profile(
+                        &mut runtime.behavior,
+                        &crate::behavior::BehaviorInput {
+                            outbound: &split.outbound,
+                            internal: &split.internal,
+                            outbound_alerts: &[],
+                            now: at,
+                        },
+                        &frozen,
+                        &runtime.profile_policy,
+                    );
+                    agg.perf_record("profile_learn", started.elapsed().as_secs_f64());
                 }
                 out
             }
@@ -2697,6 +2814,38 @@ mod engine_v3_tests {
             "plany jen pro staticke expozice"
         );
         assert!(o.device_classified > 0 && o.device_class_correct <= o.device_classified);
+    }
+
+    /// Krok 3: behaviorální vrstva v epizodě vidí odchozí provoz (vzorkování ho drží),
+    /// vydává nálezy svých typů bez porušení invariantů a krok 2 (bez vrstvy) je
+    /// nevydává; svět je v obou ramenech stejný.
+    #[test]
+    fn behavior_layer_runs_in_episode_and_step2_has_none() {
+        let step2 = EngineConfig {
+            mode: EngineMode::V3,
+            v3: crate::engine::V3Features::step2(),
+        };
+        let mut seen = 0u64;
+        let mut by_type: BTreeMap<String, u64> = BTreeMap::new();
+        for id in [3u64, 9, 14] {
+            let off = run(id, 96, step2);
+            let on = run(id, 96, EngineConfig::v3());
+            assert_eq!(off.agg.observations, on.agg.observations, "stejny svet");
+            assert!(off.agg.output.behavior_findings_by_type.is_empty());
+            assert_eq!(off.agg.output.egress_seen, 0);
+            assert!(
+                on.agg.invariant_violations.is_empty(),
+                "{:?}",
+                on.agg.violation_samples
+            );
+            seen += on.agg.output.egress_seen;
+            for (kind, n) in &on.agg.output.behavior_findings_by_type {
+                assert!(crate::behavior::is_behavior_type(kind), "{kind}");
+                *by_type.entry(kind.clone()).or_default() += n;
+            }
+        }
+        assert!(seen > 0, "odchozi toky musi dojit do vrstvy");
+        assert!(!by_type.is_empty(), "vrstva nic nevydala: {by_type:?}");
     }
 
     /// Krok 2C: verdikty k rozhodnutým případům jdou přes Case Memory a plní kalibrační

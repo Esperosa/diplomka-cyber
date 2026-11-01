@@ -126,6 +126,9 @@ impl Family {
                 "external_flow_observed",
                 "unexpected_traffic",
                 "unmapped_passive_event",
+                // krok 3 (jen v3 s egress): periodicita dvojice a odchozi IDS alert
+                "beacon_periodic",
+                "egress_ids_alert",
             ],
             Family::Ddos => &[
                 "packet_rate_spike",
@@ -139,11 +142,16 @@ impl Family {
                 "inductive_volume_anomaly",
                 "unexpected_traffic",
                 "packet_rate_spike",
+                // krok 3: odchozi objem hostu a dlouhy prenos ven
+                "egress_volume_anomaly",
+                "long_lived_tunnel",
             ],
             Family::Lateral => &[
                 "unexpected_traffic",
                 "multi_target_pattern",
                 "connection_timeout_burst",
+                // krok 3D: retez novych hran
+                "pivot_chain",
             ],
             Family::RogueDevice => &[
                 "new_exposed_service",
@@ -163,6 +171,8 @@ impl Family {
                 "unexpected_traffic",
                 "inductive_volume_anomaly",
                 "source_volume_outlier",
+                // krok 3: objem dotazu primo na vnejsi resolver
+                "egress_volume_anomaly",
             ],
             // krok 2A: hadani hesel z botnetu = nárůst objemu na sluzbu (mechanismus utoku),
             // v3 ho tak zachyti (A30: typ, ktery engine umi)
@@ -179,17 +189,23 @@ impl Family {
                 "inductive_volume_anomaly",
                 "external_flow_observed",
                 "source_volume_outlier",
+                "pivot_chain",
             ],
             Family::Cryptomining => &[
                 "external_flow_observed",
                 "unexpected_traffic",
                 "inductive_volume_anomaly",
+                // krok 3: trvale spojeni ven na pool, odchozi IDS alert
+                "long_lived_tunnel",
+                "beacon_periodic",
+                "egress_ids_alert",
             ],
             Family::InsiderHoarding => &[
                 "inductive_volume_anomaly",
                 "unexpected_traffic",
                 "external_flow_observed",
                 "source_volume_outlier",
+                "egress_volume_anomaly",
             ],
             Family::WebExploit => &[
                 "suricata_alert",
@@ -203,6 +219,8 @@ impl Family {
                 "external_flow_observed",
                 "unexpected_traffic",
                 "multi_target_pattern",
+                "beacon_periodic",
+                "egress_ids_alert",
             ],
             Family::ApChain => &[
                 "unexpected_traffic",
@@ -211,6 +229,10 @@ impl Family {
                 "suricata_alert",
                 "external_flow_observed",
                 "inductive_volume_anomaly",
+                "pivot_chain",
+                "beacon_periodic",
+                "egress_volume_anomaly",
+                "long_lived_tunnel",
             ],
         }
     }
