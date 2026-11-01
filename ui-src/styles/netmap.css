@@ -427,6 +427,11 @@
   stroke-dasharray: 1px calc(9px * var(--u));
   transition: opacity var(--dur-base) var(--ease-soft);
 }
+.hop-seg.hop-sock {
+  fill: var(--hot);
+  stroke: none;
+  stroke-dasharray: none;
+}
 .hop-seg.off,
 .hm-pos.off {
   opacity: 0;

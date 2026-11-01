@@ -3,6 +3,7 @@
 // Nic tu nepouziva rasterovy filtr na cele mape: mosty a oblouky jsou geometrie, takze 300 zarizeni
 // zustava plynulych. Pohyb (rozkvet, utlum) resi CSS ve styles/netmap.css pres sdilene tokeny.
 import { iconInner, kindLabel, type DeviceKind } from "./devices";
+import { metaballBridge } from "./metaball";
 import { blobPath, hashString, type P } from "./pebbles";
 import { type Hop, type Item, type NetModel, type Zone, hopsOf, statusLabel, zoneSeed } from "./netmodel";
 import { esc } from "./ui";
@@ -13,49 +14,9 @@ export type { Hop };
 const f1 = (v: number) => v.toFixed(1);
 
 // ---------- geometrie ----------
-function smoothOpen(points: P[]): string {
-  if (points.length < 3) return points.map((p, i) => `${i ? "L" : "M"}${f1(p.x)},${f1(p.y)}`).join("");
-  let d = `M${f1(points[0].x)},${f1(points[0].y)}`;
-  for (let i = 1; i < points.length - 1; i += 1) {
-    const mx = (points[i].x + points[i + 1].x) / 2;
-    const my = (points[i].y + points[i + 1].y) / 2;
-    d += `Q${f1(points[i].x)},${f1(points[i].y)} ${f1(mx)},${f1(my)}`;
-  }
-  const last = points[points.length - 1];
-  return `${d}L${f1(last.x)},${f1(last.y)}`;
-}
-
-/** Tekuty most: vyplneny tvar mezi dvema kruhy, u kruhu rozsireny (hrdlo goo), uprostred uzky. */
-export function bridgePath(a: P, ra: number, b: P, rb: number, wEnd: number, wMid: number, bend = 0.06): string {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const ux = dx / len;
-  const uy = dy / len;
-  const sx = a.x + ux * ra * 0.55;
-  const sy = a.y + uy * ra * 0.55;
-  const ex = b.x - ux * rb * 0.55;
-  const ey = b.y - uy * rb * 0.55;
-  const cx = (sx + ex) / 2 - uy * len * bend;
-  const cy = (sy + ey) / 2 + ux * len * bend;
-  const left: P[] = [];
-  const right: P[] = [];
-  const N = 16;
-  for (let i = 0; i <= N; i += 1) {
-    const t = i / N;
-    const x = (1 - t) * (1 - t) * sx + 2 * (1 - t) * t * cx + t * t * ex;
-    const y = (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * cy + t * t * ey;
-    const tx = 2 * (1 - t) * (cx - sx) + 2 * t * (ex - cx);
-    const ty = 2 * (1 - t) * (cy - sy) + 2 * t * (ey - cy);
-    const tl = Math.hypot(tx, ty) || 1;
-    const nx = -ty / tl;
-    const ny = tx / tl;
-    const flare = Math.pow(1 - Math.sin(Math.PI * t), 3);
-    const w = (wMid + (wEnd - wMid) * flare) / 2;
-    left.push({ x: x + nx * w, y: y + ny * w });
-    right.push({ x: x - nx * w, y: y - ny * w });
-  }
-  return `${smoothOpen(left)}L${f1(right[N].x)},${f1(right[N].y)}${smoothOpen(right.reverse()).replace(/^M[^QL]*/, "")}Z`;
+/** Tekuty most: jedna souvisla uzavrena krivka kolem dvojice kruhu (metaball, G1 navaznost na oblouky). */
+export function bridgePath(a: P, ra: number, b: P, rb: number, _wEnd: number, wMid: number, _bend = 0): string {
+  return metaballBridge(a, ra, b, rb, wMid)?.d ?? "";
 }
 
 export function arcPath(r: number, a0: number, a1: number): string {
@@ -234,7 +195,7 @@ function zoneMarkup(model: NetModel, zone: Zone, selected: string | null): strin
 }
 
 // ---------- cesta skoku ----------
-type Stop = { p: P; r: number; zoneKey: string | null; key: string };
+type Stop = { p: P; r: number; core: number; zoneKey: string | null; key: string };
 
 function rot(angle: number): P {
   return { x: Math.cos(angle), y: Math.sin(angle) };
@@ -291,6 +252,10 @@ function routeLayer(stops: Stop[], idPrefix: string, reduced: boolean): { svg: s
   segs.forEach((seg, i) => {
     const id = `${idPrefix}${i}`;
     defs += `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${f1(seg.s.x)}" y1="${f1(seg.s.y)}" x2="${f1(seg.e.x)}" y2="${f1(seg.e.y)}"><stop offset="0" class="hg-e"/><stop offset="0.16" class="hg-f"/><stop offset="0.84" class="hg-f"/><stop offset="1" class="hg-e"/></linearGradient>`;
+    // vstup cesty do uzlu: tekuty krček (metaball) od okraje uzlu k prvni a posledni tecce, bez sve
+    const sockA = metaballBridge(seg.a.p, seg.a.core, seg.s, 3.4, 2.4)?.d ?? "";
+    const sockB = metaballBridge(seg.b.p, seg.b.core, seg.e, 3.4, 2.4)?.d ?? "";
+    paths += `<path class="hop-seg hop-sock" data-a="${esc(seg.a.key)}" data-b="${esc(seg.b.key)}" data-za="${esc(seg.a.zoneKey ?? "")}" data-zb="${esc(seg.b.zoneKey ?? "")}" d="${sockA}${sockB}"/>`;
     paths += `<path class="hop-seg" data-a="${esc(seg.a.key)}" data-b="${esc(seg.b.key)}" data-za="${esc(seg.a.zoneKey ?? "")}" data-zb="${esc(seg.b.zoneKey ?? "")}" stroke="url(#${id})" d="M${f1(seg.s.x)},${f1(seg.s.y)}C${f1(seg.c1.x)},${f1(seg.c1.y)} ${f1(seg.c2.x)},${f1(seg.c2.y)} ${f1(seg.e.x)},${f1(seg.e.y)}"/>`;
   });
   // skakajici tecka: jedna souvisla draha (kroky + kratke tetivy po obvodu uzlu), prodlevy v uzlech
@@ -402,15 +367,15 @@ export function renderNetMap(model: NetModel, selected: string | null, runId: st
     const item = model.byIp.get(hop.asset);
     if (item) {
       const isGate = item === gate;
-      push(nodeStops, { p: { x: item.x, y: item.y }, r: item.r + (isGate ? 9 : 11.5), zoneKey: isGate ? null : item.zone, key: item.key });
+      push(nodeStops, { p: { x: item.x, y: item.y }, r: item.r + (isGate ? 9 : 11.5), core: item.r, zoneKey: isGate ? null : item.zone, key: item.key });
       const zone = isGate ? null : model.zoneByKey.get(item.zone);
-      if (zone) push(zoneStops, { p: { x: zone.cx, y: zone.cy }, r: zone.Rb + 23, zoneKey: zone.key, key: zone.key });
-      else push(zoneStops, { p: { x: model.gate.x, y: model.gate.y }, r: 30, zoneKey: null, key: "gw" });
+      if (zone) push(zoneStops, { p: { x: zone.cx, y: zone.cy }, r: zone.Rb + 23, core: zone.Rb, zoneKey: zone.key, key: zone.key });
+      else push(zoneStops, { p: { x: model.gate.x, y: model.gate.y }, r: 30, core: gate ? 21 : 15, zoneKey: null, key: "gw" });
     } else {
       const out = model.outsiders.find((o) => o.ip === hop.asset);
       if (out) {
-        push(nodeStops, { p: { x: out.x, y: out.y }, r: 17, zoneKey: null, key: `out:${out.ip}` });
-        push(zoneStops, { p: { x: out.x, y: out.y }, r: 17, zoneKey: null, key: `out:${out.ip}` });
+        push(nodeStops, { p: { x: out.x, y: out.y }, r: 17, core: 12, zoneKey: null, key: `out:${out.ip}` });
+        push(zoneStops, { p: { x: out.x, y: out.y }, r: 17, core: 12, zoneKey: null, key: `out:${out.ip}` });
       }
     }
   }

@@ -8,6 +8,7 @@ import { tokenDialog } from "./dialogs";
 import { parseHash, navigate } from "./router";
 import { onChange, state, update, type SectionId, type View } from "./state";
 import { countdown, esc } from "./ui";
+import { metaballBridge } from "./metaball";
 import type { PentestMode } from "./types";
 import { audit } from "./views/audit";
 import { automation } from "./views/automation";
@@ -118,13 +119,36 @@ function renderChrome() {
 
 // Dok se vytvori jednou a pak se jen upravuje: tekute prelevani aktivni bubliny potrebuje stejne
 // DOM prvky mezi vykreslenimi (kdyby se prepsal innerHTML, animace by se ztratila).
+// Retez bublin doku: jedna cesta z metaball mostu mezi sousednimi bublinami (G1 navaznost na kruhy).
+function drawDockChain(track: HTMLElement) {
+  const goo = track.querySelector<HTMLElement>(".dock-goo");
+  const svg = goo?.querySelector<SVGSVGElement>(".dock-chain");
+  const path = svg?.querySelector("path");
+  const probe = goo?.querySelector<HTMLElement>(".dock-probe");
+  if (!goo || !svg || !path || !probe) return;
+  const w = goo.clientWidth;
+  const h = goo.clientHeight;
+  if (!w || !h) return;
+  const n = VIEWS.length;
+  const pitch = h / n;
+  const r = probe.getBoundingClientRect().width / 2;
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  let d = "";
+  for (let i = 0; i < n; i += 1) {
+    const c = { x: w / 2, y: (i + 0.5) * pitch };
+    d += `M${(c.x + r).toFixed(2)},${c.y.toFixed(2)}A${r.toFixed(2)},${r.toFixed(2)} 0 1 1 ${(c.x - r).toFixed(2)},${c.y.toFixed(2)}A${r.toFixed(2)},${r.toFixed(2)} 0 1 1 ${(c.x + r).toFixed(2)},${c.y.toFixed(2)}Z`;
+    if (i < n - 1) d += metaballBridge(c, r, { x: c.x, y: c.y + pitch }, r, r * 0.62)?.d ?? "";
+  }
+  path.setAttribute("d", d);
+}
+
 function renderDock() {
   const dock = app.querySelector<HTMLElement>("#dock")!;
   const pending = state.enforcement ? state.enforcement.actions.filter((a) => a.status === "proposed").length : 0;
   let track = dock.querySelector<HTMLElement>(".dock-track");
   if (!track) {
     dock.innerHTML = `<div class="dock-track" style="--n:${VIEWS.length}">
-      <div class="dock-goo" aria-hidden="true">${VIEWS.map(() => "<i></i>").join("")}<span class="dock-blob"></span><span class="dock-blob dock-trail"></span></div>
+      <div class="dock-goo" aria-hidden="true"><svg class="dock-chain"><path/></svg><span class="dock-probe"></span><span class="dock-blob"></span><span class="dock-blob dock-trail"></span></div>
       <span class="dock-core" aria-hidden="true"></span>
       ${VIEWS.map(
         (view) => `<a class="dock-item" href="#/${view.id}" data-nav="${view.id}" aria-label="${esc(view.label)}" title="${esc(view.label)}">
@@ -132,6 +156,7 @@ function renderDock() {
       ).join("")}
     </div>`;
     track = dock.querySelector<HTMLElement>(".dock-track")!;
+    new ResizeObserver(() => drawDockChain(track!)).observe(track);
   }
   const index = Math.max(0, VIEWS.findIndex((view) => view.id === state.section));
   track.style.setProperty("--i", String(index));
