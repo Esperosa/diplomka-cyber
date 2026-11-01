@@ -259,6 +259,9 @@ function buildTopology(report: Report, hosts: Host[], kindOf: Map<string, Device
   return topo;
 }
 
+/** Nejmensi vzdalenost stredu zarizeni v zone v nasobcich nejvetsiho polomeru. */
+export const MIN_CENTER_FACTOR = 2.6;
+
 function pack(radii: number[], gap: number): P[] {
   const pos: P[] = [];
   for (let i = 0; i < radii.length; i += 1) {
@@ -420,6 +423,13 @@ export function buildNetModel(report: Report): NetModel {
   }
   if (gateway) gateway.zone = "gw";
 
+  // rozestupy: stredy zarizeni ve stejne zone jsou od sebe nejmene 2,6x nejvetsi polomer
+  // (mezera = 2,6 Rmax - 2 rmin zaruci d >= ri + rj + mezera >= 2,6 Rmax i u nejmensich bublin)
+  const zoneRadii = items.filter((i) => i !== gateway).map((i) => i.r);
+  const rMaxZone = zoneRadii.length ? Math.max(...zoneRadii) : 16.5;
+  const rMinZone = zoneRadii.length ? Math.min(...zoneRadii) : 9;
+  const spacingGap = Math.max(15, MIN_CENTER_FACTOR * rMaxZone - 2 * rMinZone);
+
   const zones: Zone[] = [...groups.entries()].map(([key, members]) => {
     const vlan = key.startsWith("vlan:") ? key.slice(5) : null;
     const subs = [...new Set(members.map((m) => subnetOf(m.ip).label))];
@@ -438,9 +448,9 @@ export function buildNetModel(report: Report): NetModel {
     }
     for (const list of kids.values()) list.sort((a, b) => b.imp - a.imp || a.key.localeCompare(b.key));
     const clusters = roots
-      .map((root) => ({ root, cluster: layoutCluster(root, kids, 15) }))
+      .map((root) => ({ root, cluster: layoutCluster(root, kids, spacingGap) }))
       .sort((a, b) => b.cluster.r - a.cluster.r || b.root.imp - a.root.imp || a.root.key.localeCompare(b.root.key));
-    const pos = pack(clusters.map((c) => c.cluster.r), 15);
+    const pos = pack(clusters.map((c) => c.cluster.r), spacingGap);
     const rel = new Map<string, P>();
     clusters.forEach((c, i) => {
       for (const [k, p] of c.cluster.rel) rel.set(k, { x: p.x + pos[i].x, y: p.y + pos[i].y });
