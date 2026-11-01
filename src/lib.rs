@@ -6,6 +6,7 @@ pub mod case_history;
 pub mod case_memory;
 pub mod config;
 pub mod context;
+pub mod context_gate;
 pub mod correlation;
 pub mod correlation_v2;
 pub mod cpe;
