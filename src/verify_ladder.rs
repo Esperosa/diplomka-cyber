@@ -88,12 +88,14 @@ pub enum CheckId {
     Liveness,
     /// L4: podezřelé nálezy na souvisejících zařízeních.
     Pivot,
+    /// L0: naučený profil hostu (obvyklý cíl a port, flotila; krok 3E).
+    Profile,
 }
 
 impl CheckId {
     pub fn level(self) -> Level {
         match self {
-            CheckId::History => Level::L0,
+            CheckId::History | CheckId::Profile => Level::L0,
             CheckId::Context | CheckId::Reputation | CheckId::Intel | CheckId::DeviceProfile => {
                 Level::L1
             }
@@ -114,6 +116,7 @@ impl CheckId {
             CheckId::Persistence => "persistence",
             CheckId::Liveness => "liveness",
             CheckId::Pivot => "pivot",
+            CheckId::Profile => "profile",
         }
     }
 }
@@ -347,6 +350,10 @@ pub struct LrTable {
     pub liveness_down_outage: f64,
     pub liveness_up_unreachable: f64,
     pub pivot_per_hit: f64,
+    /// Krok 3E: zvyk zavedený u hostu, u flotily, nový cíl zralého profilu.
+    pub profile_host: f64,
+    pub profile_fleet: f64,
+    pub profile_new: f64,
 }
 
 impl Default for LrTable {
@@ -367,6 +374,9 @@ impl Default for LrTable {
             liveness_down_outage: 0.15,
             liveness_up_unreachable: 1.5,
             pivot_per_hit: 2.0,
+            profile_host: 0.2,
+            profile_fleet: 0.35,
+            profile_new: 1.5,
         }
     }
 }
@@ -394,6 +404,8 @@ pub struct LadderPolicy {
     pub pivot_max_nodes: usize,
     pub max_open_cases: usize,
     pub lr: LrTable,
+    /// Kontrola profilu hostu (krok 3E); vypnuto = plán jako v kroku 2.
+    pub profile: bool,
 }
 
 impl Default for LadderPolicy {
@@ -412,6 +424,7 @@ impl Default for LadderPolicy {
             pivot_max_nodes: 5,
             max_open_cases: 5_000,
             lr: LrTable::default(),
+            profile: false,
         }
     }
 }
@@ -440,6 +453,10 @@ pub trait LadderEvidence {
     fn in_scope(&self, ip: &str) -> bool;
     /// Typy podezřelých otevřených nálezů na zařízení (pro pivot).
     fn suspicious_on(&self, ip: &str) -> usize;
+    /// Naučený profil hostu pro případ (krok 3E); výchozí = nic neplyne.
+    fn profile(&self, _case: &CaseInput) -> crate::behavior::profile::ProfileVerdict {
+        crate::behavior::profile::ProfileVerdict::Unknown("profil neni k dispozici".into())
+    }
 }
 
 /// Statistiky žebříku (pro měření a report).
@@ -485,11 +502,14 @@ fn entropy(p: f64) -> f64 {
 }
 
 /// Kontroly, které pro typ nálezu dávají smysl (bez kontroly bez exekutoru, R10-lite).
-fn checks_for(input: &CaseInput) -> Vec<CheckId> {
+fn checks_for(input: &CaseInput, policy: &LadderPolicy) -> Vec<CheckId> {
     let kind = input.finding_type.as_str();
     let mut checks = Vec::new();
     if input.history_key.is_some() {
         checks.push(CheckId::History);
+    }
+    if policy.profile {
+        checks.push(CheckId::Profile);
     }
     checks.push(CheckId::Context);
     if !input.sources.is_empty() {
@@ -519,6 +539,10 @@ fn checks_for(input: &CaseInput) -> Vec<CheckId> {
             | "service_unreachable"
             | "connection_timeout_burst"
             | "service_overload_risk"
+            | "beacon_periodic"
+            | "interactive_session"
+            | "long_lived_tunnel"
+            | "egress_volume_anomaly"
     ) {
         checks.push(CheckId::Peers);
     }
@@ -533,6 +557,11 @@ fn checks_for(input: &CaseInput) -> Vec<CheckId> {
             | "suricata_alert"
             | "source_volume_outlier"
             | "unexpected_traffic"
+            | "beacon_periodic"
+            | "interactive_session"
+            | "long_lived_tunnel"
+            | "egress_ids_alert"
+            | "pivot_chain"
     ) {
         checks.push(CheckId::Pivot);
     }
@@ -543,8 +572,8 @@ fn checks_for(input: &CaseInput) -> Vec<CheckId> {
 /// klíče a klíče případu (RQ3 Z11). Přetrvání (L2) je úplně poslední: stojí čas, ne
 /// zdroje, a okamžité kontroly (L3 dostupnost služby při výpadku) by po čekání
 /// viděly už jiný stav.
-fn plan_for(input: &CaseInput, secret: u64) -> VecDeque<CheckId> {
-    let mut checks = checks_for(input);
+fn plan_for(input: &CaseInput, secret: u64, policy: &LadderPolicy) -> VecDeque<CheckId> {
+    let mut checks = checks_for(input, policy);
     let salt = mix(secret ^ hash_text(&input.finding_id));
     checks.sort_by_key(|check| {
         let wait_last = (*check == CheckId::Persistence) as u8;
@@ -761,7 +790,7 @@ impl Ladder {
             self.stats.cases_capped += 1;
             return false;
         }
-        let plan = plan_for(&input, self.secret);
+        let plan = plan_for(&input, self.secret, &self.policy);
         self.cases.insert(
             input.key.clone(),
             Case {
@@ -1236,6 +1265,29 @@ fn evaluate(
                 Liveness::Failed(reason) => Outcome::Unavailable(reason),
             }
         }
+        CheckId::Profile => {
+            use crate::behavior::profile::ProfileVerdict;
+            match env.profile(input) {
+                ProfileVerdict::Established { since, days } => Outcome::Evidence {
+                    lr: lr.profile_host,
+                    detail: format!(
+                        "zavedeny zvyk hostu od {} ({days} dni)",
+                        chrono::DateTime::from_timestamp(since, 0)
+                            .map(|d| d.format("%Y-%m-%d").to_string())
+                            .unwrap_or_default()
+                    ),
+                },
+                ProfileVerdict::Fleet { hosts } => Outcome::Evidence {
+                    lr: lr.profile_fleet,
+                    detail: format!("zavedeny zvyk u {hosts} hostu stejne skupiny"),
+                },
+                ProfileVerdict::NewForMature { profile_days } => Outcome::Evidence {
+                    lr: lr.profile_new,
+                    detail: format!("novy cil pro profil hostu ({profile_days:.0} dni dat)"),
+                },
+                ProfileVerdict::Unknown(why) => Outcome::Undetermined(why),
+            }
+        }
         CheckId::Pivot => {
             // BFS po komunikacnich hranach z entity a zdroju, jen v rozsahu
             let mut frontier: Vec<String> = std::iter::once(input.host_ip.clone())
@@ -1565,7 +1617,9 @@ mod tests {
             let mut l = Ladder::new(LadderPolicy::default(), secret);
             let case = input("unexpected_traffic", "10.0.0.5", &["10.0.1.1"]);
             l.open(case.clone(), 0);
-            plan_for(&case, secret).into_iter().collect::<Vec<_>>()
+            plan_for(&case, secret, &LadderPolicy::default())
+                .into_iter()
+                .collect::<Vec<_>>()
         };
         assert_eq!(order(1), order(1));
         let plan = order(1);
