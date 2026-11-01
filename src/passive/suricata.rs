@@ -6,7 +6,10 @@ use ipnet::IpNet;
 use crate::{
     error::Result,
     model::{NormalizedEvent, Severity},
-    passive::{event_in_window, in_scope, parse_suricata_ts},
+    passive::{
+        egress::{ScopeMode, keep},
+        event_in_window, parse_suricata_ts,
+    },
 };
 
 pub fn parse_suricata(
@@ -15,8 +18,19 @@ pub fn parse_suricata(
     start: DateTime<Utc>,
     end: DateTime<Utc>,
 ) -> Result<Vec<NormalizedEvent>> {
+    parse_suricata_mode(path, scope, start, end, ScopeMode::DstOnly)
+}
+
+/// `mode = SrcOrDst`: i alerty se zdrojem v rozsahu a cílem venku (C2, miner, krok 3A).
+pub fn parse_suricata_mode(
+    path: &Path,
+    scope: &[IpNet],
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    mode: ScopeMode,
+) -> Result<Vec<NormalizedEvent>> {
     let content = fs::read_to_string(path)?;
-    parse_suricata_str(&content, &path.to_string_lossy(), scope, start, end)
+    parse_suricata_str_mode(&content, &path.to_string_lossy(), scope, start, end, mode)
 }
 
 /// Stejna logika nad textem (`label` nahrazuje cestu v logu/`raw_ref`) - pouziva ji
@@ -28,6 +42,17 @@ pub(crate) fn parse_suricata_str(
     scope: &[IpNet],
     start: DateTime<Utc>,
     end: DateTime<Utc>,
+) -> Result<Vec<NormalizedEvent>> {
+    parse_suricata_str_mode(content, label, scope, start, end, ScopeMode::DstOnly)
+}
+
+pub(crate) fn parse_suricata_str_mode(
+    content: &str,
+    label: &str,
+    scope: &[IpNet],
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    mode: ScopeMode,
 ) -> Result<Vec<NormalizedEvent>> {
     let mut events = Vec::new();
     for (line_no, raw_line) in content.lines().enumerate() {
@@ -67,7 +92,8 @@ pub(crate) fn parse_suricata_str(
             }
         };
         let dst_ip = row["dest_ip"].as_str().unwrap_or_default().to_string();
-        if dst_ip.is_empty() || !in_scope(scope, &dst_ip) || !event_in_window(timestamp, start, end)
+        if !keep(mode, scope, row["src_ip"].as_str(), &dst_ip)
+            || !event_in_window(timestamp, start, end)
         {
             continue;
         }
@@ -210,5 +236,21 @@ mod tests {
 
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].message, "ok");
+    }
+
+    /// Krok 3A: alert C2 se zdrojem uvnitr a cilem venku legacy zahodi, `SrcOrDst` drzi.
+    #[test]
+    fn outbound_alert_is_kept_only_in_src_or_dst_mode() {
+        let (start, end) = window();
+        let ts = (start + Duration::minutes(5)).to_rfc3339();
+        let line = format!(
+            r#"{{"timestamp":"{ts}","flow_id":4,"event_type":"alert","src_ip":"10.0.0.9","src_port":51000,"dest_ip":"203.0.113.7","dest_port":443,"proto":"TCP","alert":{{"signature_id":2027865,"signature":"ET MALWARE Known C2 beacon pattern","severity":1}}}}"#
+        );
+        let legacy = parse_suricata_str(&line, "t", &scope(), start, end).unwrap();
+        assert!(legacy.is_empty());
+        let egress =
+            parse_suricata_str_mode(&line, "t", &scope(), start, end, ScopeMode::SrcOrDst).unwrap();
+        assert_eq!(egress.len(), 1);
+        assert_eq!(egress[0].dst_ip, "203.0.113.7");
     }
 }

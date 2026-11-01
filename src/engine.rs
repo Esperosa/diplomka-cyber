@@ -72,6 +72,17 @@ pub struct V3Features {
     /// Peer baseline detektoru podle typu zařízení a podsítě (krok 2D, zvlášť měřeno).
     #[serde(default)]
     pub peers: bool,
+    /// Viditelnost odchozího provozu: toky a alerty se zdrojem NEBO cílem v rozsahu,
+    /// se směrem a vzorkováním (krok 3A, audit 01 A10/R2).
+    pub egress: bool,
+    /// Beaconing na dvojici zdroj-cíl (krok 3B, RQ4 Z1/Z2, hypotéza).
+    pub beacon: bool,
+    /// Interaktivní relace a dlouhé tunely ven (krok 3C, RQ4 Z13, hypotéza).
+    pub interactive: bool,
+    /// Graf spojení: nové hrany a řetěz A→B→C (krok 3D, RQ4 Z10/Z11).
+    pub graph: bool,
+    /// Profil hostu a známé neškodné vzory jako pozitivní důkaz žebříku (krok 3E).
+    pub profile: bool,
 }
 
 impl Default for V3Features {
@@ -81,7 +92,7 @@ impl Default for V3Features {
 }
 
 impl V3Features {
-    pub const NAMES: [&'static str; 11] = [
+    pub const NAMES: [&'static str; 16] = [
         "memory",
         "rate",
         "volume",
@@ -93,6 +104,11 @@ impl V3Features {
         "learning",
         "devices",
         "peers",
+        "egress",
+        "beacon",
+        "interactive",
+        "graph",
+        "profile",
     ];
 
     pub fn all() -> Self {
@@ -108,6 +124,11 @@ impl V3Features {
             learning: true,
             devices: true,
             peers: true,
+            egress: true,
+            beacon: true,
+            interactive: true,
+            graph: true,
+            profile: true,
         }
     }
 
@@ -133,6 +154,23 @@ impl V3Features {
             learning: false,
             devices: false,
             peers: false,
+            egress: false,
+            beacon: false,
+            interactive: false,
+            graph: false,
+            profile: false,
+        }
+    }
+
+    /// Stav po kroku 2 (bez změn kroku 3), pro párové srovnání kroku 3.
+    pub fn step2() -> Self {
+        Self {
+            egress: false,
+            beacon: false,
+            interactive: false,
+            graph: false,
+            profile: false,
+            ..Self::recommended()
         }
     }
 
@@ -144,7 +182,7 @@ impl V3Features {
             learning: false,
             devices: false,
             peers: false,
-            ..Self::all()
+            ..Self::step2()
         }
     }
 
@@ -161,6 +199,11 @@ impl V3Features {
             "learning" => &mut self.learning,
             "devices" => &mut self.devices,
             "peers" => &mut self.peers,
+            "egress" => &mut self.egress,
+            "beacon" => &mut self.beacon,
+            "interactive" => &mut self.interactive,
+            "graph" => &mut self.graph,
+            "profile" => &mut self.profile,
             _ => return None,
         })
     }
@@ -252,6 +295,28 @@ impl EngineConfig {
     pub fn peer_baseline(&self) -> bool {
         self.on(|f| f.devices && f.peers)
     }
+    /// Odchozí toky a alerty (zdroj nebo cíl v rozsahu, krok 3A).
+    pub fn egress(&self) -> bool {
+        self.on(|f| f.egress)
+    }
+    /// Detektory nad odchozím provozem potřebují viditelnost ven (krok 3A).
+    pub fn beacon(&self) -> bool {
+        self.on(|f| f.egress && f.beacon)
+    }
+    pub fn interactive(&self) -> bool {
+        self.on(|f| f.egress && f.interactive)
+    }
+    pub fn graph(&self) -> bool {
+        self.on(|f| f.graph)
+    }
+    /// Profil hostu je důkaz žebříku, bez žebříku nemá smysl.
+    pub fn profile(&self) -> bool {
+        self.on(|f| f.profile && f.ladder && f.memory)
+    }
+    /// Běží behaviorální vrstva kroku 3 (aspoň jedna její část)?
+    pub fn behavior(&self) -> bool {
+        self.egress() || self.graph() || self.profile()
+    }
     /// Běží v3 detektor (aspoň jedna detekční změna)?
     pub fn v3_detector(&self) -> bool {
         self.robust_rate() || self.volume_baseline() || self.unexpected_v3()
@@ -298,8 +363,23 @@ mod tests {
         };
         assert_eq!(
             cfg.label(),
-            "v3[memory+unexpected+context+identity+recall+ladder+learning+devices+peers]"
+            "v3[memory+unexpected+context+identity+recall+ladder+learning+devices+peers+egress+beacon+interactive+graph+profile]"
         );
+        let step2 = EngineConfig {
+            mode: EngineMode::V3,
+            v3: V3Features::step2(),
+        };
+        assert_eq!(
+            step2.label(),
+            "v3[memory+rate+volume+unexpected+context+identity+recall+ladder+learning+devices]"
+        );
+        assert!(!step2.behavior() && !step2.egress());
+        let no_egress = EngineConfig {
+            mode: EngineMode::V3,
+            v3: V3Features::all().disable_list("egress").unwrap(),
+        };
+        // beacon a interaktivni relace bez viditelnosti ven nebezi
+        assert!(!no_egress.beacon() && !no_egress.interactive() && no_egress.graph());
         let step1 = EngineConfig {
             mode: EngineMode::V3,
             v3: V3Features::step1(),

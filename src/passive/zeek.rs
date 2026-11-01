@@ -6,7 +6,11 @@ use ipnet::IpNet;
 use crate::{
     error::{BakulaError, Result},
     model::{NormalizedEvent, Severity},
-    passive::{ConnectionObservation, event_in_window, in_scope, parse_zeek_ts},
+    passive::{
+        ConnectionObservation,
+        egress::{ScopeMode, keep},
+        event_in_window, in_scope, parse_zeek_ts,
+    },
 };
 
 #[allow(private_interfaces)]
@@ -21,6 +25,19 @@ pub fn parse_zeek_dir(
     scope: &[IpNet],
     start: DateTime<Utc>,
     end: DateTime<Utc>,
+) -> Result<ZeekParseResult> {
+    parse_zeek_dir_mode(path, scope, start, end, ScopeMode::DstOnly)
+}
+
+/// Jako `parse_zeek_dir`; `mode = SrcOrDst` drží i toky `conn.log` se zdrojem v rozsahu
+/// a cílem venku (krok 3A). `notice.log` a `http.log` zůstávají jen s cílem v rozsahu
+/// (jejich pravidla stojí na inventáři cílové služby).
+pub fn parse_zeek_dir_mode(
+    path: &Path,
+    scope: &[IpNet],
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    mode: ScopeMode,
 ) -> Result<ZeekParseResult> {
     let mut events = Vec::new();
     let mut connections = Vec::new();
@@ -170,9 +187,12 @@ pub fn parse_zeek_dir(
                 }
             };
             let dst_ip = row.get("id.resp_h").cloned().unwrap_or_default();
-            if dst_ip.is_empty()
-                || !in_scope(scope, &dst_ip)
-                || !event_in_window(timestamp, start, end)
+            if !keep(
+                mode,
+                scope,
+                row.get("id.orig_h").map(String::as_str),
+                &dst_ip,
+            ) || !event_in_window(timestamp, start, end)
             {
                 continue;
             }
@@ -348,5 +368,40 @@ mod tests {
             .expect("neplatny 'ts' radek nesmi shodit cely parse");
         assert_eq!(result.connections.len(), 1);
         assert_eq!(result.connections[0].src_port, Some(51000));
+    }
+
+    /// Krok 3A (audit A10): odchozi tok (zdroj uvnitr, cil venku) legacy zahodi,
+    /// rezim `SrcOrDst` ho drzi; tranzit (ani jedna strana v rozsahu) zahodi oba.
+    #[test]
+    fn outbound_flow_is_kept_only_in_src_or_dst_mode() {
+        let dir = TempDir::new().expect("tempdir");
+        let (start, end) = window();
+        let ts = (start + Duration::minutes(5)).timestamp();
+        let header = "#fields\tts\tuid\tid.orig_h\tid.orig_p\tid.resp_h\tid.resp_p\tproto\tduration\torig_bytes\tresp_bytes\torig_pkts\tresp_pkts\tmissed_bytes\tconn_state\thistory";
+        let row = |uid: &str, src: &str, dst: &str| {
+            format!(
+                "{ts}.0\t{uid}\t{src}\t51000\t{dst}\t443\ttcp\t1.0\t100\t200\t1\t1\t0\tSF\tShadAfF"
+            )
+        };
+        let content = [
+            header.to_string(),
+            row("C1", "10.0.0.9", "203.0.113.7"),
+            row("C2", "198.51.100.1", "10.0.0.5"),
+            row("C3", "198.51.100.1", "203.0.113.7"),
+        ]
+        .join("\n");
+        fs::write(dir.path().join("conn.log"), content).expect("write conn.log");
+        let legacy = parse_zeek_dir(dir.path(), &scope(), start, end).expect("legacy");
+        assert_eq!(legacy.connections.len(), 1);
+        assert_eq!(legacy.connections[0].dst_ip, "10.0.0.5");
+        let egress =
+            parse_zeek_dir_mode(dir.path(), &scope(), start, end, ScopeMode::SrcOrDst).expect("v3");
+        assert_eq!(egress.connections.len(), 2);
+        assert!(
+            egress
+                .connections
+                .iter()
+                .any(|c| c.dst_ip == "203.0.113.7" && c.src_ip.as_deref() == Some("10.0.0.9"))
+        );
     }
 }

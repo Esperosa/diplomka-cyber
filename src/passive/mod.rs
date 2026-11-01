@@ -12,6 +12,7 @@ mod anomaly;
 pub(crate) mod anomaly_v3;
 mod community_id;
 pub(crate) mod detector;
+pub(crate) mod egress;
 mod suricata;
 pub(crate) mod thresholds;
 mod zeek;
@@ -26,9 +27,9 @@ pub(crate) use anomaly::score_connection_keys;
 #[allow(unused_imports)]
 pub(crate) use anomaly::score_source_hosts;
 pub(crate) use detector::{ConnectionDetector, LegacyAnomalyDetector, V3StatefulDetector};
-pub(crate) use suricata::parse_suricata_str;
+pub(crate) use suricata::{parse_suricata_str, parse_suricata_str_mode};
 pub(crate) use zeek::parse_zeek_log;
-pub use zeek::{ZeekParseResult, parse_zeek_dir};
+pub use zeek::{ZeekParseResult, parse_zeek_dir, parse_zeek_dir_mode};
 
 #[derive(Debug, Clone)]
 pub struct PassiveSources {
