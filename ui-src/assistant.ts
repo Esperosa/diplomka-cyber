@@ -95,22 +95,19 @@ function cancelAnimations() {
 }
 
 /**
- * Otevre/zavre asistenta technikou FLIP. Sloupec layoutu se prepne hned na konecny stav (jedno
- * prepocitani), hlavni plocha se animuje pres transform z puvodniho obdelniku a karta se zhmotni z tlacitka
- * zvlnenou hranou (clip-path). Po otevreni dostane fokus pole zpravy, po zavreni se fokus vrati na tlacitko.
+ * Otevre/zavre asistenta. Sirka sloupce (--as-col) se plynule meni v CSS (zadne scale na hlavni plose, mapa
+ * se jen prizpusobi nove velikosti pres ResizeObserver) a karta se zhmotni z tlacitka zvlnenou hranou
+ * (clip-path). Po otevreni dostane fokus pole zpravy, po zavreni se fokus vrati na tlacitko.
  */
 export function setAssistantOpen(open: boolean, returnFocus = false) {
   update({ assistantOpen: open }, false);
   const panel = document.getElementById("assistant");
   const card = panel?.querySelector<HTMLElement>(".assistant-card");
-  const stage = document.getElementById("stage") ?? document.querySelector<HTMLElement>(".stage");
   if (!panel || !card) return;
   const toggle = document.querySelector<HTMLElement>("[data-global='assistant-toggle']");
   toggle?.setAttribute("aria-expanded", String(open));
   cancelAnimations();
-  const phone = window.matchMedia("(max-width: 64.06rem)").matches;
   const animate = !reducedMotion();
-  const before = stage?.getBoundingClientRect();
   const btn = toggle?.getBoundingClientRect();
   const duration = tokenMs("--dur-slow", 440);
   const easing = "cubic-bezier(0.3, 0.7, 0.2, 1)";
@@ -133,13 +130,7 @@ export function setAssistantOpen(open: boolean, returnFocus = false) {
       if (!open) panel.hidden = true;
       return;
     }
-    const after = stage?.getBoundingClientRect(); // jedno cteni layoutu po prepnuti sloupce
     const c = card.getBoundingClientRect();
-    if (stage && before && after && !phone && after.width > 0) {
-      const dx = before.left - after.left;
-      const sx = before.width / after.width;
-      animations.push(stage.animate([{ transform: `translate3d(${dx}px, 0, 0) scale(${sx}, 1)` }, { transform: "none" }], { duration, easing }));
-    }
     const cx = btn ? btn.left + btn.width / 2 - c.left : c.width;
     const cy = btn ? btn.top + btn.height / 2 - c.top : 0;
     let frames = blobFrames(Math.min(Math.max(cx, 0), c.width), Math.min(Math.max(cy, 0), c.height), c.width, c.height);

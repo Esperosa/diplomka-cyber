@@ -11,8 +11,16 @@
     "dock stage as";
   overflow: hidden;
 }
-/* Sloupec asistenta se prepne okamzite na konecnou sirku (jedno prepocitani layoutu).
-   Plynuly pohyb zajisti assistant.ts technikou FLIP: transform hlavni plochy a clip-path karty. */
+/* Sloupec asistenta meni sirku plynule (registrovana vlastnost --as-col). Hlavni plocha se meni na novou
+   VELIKOST, nikdy se neskaluje transformem; mapa se prizpusobuje pres ResizeObserver. */
+.shell {
+  transition: --as-col var(--dur-slow) var(--ease-soft);
+}
+@media (prefers-reduced-motion: reduce) {
+  .shell {
+    transition: none;
+  }
+}
 .assistant-open .shell {
   --as-col: calc(var(--as-w) + 1rem);
 }

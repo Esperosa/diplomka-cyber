@@ -325,6 +325,8 @@ function transitionSections(direction: "down" | "up", commit: () => void) {
   ghost.setAttribute("inert", "");
   const offset = stage.scrollTop;
   ghost.style.top = `${offset}px`;
+  // stejne odsazeni jako plocha, aby se obsah stareho pohledu ani o bod neposunul ani nezmenil rozmer
+  ghost.style.padding = getComputedStyle(stage).padding;
   ghost.style.height = `${h}px`;
   for (const child of Array.from(stage.children)) {
     const copy = child.cloneNode(true) as HTMLElement;
