@@ -289,11 +289,11 @@ impl PlanQueue {
         if self.keys.contains(&key) {
             return false;
         }
-        if self.queue.len() >= Self::MAX {
-            if let Some(old) = self.queue.pop_front() {
-                self.keys.remove(&Self::key(&old));
-                self.dropped += 1;
-            }
+        if self.queue.len() >= Self::MAX
+            && let Some(old) = self.queue.pop_front()
+        {
+            self.keys.remove(&Self::key(&old));
+            self.dropped += 1;
         }
         self.keys.insert(key);
         self.queue.push_back(plan);

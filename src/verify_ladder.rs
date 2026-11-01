@@ -12,7 +12,7 @@
 //!   prázdný výsledek dotazu NENÍ důkaz neškodnosti, je to stav „nezjištěno“
 //!   (RQ6 Z3: prázdné vyhledávání souvisí se zamítnutím útoku v 98,6 % případů),
 //! - eskalace člověku: strop počtu kontrol (`max_checks`, RQ3 Z3: bez stropu zůstává
-//!   > 80 % nerozhodnuto, strop sám nerozhodnutost neřeší), vyčerpaný plán nebo
+//!   přes 80 % nerozhodnuto, strop sám nerozhodnutost neřeší), vyčerpaný plán nebo
 //!   opakovaně chybějící rozpočet.
 //!
 //! Úrovně od nejlevnější a nejbezpečnější (Dodatek A.3, pořadí v A.4):
@@ -1606,7 +1606,7 @@ mod tests {
             );
         }
         let lr = learner.lr(CheckId::History, "benign", 0.25);
-        assert!(lr < 0.25 && lr >= 0.02, "{lr}");
+        assert!((0.02..0.25).contains(&lr), "{lr}");
         assert_eq!(
             learner.lr(CheckId::Context, "undetermined", 1.0),
             1.0,

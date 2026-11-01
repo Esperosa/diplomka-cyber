@@ -492,7 +492,7 @@ fn run_episode_inner(
     let scope = ScopePolicy::new(scope_nets.clone());
     let mut resolver = IdentityResolver::new();
     let mut v3 = match cfg.engine.mode {
-        EngineMode::V3 => Some(V3Runtime::new(cfg.engine, derive(model.seed, 0x1ADD_E7))?),
+        EngineMode::V3 => Some(V3Runtime::new(cfg.engine, derive(model.seed, 0x001A_DDE7))?),
         EngineMode::Legacy => None,
     };
     let coverage = ContextCoverage::default();
@@ -1735,8 +1735,8 @@ fn run_episode_inner(
             // vyvraceno: audit 10 %) jde pres Case Memory (ochrana proti otraveni)
             if learning_on && let Some(runtime) = v3.as_mut() {
                 let audited = matches!(decision.status, Status::Refuted)
-                    && mix(finding_hash(&decision.finding_id) ^ model.seed ^ cycle as u64) % 10
-                        == 0;
+                    && mix(finding_hash(&decision.finding_id) ^ model.seed ^ cycle as u64)
+                        .is_multiple_of(10);
                 let reviewed = match decision.status {
                     Status::Refuted => audited,
                     _ => eval_rng.chance(0.5),

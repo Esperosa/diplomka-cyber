@@ -90,6 +90,9 @@ type SuccessTally = (u32, DateTime<Utc>, HashMap<String, u32>);
 /// (pocet, prvni cas, porty) uspesnych spojeni na neznamou adresu.
 type UnknownHostTally = (u32, DateTime<Utc>, HashMap<(String, u16), u32>);
 
+/// (distinktní cíle, první čas) rozptylu zdroje na správcovských portech.
+type FanoutTally = (HashSet<String>, DateTime<Utc>);
+
 /// Které části v3 jsou zapnuté (zbytek je legacy logika ablace A).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct V3Switches {
@@ -437,36 +440,36 @@ pub(crate) fn detect_v3(
         }
 
         let known = known_services.contains(&key);
-        if switches.recall {
-            if let Some(src) = &connection.src_ip {
-                if is_timeout_like(connection) {
-                    let entry = fail_sources.entry(key.clone()).or_default();
-                    if entry.len() < 256 || entry.contains_key(src) {
-                        *entry.entry(src.clone()).or_default() += 1;
-                    }
+        if switches.recall
+            && let Some(src) = &connection.src_ip
+        {
+            if is_timeout_like(connection) {
+                let entry = fail_sources.entry(key.clone()).or_default();
+                if entry.len() < 256 || entry.contains_key(src) {
+                    *entry.entry(src.clone()).or_default() += 1;
                 }
-                if ADMIN_PORTS.contains(&port)
-                    && known_hosts.contains(src)
-                    && src != &connection.dst_ip
-                    && (is_attempt(connection) || is_success(connection))
-                {
-                    let entry = fanout
-                        .entry(src.clone())
-                        .or_insert_with(|| (HashSet::new(), connection.timestamp));
-                    entry.1 = entry.1.min(connection.timestamp);
-                    if entry.0.len() < 4096 {
-                        entry.0.insert(connection.dst_ip.clone());
-                    }
+            }
+            if ADMIN_PORTS.contains(&port)
+                && known_hosts.contains(src)
+                && src != &connection.dst_ip
+                && (is_attempt(connection) || is_success(connection))
+            {
+                let entry = fanout
+                    .entry(src.clone())
+                    .or_insert_with(|| (HashSet::new(), connection.timestamp));
+                entry.1 = entry.1.min(connection.timestamp);
+                if entry.0.len() < 4096 {
+                    entry.0.insert(connection.dst_ip.clone());
                 }
-                // pokusy i na ZNÁMOU službu: horizontální sken otevřeného portu
-                if switches.unexpected && known && is_attempt(connection) {
-                    let entry = attempts_by_source
-                        .entry(src.clone())
-                        .or_insert_with(|| (Vec::new(), connection.timestamp));
-                    entry.1 = entry.1.min(connection.timestamp);
-                    if entry.0.len() < 4096 {
-                        entry.0.push(key.clone());
-                    }
+            }
+            // pokusy i na ZNÁMOU službu: horizontální sken otevřeného portu
+            if switches.unexpected && known && is_attempt(connection) {
+                let entry = attempts_by_source
+                    .entry(src.clone())
+                    .or_insert_with(|| (Vec::new(), connection.timestamp));
+                entry.1 = entry.1.min(connection.timestamp);
+                if entry.0.len() < 4096 {
+                    entry.0.push(key.clone());
                 }
             }
         }
@@ -1112,7 +1115,7 @@ fn recall_events(
     *events = kept;
 
     // 2. rozptyl zdroje po hostech na spravcovskych portech
-    let mut fan: Vec<(&String, &(HashSet<String>, DateTime<Utc>))> = input.fanout.iter().collect();
+    let mut fan: Vec<(&String, &FanoutTally)> = input.fanout.iter().collect();
     fan.sort_by(|a, b| a.0.cmp(b.0));
     for (src, (targets, first)) in fan {
         let distinct = targets.len();
