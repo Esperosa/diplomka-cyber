@@ -194,6 +194,7 @@ pub fn host_report_from_arp(ip: &str, mac: Option<String>) -> HostReport {
         vendor: None,
         asset_id: None,
         identity_note: None,
+        device_class: None,
         services: Vec::new(),
     }
 }

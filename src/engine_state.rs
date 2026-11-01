@@ -234,6 +234,7 @@ mod tests {
             vendor: None,
             asset_id: None,
             identity_note: None,
+            device_class: None,
             services: ports.iter().map(|p| service(*p)).collect(),
         }
     }

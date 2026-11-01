@@ -282,6 +282,10 @@ pub struct HostReport {
     /// sloučení dvou různých zařízení udělalo nebezpečnějším.
     #[serde(default)]
     pub identity_note: Option<String>,
+    /// Typ zařízení z jádra (krok 2D, `device_class::classify`): typ, jistota, důvody.
+    /// `None` = neklasifikováno (legacy beze změny výstupu).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_class: Option<crate::device_class::DeviceClass>,
     pub services: Vec<ServiceReport>,
 }
 

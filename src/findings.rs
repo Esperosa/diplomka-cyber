@@ -1588,6 +1588,7 @@ mod rule_tests {
             vendor: None,
             asset_id: None,
             identity_note: None,
+            device_class: None,
             services: vec![service],
         }];
         report

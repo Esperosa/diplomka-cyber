@@ -837,6 +837,7 @@ mod tests {
             vendor: None,
             asset_id: None,
             identity_note: None,
+            device_class: None,
             services: vec![
                 ServiceReport {
                     service_id: "svc:192.168.1.50/tcp/3306".to_string(),
@@ -957,6 +958,7 @@ mod tests {
             vendor: None,
             identity_note: None,
             asset_id: None,
+            device_class: None,
             services: vec![ServiceReport {
                 service_id: "svc:203.0.113.50/tcp/22".to_string(),
                 service_key: "203.0.113.50/tcp/22".to_string(),

@@ -11,6 +11,7 @@ pub mod correlation;
 pub mod correlation_v2;
 pub mod cpe;
 pub mod decision;
+pub mod device_class;
 pub mod diff;
 pub mod enforcement;
 pub mod engine;

@@ -451,6 +451,7 @@ mod tests {
             vendor: None,
             asset_id: None,
             identity_note: None,
+            device_class: None,
             services: Vec::new(),
         }
     }
