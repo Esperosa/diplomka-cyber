@@ -9,6 +9,7 @@ import { parseHash, navigate } from "./router";
 import { onChange, state, update, type SectionId, type View } from "./state";
 import { countdown, esc } from "./ui";
 import { metaballBridge } from "./metaball";
+import { morphInto } from "./morph";
 import type { PentestMode } from "./types";
 import { audit } from "./views/audit";
 import { automation } from "./views/automation";
@@ -189,7 +190,19 @@ let lastStage = { section: "", html: "" };
 function renderStage() {
   const html = currentView().render();
   if (state.section === lastStage.section && html === lastStage.html && stage.childElementCount) return;
+  // mapa si po vykresleni plni lisu, drobeckovou navigaci i bocni panel sama (JS), proto se prekresluje celek
+  const sameSection = state.section === lastStage.section && stage.childElementCount > 0 && state.section !== "prehled";
   lastStage = { section: state.section, html };
+
+  if (sameSection) {
+    // zmena dat uvnitr stejne sekce: prenesou se jen zmenene prvky (podle ID), scroll, fokus a zoom zustavaji
+    const result = morphInto(stage, html);
+    stage.dataset.section = state.section;
+    void result;
+    currentView().after?.();
+    afterStageRender(stage, state.section);
+    return;
+  }
 
   const sigBefore = focusSignature(document.activeElement);
   const scrolls = new Map<string, number>();

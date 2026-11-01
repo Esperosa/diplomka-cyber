@@ -87,11 +87,14 @@ function enhanceSegments(stage: HTMLElement, section: string) {
     const key = `${section}:${index}`;
     const l = on.offsetLeft;
     const w = on.offsetWidth;
-    const bubble = document.createElement("span");
-    bubble.className = "seg-bubble";
-    bubble.setAttribute("aria-hidden", "true");
+    let bubble = group.querySelector<HTMLElement>(":scope > .seg-bubble");
+    if (!bubble) {
+      bubble = document.createElement("span");
+      bubble.className = "seg-bubble";
+      bubble.setAttribute("aria-hidden", "true");
+      group.prepend(bubble);
+    }
     bubble.style.cssText = `left:${l}px;top:${on.offsetTop}px;width:${w}px;height:${on.offsetHeight}px`;
-    group.prepend(bubble);
     group.classList.add("has-bubble");
     const before = previous.get(key);
     previous.set(key, { l, w });

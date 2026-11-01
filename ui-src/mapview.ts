@@ -47,7 +47,7 @@ function readEase(): (t: number) => number {
 export type MapViewOptions = {
   bounds: Box;
   /** uzivatel priblizuje; controller muze zonu rozbalit */
-  onUserZoom?: (cam: Cam, fit: number, client: { x: number; y: number }, world: { x: number; y: number }) => void;
+  onUserZoom?: (cam: Cam, fit: number, client: { x: number; y: number }, world: { x: number; y: number }, factor: number) => void;
   /** dvojklik/dvojtap na prazdne plose; vraci true, kdyz ho controller zpracoval */
   onBackgroundDouble?: () => boolean;
   /** po zmene meritka (prahy popisku) */
@@ -181,7 +181,7 @@ export function bindMapView(host: HTMLElement, svg: SVGSVGElement, opts: MapView
     const uy = cam.cy + py / cam.s;
     cam = clamp({ s, cx: ux - px / s, cy: uy - py / s });
     apply();
-    if (factor > 1) opts.onUserZoom?.(cam, fitScale(), { x: client?.x ?? r.left + r.width / 2, y: client?.y ?? r.top + r.height / 2 }, toWorld(client?.x ?? r.left + r.width / 2, client?.y ?? r.top + r.height / 2));
+    if (factor !== 1) opts.onUserZoom?.(cam, fitScale(), { x: client?.x ?? r.left + r.width / 2, y: client?.y ?? r.top + r.height / 2 }, toWorld(client?.x ?? r.left + r.width / 2, client?.y ?? r.top + r.height / 2), factor);
   };
   const panBy = (dx: number, dy: number) => {
     cancelAnimationFrame(anim);

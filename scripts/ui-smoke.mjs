@@ -21,7 +21,7 @@ check(/color-scheme/.test(html), "chybi meta color-scheme");
 
 // Zadne zbytky stareho UI
 check(!/jumping|spider/i.test(css + js), "bundle obsahuje maskota ze stareho UI");
-check((await readdir("ui")).sort().join(",") === "app.js,fonts,index.html,styles.css", "ui/ ma obsahovat jen app.js, fonts, index.html, styles.css");
+check((await readdir("ui")).filter((n) => n !== "brand").sort().join(",") === "app.js,fonts,index.html,styles.css", "ui/ ma obsahovat jen app.js, fonts, index.html, styles.css (a volitelne brand)");
 check((await readdir("ui/fonts")).sort().join(",") === "sedmdvacet-display,sedmdvacet-mono,sedmdvacet-text-c", "ui/fonts ma obsahovat jen rodiny Sedmdvacet");
 
 // Zakazane AI vzory (docs: anti-patterns-ai-look.md)

@@ -38,6 +38,9 @@ let cache: { report: Report; model: NetModel } | null = null;
 let saved: { run: string; cam: Cam } | null = null;
 let lastHash = "";
 let escBound = false;
+let levelLockUntil = 0;
+export const LEVEL_IN = 1.9;
+export const LEVEL_OUT = 1.25;
 let appliedSig = "";
 
 export function modelFor(report: Report): NetModel {
@@ -572,12 +575,26 @@ export function mountMap(host: HTMLElement, report: Report, renderSide: () => st
       onCam: (cam) => {
         saved = { run: model.runId, cam };
       },
-      onUserZoom: (cam, fit, _client, world) => {
+      // Prechod mezi urovnemi s hysterezi: rozbaleni zony pri priblizeni nad 1,9x meritka celku, navrat na
+      // celou sit az pri oddaleni pod 1,25x. Mezi prahy se nic nedeje, po prepnuti je 700 ms klid.
+      onUserZoom: (cam, fit, _client, world, factor) => {
         const c = ctx;
-        if (!c || cam.s < fit * 1.9) return;
+        const now = performance.now();
+        if (!c || now < levelLockUntil) return;
+        if (factor < 1) {
+          if (ui.filter.zones.length && cam.s <= fit * LEVEL_OUT) {
+            levelLockUntil = now + 700;
+            actions.crumb("all");
+          }
+          return;
+        }
+        if (cam.s < fit * LEVEL_IN) return;
         if (derive(c.model, ui.filter).open.size) return;
         const z = c.model.zones.find((zz) => Math.hypot(world.x - zz.cx, world.y - zz.cy) <= zz.Rb * 1.35);
-        if (z) actions.zone(z.key);
+        if (z) {
+          levelLockUntil = now + 700;
+          actions.zone(z.key);
+        }
       },
       onBackgroundDouble: () => (ui.filter.zones.length || state.selectedHost ? actions.back() : false),
     },
