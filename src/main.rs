@@ -107,6 +107,12 @@ struct SoakRunArgs {
     /// Parove A/B: zasahy enginu nezpetnuji generator provozu (stejny provoz v ramenech).
     #[arg(long, default_value_t = false)]
     no_feedback: bool,
+    /// Kontrafaktualni atribuce: kazdou sit pustit i bez utoku (stejny seed).
+    #[arg(long, default_value_t = false)]
+    counterfactual: bool,
+    /// Pocet leave-one-out svetu na sit (validace kontrafaktualu).
+    #[arg(long, default_value_t = 0)]
+    cf_loo: usize,
 }
 
 #[derive(Args, Debug)]
@@ -925,6 +931,8 @@ fn main() -> anyhow::Result<()> {
                     .map_err(anyhow::Error::msg)?,
             };
             cfg.feedback = !args.no_feedback;
+            cfg.counterfactual = args.counterfactual;
+            cfg.cf_loo = args.cf_loo;
             bakula_program::soak::runner::run(cfg, args.resume)?;
         }
         Command::Soak(SoakCommand::Verify(args)) => {

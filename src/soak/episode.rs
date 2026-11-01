@@ -69,6 +69,67 @@ pub struct EpisodeConfig {
     /// Zasahy (blokace) zpetne ovlivnuji generator provozu. Pro parove A/B se vypina
     /// (`--no-feedback`), jinak ramena dostanou jiny provoz (K20).
     pub feedback: bool,
+    /// Ktere utoky se v tomto svete neemituji (kontrafaktualni beh, krok 2A).
+    pub mask: WorldMask,
+    /// Kontrafaktualni svety (bez utoku) pro atribuci nalezu tohoto (faktickeho) behu.
+    pub counterfactual: Option<Arc<Counterfactual>>,
+}
+
+/// Maska udalosti sveta. Kontrafaktual = stejny seed, stejny svet, jen bez utoku.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum WorldMask {
+    #[default]
+    None,
+    /// Vsechny utoky (zbyde pozadi a benigni udalosti).
+    AllAttacks,
+    /// Jen vyjmenovane utoky (id truth), leave-one-out.
+    Only(Vec<u32>),
+}
+
+/// Otisk behavioralnich nalezu jednoho sveta: cyklus -> (hash finding_id -> zobrazeno).
+/// Uklada se jen to, co muze byt pripsano utoku (zminuje klicovou IP utoku v jeho okne).
+#[derive(Debug, Clone, Default)]
+pub struct CfWorld {
+    pub cycles: HashMap<u32, HashMap<u64, bool>>,
+}
+
+impl CfWorld {
+    fn displayed(&self, cycle: u32, hash: u64) -> Option<bool> {
+        self.cycles.get(&cycle).and_then(|m| m.get(&hash)).copied()
+    }
+
+    /// Nalez v kontrafaktualu chybi v cyklu `cycle` (a pri `strict` i v sousednich).
+    fn absent(&self, cycle: u32, hash: u64, strict: bool) -> bool {
+        let range = if strict {
+            cycle.saturating_sub(1)..=cycle + 1
+        } else {
+            cycle..=cycle
+        };
+        range.into_iter().all(|c| self.displayed(c, hash).is_none())
+    }
+}
+
+/// Kontrafaktualy faktickeho behu: svet bez vsech utoku a volitelne leave-one-out svety.
+#[derive(Debug, Clone, Default)]
+pub struct Counterfactual {
+    pub all: CfWorld,
+    pub loo: Vec<(u32, CfWorld)>,
+}
+
+fn finding_hash(id: &str) -> u64 {
+    crate::soak::rng::mix(id.bytes().fold(0xcbf2_9ce4_8422_2325u64, |a, b| {
+        (a ^ b as u64).wrapping_mul(0x100_0000_01b3)
+    }))
+}
+
+/// Utoky vybrane pro leave-one-out (deterministicky podle seedu site, nejvys `k`).
+pub fn loo_candidates(run_seed: u64, network_id: u64, attack_ids: &[u32], k: usize) -> Vec<u32> {
+    let mut ranked: Vec<(u64, u32)> = attack_ids
+        .iter()
+        .map(|id| (derive(mix(run_seed ^ network_id), *id as u64 ^ 0x100), *id))
+        .collect();
+    ranked.sort_unstable();
+    ranked.into_iter().take(k).map(|(_, id)| id).collect()
 }
 
 /// Typy nalezu odvozene z inventare (ne z provozu): nejsou "poplachy", takze se
@@ -149,6 +210,17 @@ struct Ledger {
     placebo: Option<(u32, u32)>,
     placebo_captured: bool,
     placebo_displayed: bool,
+    /// Kontrafaktualni atribuce (krok 2A): nalez chybi ve svete bez utoku.
+    cf_detect: bool,
+    cf_detect_strict: bool,
+    cf_displayed: bool,
+    cf_displayed_strict: bool,
+    cf_typed: bool,
+    cf_typed_displayed: bool,
+    /// Typy nalezu, ktere utoku kontrafaktualne pripadly (zobrazene).
+    cf_types: BTreeSet<String>,
+    /// Leave-one-out (jen vybrane utoky): zobrazena detekce proti svetu bez TOHOTO utoku.
+    loo_displayed: Option<bool>,
 }
 
 /// Zobrazeni nalezu v cyklu (legacy: vse, v3: podle pameti a kontextu).
@@ -243,6 +315,41 @@ pub struct EpisodeResult {
     pub digest: u64,
     /// Souhrn site pro parove A/B (networks.jsonl).
     pub summary: NetworkSummary,
+    /// Otisk nalezu sveta (vyplni se jen u maskovaneho, kontrafaktualniho behu).
+    pub world: CfWorld,
+    /// Id utoku v planu epizody (pro vyber leave-one-out).
+    pub attack_ids: Vec<u32>,
+}
+
+/// Fakticky beh site s kontrafaktualem: nejdriv svet bez vsech utoku (a `loo`
+/// leave-one-out svetu), pak fakticky svet, jehoz nalezy se pripisou utoku jen tehdy,
+/// kdyz v kontrafaktualu chybi (krok 2A, nahrada okna a placebo oken).
+pub fn run_with_counterfactual(cfg: &EpisodeConfig, loo: usize) -> EpisodeResult {
+    let background = run_episode(&EpisodeConfig {
+        mask: WorldMask::AllAttacks,
+        counterfactual: None,
+        ..cfg.clone()
+    });
+    let mut cf = Counterfactual {
+        all: background.world,
+        loo: Vec::new(),
+    };
+    for id in loo_candidates(cfg.run_seed, cfg.network_id, &background.attack_ids, loo) {
+        let world = run_episode(&EpisodeConfig {
+            mask: WorldMask::Only(vec![id]),
+            counterfactual: None,
+            ..cfg.clone()
+        })
+        .world;
+        cf.loo.push((id, world));
+    }
+    let mut result = run_episode(&EpisodeConfig {
+        mask: WorldMask::None,
+        counterfactual: Some(Arc::new(cf)),
+        ..cfg.clone()
+    });
+    result.summary.wall_s += background.summary.wall_s;
+    result
 }
 
 pub fn run_episode(cfg: &EpisodeConfig) -> EpisodeResult {
@@ -252,7 +359,9 @@ pub fn run_episode(cfg: &EpisodeConfig) -> EpisodeResult {
         ..Aggregate::default()
     };
     let mut digest = EpisodeDigest(0x5EED);
-    if let Err(error) = run_episode_inner(cfg, &mut agg, &mut digest) {
+    let mut world = CfWorld::default();
+    let mut attack_ids = Vec::new();
+    if let Err(error) = run_episode_inner(cfg, &mut agg, &mut digest, &mut world, &mut attack_ids) {
         agg.violation("episode_error", format!("sit {}: {error}", cfg.network_id));
     }
     agg.networks += 1;
@@ -263,6 +372,8 @@ pub fn run_episode(cfg: &EpisodeConfig) -> EpisodeResult {
         digest: digest.0 ^ agg.deterministic_digest(),
         agg,
         summary,
+        world,
+        attack_ids,
     }
 }
 
@@ -271,6 +382,8 @@ fn run_episode_inner(
     cfg: &EpisodeConfig,
     agg: &mut Aggregate,
     digest: &mut EpisodeDigest,
+    world: &mut CfWorld,
+    attack_ids: &mut Vec<u32>,
 ) -> Result<()> {
     let mut model = NetworkModel::generate(cfg.run_seed, cfg.network_id);
     *agg.archetypes
@@ -309,6 +422,28 @@ fn run_episode_inner(
         }
     }
     let mut truths = plan_episode(&model, &mut rng, hours, &telemetry);
+    *attack_ids = truths
+        .iter()
+        .filter(|t| matches!(t.kind, Kind::Attack(_)))
+        .map(|t| t.id)
+        .collect();
+    let masked: HashSet<u32> = match &cfg.mask {
+        WorldMask::None => HashSet::new(),
+        WorldMask::AllAttacks => attack_ids.iter().copied().collect(),
+        WorldMask::Only(ids) => ids.iter().copied().collect(),
+    };
+    let collect_world = cfg.mask != WorldMask::None;
+    let cf = cfg.counterfactual.clone();
+    let loo_of: HashMap<u32, usize> = cf
+        .as_ref()
+        .map(|c| {
+            c.loo
+                .iter()
+                .enumerate()
+                .map(|(i, (id, _))| (*id, i))
+                .collect()
+        })
+        .unwrap_or_default();
     let restart_cycles: HashSet<u32> = (0..rng.poisson(hours as f64 / 24.0 * 0.25))
         .map(|_| rng.range(1, cycles.saturating_sub(1).max(1) as u64) as u32)
         .collect();
@@ -377,8 +512,21 @@ fn run_episode_inner(
             placebo: None,
             placebo_captured: false,
             placebo_displayed: false,
+            cf_detect: false,
+            cf_detect_strict: false,
+            cf_displayed: false,
+            cf_displayed_strict: false,
+            cf_typed: false,
+            cf_typed_displayed: false,
+            cf_types: BTreeSet::new(),
+            loo_displayed: None,
         })
         .collect();
+    for (ledger, truth) in ledgers.iter_mut().zip(&truths) {
+        if loo_of.contains_key(&truth.id) {
+            ledger.loo_displayed = Some(false);
+        }
+    }
     // placebo okna: posunuty cas, stejna klicova zarizeni, bez jineho utoku na ne
     {
         let devices_of = |t: &Truth| -> BTreeSet<u32> {
@@ -543,10 +691,15 @@ fn run_episode_inner(
         let ips: Vec<String> = (0..model.devices.len() as u32)
             .map(|d| model.ip_of(d))
             .collect();
+        let rogue_scheduled = rogue_info.iter().any(|(index, _)| {
+            cycle >= truths[*index].start_cycle && cycle <= truths[*index].end_cycle
+        });
         let rogue = rogue_info
             .iter()
             .find(|(index, _)| {
-                cycle >= truths[*index].start_cycle && cycle <= truths[*index].end_cycle
+                cycle >= truths[*index].start_cycle
+                    && cycle <= truths[*index].end_cycle
+                    && !masked.contains(&truths[*index].id)
             })
             .map(|(_, info)| info.clone());
         if kernel.inject_faults(&mut eval_rng).is_some() {
@@ -568,6 +721,8 @@ fn run_episode_inner(
                     &crate::soak::traffic::NoBlocks
                 },
                 rogue: rogue.clone(),
+                scan_now: cycle % 4 == 0 || rogue_scheduled,
+                masked: &masked,
             };
             generate_cycle(&ctx, &mut truths, &mut cycle_rng)
         });
@@ -1025,6 +1180,22 @@ fn run_episode_inner(
             let mut attributed = false;
             let mut attacked = false;
             let mut attack_family: Option<&'static str> = None;
+            let fhash = finding_hash(&finding.finding_id);
+            if is_behavioral && collect_world {
+                // kontrafaktualni svet: zapamatovat nalezy, ktere by fakticky beh mohl
+                // pripsat nekteremu utoku (stejne okno a klicove IP)
+                let candidate = truths.iter().enumerate().any(|(index, truth)| {
+                    matches!(truth.kind, Kind::Attack(_))
+                        && cycle + ATTRIBUTION_LATENCY >= truth.start_cycle
+                        && cycle <= truth.end_cycle + ATTRIBUTION_LATENCY
+                        && finding_mentions(finding, &truth_keys[index])
+                });
+                if candidate {
+                    let slot = world.cycles.entry(cycle).or_default();
+                    let entry = slot.entry(fhash).or_insert(false);
+                    *entry |= show.displayed;
+                }
+            }
             if is_behavioral {
                 for (index, truth) in truths.iter().enumerate() {
                     if let Some((ps, pe)) = ledgers[index].placebo
@@ -1057,6 +1228,32 @@ fn run_episode_inner(
                             if show.displayed {
                                 ledger.displayed_detect.get_or_insert(cycle);
                                 ledger.typed_displayed |= typed;
+                            }
+                            if let Some(cf) = cf.as_deref() {
+                                // pripsat jen nalez, ktery ve svete bez utoku chybi;
+                                // zobrazeni jen tehdy, kdyz ho kontrafaktual nezobrazil
+                                let new = cf.all.absent(cycle, fhash, false);
+                                let new_strict = cf.all.absent(cycle, fhash, true);
+                                let shown_cf = cf.all.displayed(cycle, fhash).unwrap_or(false);
+                                ledger.cf_detect |= new;
+                                ledger.cf_detect_strict |= new_strict;
+                                ledger.cf_typed |= new && typed;
+                                if show.displayed && !shown_cf {
+                                    ledger.cf_displayed = true;
+                                    ledger.cf_typed_displayed |= typed;
+                                    ledger.cf_types.insert(finding.finding_type.clone());
+                                }
+                                if show.displayed && new_strict {
+                                    ledger.cf_displayed_strict = true;
+                                }
+                                if let Some(&slot) = loo_of.get(&truth.id) {
+                                    let loo_world = &cf.loo[slot].1;
+                                    let loo_shown =
+                                        loo_world.displayed(cycle, fhash).unwrap_or(false);
+                                    let hit = show.displayed && !loo_shown;
+                                    let entry = ledger.loo_displayed.get_or_insert(false);
+                                    *entry |= hit;
+                                }
                             }
                         }
                         Kind::Benign(_) => *attributed_to_lookalike.entry(index).or_default() += 1,
@@ -1575,6 +1772,21 @@ fn run_episode_inner(
                 if ledger.typed_displayed {
                     stats.typed_displayed += 1;
                 }
+                if cf.is_some() && truth.first_emit_cycle.is_some() {
+                    stats.cf_attacks += 1;
+                    stats.cf_detected += ledger.cf_detect as u64;
+                    stats.cf_detected_strict += ledger.cf_detect_strict as u64;
+                    stats.cf_detected_displayed += ledger.cf_displayed as u64;
+                    stats.cf_detected_displayed_strict += ledger.cf_displayed_strict as u64;
+                    stats.cf_typed += ledger.cf_typed as u64;
+                    stats.cf_typed_displayed += ledger.cf_typed_displayed as u64;
+                    if let Some(loo) = ledger.loo_displayed {
+                        stats.loo_n += 1;
+                        stats.loo_detected_displayed += loo as u64;
+                        stats.loo_all_detected_displayed += ledger.cf_displayed as u64;
+                        stats.loo_agree += (loo == ledger.cf_displayed) as u64;
+                    }
+                }
                 if ledger.placebo.is_some() {
                     stats.placebo_windows += 1;
                     stats.placebo_hits_captured += ledger.placebo_captured as u64;
@@ -1612,6 +1824,11 @@ fn run_episode_inner(
                     ranked.truth += 1;
                     ranked.detected_any += rp as u64;
                     ranked.detected_typed += re as u64; // typed = "s egress tokem"
+                }
+                for kind in &ledger.cf_types {
+                    *agg.cf_type_hits
+                        .entry(format!("{}|{kind}", family.label()))
+                        .or_default() += 1;
                 }
             }
             Kind::Benign(look) => {
@@ -1741,6 +1958,8 @@ mod tests {
                 .join(format!("n{id}")),
             engine: EngineConfig::legacy(),
             feedback: true,
+            mask: WorldMask::None,
+            counterfactual: None,
         }
     }
 
@@ -1811,6 +2030,8 @@ mod tests {
                     scratch: std::env::temp_dir().join(format!("bakula-soak-regr-{id}")),
                     engine: EngineConfig::legacy(),
                     feedback: true,
+                    mask: WorldMask::None,
+                    counterfactual: None,
                 })
             });
             assert!(result.is_ok(), "sit {id} spadla");
@@ -1869,6 +2090,8 @@ mod engine_v3_tests {
             scratch: std::env::temp_dir().join("bakula-soak-v3-test"),
             engine,
             feedback: false,
+            mask: WorldMask::None,
+            counterfactual: None,
         })
     }
 
@@ -1908,6 +2131,52 @@ mod engine_v3_tests {
         );
         assert!(v3.agg.output.memory_peak_entries > 0);
         assert_eq!(v3.summary.engine, v3.agg.engine);
+    }
+
+    /// Krok 2A: kontrafaktualni detekce je podmnozina detekce oknem (pripisuje se jen
+    /// nalez, ktery ve svete bez utoku chybi), svet bez utoku nema zadny utok a
+    /// leave-one-out se vyhodnoti na vybranych utocich.
+    #[test]
+    fn counterfactual_credit_is_subset_of_window_credit() {
+        let mut attacks = 0;
+        for network_id in 3..30 {
+            let cfg = EpisodeConfig {
+                run_seed: 20261102,
+                network_id,
+                hours: 48,
+                scratch: std::env::temp_dir().join("bakula-soak-cf-test"),
+                engine: EngineConfig::legacy(),
+                feedback: false,
+                mask: WorldMask::None,
+                counterfactual: None,
+            };
+            let background = run_episode(&EpisodeConfig {
+                mask: WorldMask::AllAttacks,
+                ..cfg.clone()
+            });
+            assert!(background.agg.families.values().all(|f| f.truth == 0));
+            if background.attack_ids.is_empty() {
+                continue;
+            }
+            let result = run_with_counterfactual(&cfg, 2);
+            let plain = run_episode(&cfg);
+            assert_eq!(
+                result.agg.findings, plain.agg.findings,
+                "kontrafaktual nemeni fakticky beh"
+            );
+            for f in result.agg.families.values() {
+                attacks += f.cf_attacks;
+                assert!(f.cf_detected_displayed <= f.detected_displayed, "{f:?}");
+                assert!(f.cf_detected_strict <= f.cf_detected, "{f:?}");
+                assert!(f.cf_typed_displayed <= f.cf_detected_displayed);
+                assert!(f.loo_agree <= f.loo_n);
+            }
+            assert!(result.agg.families.values().map(|f| f.loo_n).sum::<u64>() <= 2);
+            if attacks > 0 {
+                return;
+            }
+        }
+        panic!("zadna sit s utokem");
     }
 
     /// Regrese v2b (35 % falesne rozdeleno): v3 identita (jmeno hostu, drzene hosty

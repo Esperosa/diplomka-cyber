@@ -42,6 +42,30 @@ pub struct FamilyStats {
     pub placebo_detected_displayed: u64,
     #[serde(default)]
     pub placebo_detected_captured: u64,
+    /// Kontrafaktualni atribuce (krok 2A): utoky s emisi a z nich detekovane nalezem,
+    /// ktery ve svete bez utoku chybi (`_strict` = chybi i v sousednich cyklech).
+    #[serde(default)]
+    pub cf_attacks: u64,
+    #[serde(default)]
+    pub cf_detected: u64,
+    #[serde(default)]
+    pub cf_detected_strict: u64,
+    #[serde(default)]
+    pub cf_detected_displayed: u64,
+    #[serde(default)]
+    pub cf_detected_displayed_strict: u64,
+    #[serde(default)]
+    pub cf_typed: u64,
+    #[serde(default)]
+    pub cf_typed_displayed: u64,
+    #[serde(default)]
+    pub loo_n: u64,
+    #[serde(default)]
+    pub loo_detected_displayed: u64,
+    #[serde(default)]
+    pub loo_all_detected_displayed: u64,
+    #[serde(default)]
+    pub loo_agree: u64,
 }
 
 impl FamilyStats {
@@ -79,6 +103,17 @@ impl FamilyStats {
         self.placebo_hits_displayed += other.placebo_hits_displayed;
         self.placebo_detected_displayed += other.placebo_detected_displayed;
         self.placebo_detected_captured += other.placebo_detected_captured;
+        self.cf_attacks += other.cf_attacks;
+        self.cf_detected += other.cf_detected;
+        self.cf_detected_strict += other.cf_detected_strict;
+        self.cf_detected_displayed += other.cf_detected_displayed;
+        self.cf_detected_displayed_strict += other.cf_detected_displayed_strict;
+        self.cf_typed += other.cf_typed;
+        self.cf_typed_displayed += other.cf_typed_displayed;
+        self.loo_n += other.loo_n;
+        self.loo_detected_displayed += other.loo_detected_displayed;
+        self.loo_all_detected_displayed += other.loo_all_detected_displayed;
+        self.loo_agree += other.loo_agree;
         merge_vec(&mut self.ttd_cycles, &other.ttd_cycles);
         merge_vec(&mut self.ttc_cycles, &other.ttc_cycles);
     }
@@ -437,6 +472,9 @@ pub struct Aggregate {
     /// Diagnostika R13: pricina FP `unexpected_traffic` / `unmapped_passive_event`.
     #[serde(default)]
     pub unexpected_causes: BTreeMap<String, u64>,
+    /// Kontrafaktualne pripsane zobrazene typy nalezu: "rodina|typ" -> pocet utoku.
+    #[serde(default)]
+    pub cf_type_hits: BTreeMap<String, u64>,
 }
 
 const SAMPLE_CAP: usize = 100;
@@ -518,6 +556,7 @@ impl Aggregate {
         self.output.merge(&other.output);
         merge_map(&mut self.displayed_fp_by_type, &other.displayed_fp_by_type);
         merge_map(&mut self.unexpected_causes, &other.unexpected_causes);
+        merge_map(&mut self.cf_type_hits, &other.cf_type_hits);
         for (key, value) in &other.perf {
             self.perf.entry(key.clone()).or_default().merge(value);
         }
@@ -602,6 +641,17 @@ pub struct FamilyCounts {
     pub placebo_hits_captured: u64,
     pub placebo_detected_displayed: u64,
     pub placebo_detected_captured: u64,
+    pub cf_attacks: u64,
+    pub cf_detected: u64,
+    pub cf_detected_strict: u64,
+    pub cf_detected_displayed: u64,
+    pub cf_detected_displayed_strict: u64,
+    pub cf_typed: u64,
+    pub cf_typed_displayed: u64,
+    pub loo_n: u64,
+    pub loo_detected_displayed: u64,
+    pub loo_all_detected_displayed: u64,
+    pub loo_agree: u64,
 }
 
 /// Souhrn jedne site (radek `networks.jsonl`): jednotka paroveho A/B a bootstrapu.
@@ -621,6 +671,7 @@ pub struct NetworkSummary {
     pub fp_by_type: BTreeMap<String, u64>,
     pub displayed_fp_by_type: BTreeMap<String, u64>,
     pub families: BTreeMap<String, FamilyCounts>,
+    pub cf_type_hits: BTreeMap<String, u64>,
     pub identity_devices: u64,
     pub identity_false_split: u64,
     pub identity_asset_ids: u64,
@@ -661,6 +712,17 @@ impl NetworkSummary {
                         placebo_hits_captured: f.placebo_hits_captured,
                         placebo_detected_displayed: f.placebo_detected_displayed,
                         placebo_detected_captured: f.placebo_detected_captured,
+                        cf_attacks: f.cf_attacks,
+                        cf_detected: f.cf_detected,
+                        cf_detected_strict: f.cf_detected_strict,
+                        cf_detected_displayed: f.cf_detected_displayed,
+                        cf_detected_displayed_strict: f.cf_detected_displayed_strict,
+                        cf_typed: f.cf_typed,
+                        cf_typed_displayed: f.cf_typed_displayed,
+                        loo_n: f.loo_n,
+                        loo_detected_displayed: f.loo_detected_displayed,
+                        loo_all_detected_displayed: f.loo_all_detected_displayed,
+                        loo_agree: f.loo_agree,
                     },
                 )
             })
@@ -679,6 +741,7 @@ impl NetworkSummary {
             fp_by_type: agg.fp_noise_by_type.clone(),
             displayed_fp_by_type: agg.displayed_fp_by_type.clone(),
             families,
+            cf_type_hits: agg.cf_type_hits.clone(),
             identity_devices: agg.identity.devices,
             identity_false_split: agg.identity.devices_false_split,
             identity_asset_ids: agg.identity.asset_ids,

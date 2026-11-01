@@ -30,7 +30,7 @@ use crate::{
     error::{BakulaError, Result},
     soak::{
         alloc,
-        episode::{EpisodeConfig, run_episode},
+        episode::{EpisodeConfig, WorldMask, run_episode, run_with_counterfactual},
         report,
         rng::mix,
         stats::Aggregate,
@@ -61,6 +61,12 @@ pub struct SoakConfig {
     /// Zasahy ovlivnuji generator (vychozi ano); `false` = parove A/B bez zpetne vazby.
     #[serde(default = "default_true")]
     pub feedback: bool,
+    /// Kontrafaktualni atribuce (krok 2A): kazda sit se pusti i bez utoku.
+    #[serde(default)]
+    pub counterfactual: bool,
+    /// Pocet leave-one-out svetu na sit (validace kontrafaktualu bez vsech utoku).
+    #[serde(default)]
+    pub cf_loo: usize,
 }
 
 fn default_true() -> bool {
@@ -86,6 +92,8 @@ impl SoakConfig {
             legs: true,
             engine: crate::engine::EngineConfig::default(),
             feedback: true,
+            counterfactual: false,
+            cf_loo: 0,
         }
     }
 }
@@ -165,8 +173,17 @@ pub fn run_block_with_summaries(
             scratch: cfg.scratch.join(format!("w{}", block % 4096)),
             engine: cfg.engine,
             feedback: cfg.feedback,
+            mask: WorldMask::None,
+            counterfactual: None,
         };
-        match catch_unwind(AssertUnwindSafe(|| run_episode(&episode))) {
+        let run = || {
+            if cfg.counterfactual {
+                run_with_counterfactual(&episode, cfg.cf_loo)
+            } else {
+                run_episode(&episode)
+            }
+        };
+        match catch_unwind(AssertUnwindSafe(run)) {
             Ok(result) => {
                 digest = mix(digest ^ result.digest);
                 agg.merge(&result.agg);

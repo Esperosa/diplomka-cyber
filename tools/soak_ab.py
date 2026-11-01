@@ -268,6 +268,96 @@ def main():
             lines.append(f"| {fam} | {n} | {da * 100:.1f} % | {ha * 100:.1f} % | {db * 100:.1f} % | {hb * 100:.1f} % | "
                          f"{d * 100:+.1f} | {lo * 100:+.1f} az {hi * 100:+.1f} | {verdict} |")
         lines.append("")
+    # kontrafaktual (krok 2A): utok se pripise jen nalezu, ktery ve svete bez utoku chybi
+    cf_rows = any(get(v, "cf_attacks") for k in common for v in get(a_rows[k], "families").values())
+    if cf_rows:
+        def cf_table(field, title):
+            lines.append(f"**{title}**")
+            lines.append("")
+            lines.append("| rodina | n | A | B | B-A (p. b.) | 95% CI | verdikt (>= 100 utoku, mez -5 p. b.) |")
+            lines.append("|---|---:|---:|---:|---:|---|---|")
+            keys = sorted(a_rows)
+            fams_cf = sorted({f for k in keys for f in get(a_rows[k], "families")})
+            rng = random.Random(13)
+            boots = [boot_indices(keys, rng) for _ in range(BOOT)]
+            for fam in fams_cf:
+                n = [get(a_rows[k], f"families.{fam}.cf_attacks") for k in keys]
+                if sum(n) == 0:
+                    continue
+                da = [get(a_rows[k], f"families.{fam}.{field}") for k in keys]
+                db = [get(b_rows[k], f"families.{fam}.{field}") for k in keys]
+                total = sum(n)
+                diffs = []
+                for idx in boots:
+                    nt = sum(n[i] for i in idx)
+                    if nt:
+                        diffs.append((sum(db[i] for i in idx) - sum(da[i] for i in idx)) / nt)
+                diffs.sort()
+                lo = diffs[int(0.025 * len(diffs))] if diffs else float("nan")
+                hi = diffs[min(len(diffs) - 1, int(0.975 * len(diffs)))] if diffs else float("nan")
+                pa, pb = sum(da) / total, sum(db) / total
+                d = pb - pa
+                verdict = "-" if total < 100 else ("OK" if d >= -0.05 else "ZTRATA")
+                lines.append(f"| {fam} | {total} | {pa * 100:.1f} % | {pb * 100:.1f} % | {d * 100:+.1f} | "
+                             f"{lo * 100:+.1f} az {hi * 100:+.1f} | {verdict} |")
+            lines.append("")
+        cf_table("cf_detected_displayed", "KONTRAFAKTUALNI detekce ze zobrazenych (nalez chybi ve svete bez utoku)")
+        cf_table("cf_detected", "kontrafaktualni detekce zachycena (jakykoli nalez)")
+        cf_table("cf_detected_displayed_strict", "kontrafaktualni zobrazena, prisne (chybi i v sousednich cyklech)")
+        cf_table("cf_typed_displayed", "kontrafaktualni spravny typ ze zobrazenych")
+        lines.append("**nahodna shoda: detekce oknem minus kontrafaktualni (zobrazene)**")
+        lines.append("")
+        lines.append("| rodina | n | A okno | A cf | A shoda | B okno | B cf | B shoda |")
+        lines.append("|---|---:|---:|---:|---:|---:|---:|---:|")
+        for fam in sorted({f for k in common for f in get(a_rows[k], "families")}):
+            n = sum(get(a_rows[k], f"families.{fam}.cf_attacks") for k in common)
+            if n == 0:
+                continue
+            row = [fam, str(n)]
+            for rows in (a_rows, b_rows):
+                win = sum(get(rows[k], f"families.{fam}.detected_displayed") for k in common) / n
+                cfv = sum(get(rows[k], f"families.{fam}.cf_detected_displayed") for k in common) / n
+                row += [f"{win * 100:.1f} %", f"{cfv * 100:.1f} %", f"{(win - cfv) * 100:.1f} p. b."]
+            lines.append("| " + " | ".join(row) + " |")
+        lines.append("")
+        loo_n = sum(get(v, "loo_n") for k in common for v in get(b_rows[k], "families").values())
+        if loo_n:
+            lines.append("**validace: kontrafaktual bez vsech utoku vs leave-one-out (zobrazene)**")
+            lines.append("")
+            lines.append("| rameno | n LOO | LOO detekce | bez vsech detekce | shoda (95% CI) |")
+            lines.append("|---|---:|---:|---:|---|")
+            for side, rows in (("A", a_rows), ("B", b_rows)):
+                fam_vals = [v for k in common for v in get(rows[k], "families").values()]
+                n = sum(get(v, "loo_n") for v in fam_vals)
+                if not n:
+                    continue
+                loo = sum(get(v, "loo_detected_displayed") for v in fam_vals)
+                allm = sum(get(v, "loo_all_detected_displayed") for v in fam_vals)
+                agree = sum(get(v, "loo_agree") for v in fam_vals)
+                p, lo, hi = wilson(agree, n)
+                lines.append(f"| {side} | {n} | {loo / n * 100:.1f} % | {allm / n * 100:.1f} % | "
+                             f"{p * 100:.1f} % ({lo * 100:.1f} az {hi * 100:.1f}) |")
+            lines.append("")
+        lines.append("**typy nalezu kontrafaktualne pripsane utokum (podil utoku rodiny, zobrazene)**")
+        lines.append("")
+        lines.append("| rodina | A: typy | B: typy |")
+        lines.append("|---|---|---|")
+        for fam in sorted({f for k in common for f in get(a_rows[k], "families")}):
+            n = sum(get(a_rows[k], f"families.{fam}.cf_attacks") for k in common)
+            if n == 0:
+                continue
+            cells = []
+            for rows in (a_rows, b_rows):
+                hits = defaultdict(int)
+                for k in common:
+                    for key, value in get(rows[k], "cf_type_hits").items():
+                        f, _, t = key.partition("|")
+                        if f == fam:
+                            hits[t] += value
+                top = sorted(hits.items(), key=lambda kv: -kv[1])[:4]
+                cells.append(", ".join(f"{t} {v / n * 100:.0f} %" for t, v in top) or "-")
+            lines.append(f"| {fam} | {cells[0]} | {cells[1]} |")
+        lines.append("")
     # placebo
     lines.append("**placebo okna (nahodna shoda s pozadim, zobrazene polozky)**")
     lines.append("")

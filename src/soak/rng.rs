@@ -31,6 +31,10 @@ impl Rng {
         self.inner.random::<f64>()
     }
 
+    pub fn u64(&mut self) -> u64 {
+        self.inner.random::<u64>()
+    }
+
     pub fn chance(&mut self, probability: f64) -> bool {
         self.f64() < probability
     }

@@ -4,7 +4,7 @@
 //! Vystup jsou presne ty typy, ktere cte produkcni engine (`ConnectionObservation`
 //! a Suricata eve.json radky), ne primo "nalezy".
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
@@ -976,8 +976,19 @@ pub struct CycleContext<'a> {
     pub start_offset_s: i64,
     pub telemetry: &'a Telemetry,
     pub oracle: &'a dyn BlockOracle,
-    /// Neprirazene (rogue) zarizeni: ip, mac.
+    /// Neprirazene (rogue) zarizeni: ip, mac (jen kdyz jeho utok neni maskovany).
     pub rogue: Option<(String, String)>,
+    /// Aktivni sken inventare v tomto cyklu (rozvrh nezavisly na maskovani utoku,
+    /// aby kontrafaktualni svet mel stejne skeny).
+    pub scan_now: bool,
+    /// Udalosti (id truth), ktere se v tomto svete neemituji (kontrafaktual, krok 2A).
+    pub masked: &'a HashSet<u32>,
+}
+
+/// Prazdna maska (bez kontrafaktualu).
+pub fn no_mask() -> &'static HashSet<u32> {
+    static EMPTY: std::sync::OnceLock<HashSet<u32>> = std::sync::OnceLock::new();
+    EMPTY.get_or_init(HashSet::new)
 }
 
 pub fn cycle_start_abs(start_offset_s: i64, cycle: u32) -> i64 {
@@ -993,7 +1004,6 @@ pub fn generate_cycle(ctx: &CycleContext<'_>, truths: &mut [Truth], rng: &mut Rn
         truth.cycle_targets.clear();
         truth.cycle_sources.clear();
     }
-    let mut flow_id: u64 = (ctx.cycle as u64) << 32;
     let cycle_h = CYCLE_SECS as f64 / 3600.0;
 
     // --- zakladni provoz ---
@@ -1168,17 +1178,26 @@ pub fn generate_cycle(ctx: &CycleContext<'_>, truths: &mut [Truth], rng: &mut Rn
     }
 
     // --- aktivni truth polozky ---
+    // Kazda udalost ma vlastni nahodny proud a vlastni rozsah flow_id (krok 2A):
+    // vynechani (maskovani) jedne udalosti nezmeni toky zadne jine, takze
+    // kontrafaktualni svet "bez utoku X" je jinak bit po bitu stejny.
+    let truth_seed = rng.u64();
     for index in 0..truths.len() {
         if ctx.cycle < truths[index].start_cycle || ctx.cycle > truths[index].end_cycle {
             continue;
         }
+        if ctx.masked.contains(&truths[index].id) {
+            continue;
+        }
         let snapshot = truths[index].clone();
+        let mut truth_rng = Rng::new(derive(truth_seed, snapshot.id as u64));
+        let mut flow_id: u64 = ((ctx.cycle as u64) << 32) | ((snapshot.id as u64 & 0xFFFF) << 16);
         emit_truth(
             &snapshot,
             ctx,
             t0,
             &mut flow_id,
-            rng,
+            &mut truth_rng,
             &mut out,
             truths,
             index,
@@ -1186,7 +1205,7 @@ pub fn generate_cycle(ctx: &CycleContext<'_>, truths: &mut [Truth], rng: &mut Rn
     }
 
     // --- aktivni inventar nmapu (kazdy 4. cyklus, nebo kdyz je tu rogue) ---
-    if ctx.cycle % 4 == 0 || ctx.rogue.is_some() {
+    if ctx.scan_now {
         let (mut inventory, inventory_devices) = model.inventory();
         for (device_id, host) in inventory_devices.iter().zip(inventory.hosts.iter_mut()) {
             host.ip = ctx.ips[*device_id as usize].clone();
@@ -2509,21 +2528,49 @@ fn degrade(out: &mut CycleOutput, ctx: &CycleContext<'_>, rng: &mut Rng) {
         return;
     }
     if t.drop_p > 0.0 || t.dup_p > 0.0 || t.skew_s != 0 {
+        // Ztrata a duplicita podle otisku toku, ne podle poradi v proudu: vynechani
+        // toku jedne udalosti nezmeni osud toku ostatnich (kontrafaktual, krok 2A).
+        let base = rng.u64();
+        let unit = |salt: u64, h: u64| (derive(base ^ salt, h) >> 11) as f64 / (1u64 << 53) as f64;
         let mut kept = Vec::with_capacity(out.observations.len());
+        let mut seen: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
         for mut observation in out.observations.drain(..) {
-            if t.drop_p > 0.0 && rng.chance(t.drop_p) {
+            // stejne toky (vzacne) se odlisi poradim vyskytu stejneho otisku
+            let print = flow_print(&observation);
+            let nth = seen.entry(print).or_default();
+            let h = print ^ nth.wrapping_mul(0x9E37_79B9);
+            *nth += 1;
+            if t.drop_p > 0.0 && unit(0xD5, h) < t.drop_p {
                 continue;
             }
             if t.skew_s != 0 {
                 observation.timestamp += chrono::Duration::seconds(t.skew_s);
             }
-            if t.dup_p > 0.0 && rng.chance(t.dup_p) {
+            if t.dup_p > 0.0 && unit(0xD7, h) < t.dup_p {
                 kept.push(observation.clone());
             }
             kept.push(observation);
         }
         out.observations = kept;
     }
+}
+
+/// Otisk toku (cas, konce, porty, protokol, bajty) pro deterministickou degradaci.
+fn flow_print(o: &ConnectionObservation) -> u64 {
+    let mut h = crate::soak::rng::mix(o.timestamp.timestamp() as u64);
+    let mut feed = |bytes: &[u8]| {
+        for b in bytes {
+            h = (h ^ *b as u64).wrapping_mul(0x100_0000_01b3);
+        }
+    };
+    feed(o.src_ip.as_deref().unwrap_or("").as_bytes());
+    feed(&o.src_port.unwrap_or(0).to_le_bytes());
+    feed(o.dst_ip.as_bytes());
+    feed(&o.dst_port.unwrap_or(0).to_le_bytes());
+    feed(o.proto.as_bytes());
+    feed(&o.orig_bytes.unwrap_or(0).to_le_bytes());
+    feed(&o.resp_bytes.unwrap_or(0).to_le_bytes());
+    crate::soak::rng::mix(h)
 }
 
 pub fn seed_for_cycle(network_seed: u64, cycle: u32) -> u64 {
@@ -2584,11 +2631,74 @@ mod tests {
                 telemetry: &telemetry,
                 oracle: &NoBlocks,
                 rogue: None,
+                scan_now: true,
+                masked: no_mask(),
             };
             let out = generate_cycle(&ctx, &mut truths, &mut rng);
             (out.observations.len(), out.alerts.len(), truths.len())
         };
         assert_eq!(run(), run());
+    }
+
+    /// Krok 2A: maskovani jednoho utoku (kontrafaktual) nesmi zmenit zadny jiny tok,
+    /// ani pri ztrate a duplicitach telemetrie (degradace podle otisku toku).
+    #[test]
+    fn masking_an_attack_removes_only_its_flows() {
+        let telemetry = Telemetry {
+            drop_p: 0.08,
+            dup_p: 0.05,
+            skew_s: 30,
+            outage_p: 0.0,
+            ids_coverage: 1.0,
+            blind_subnets: Vec::new(),
+        };
+        let mut checked = 0;
+        for id in 0..40u64 {
+            let model = NetworkModel::generate(20261102, id);
+            let ip = ips(&model);
+            let mut plan_rng = Rng::new(id ^ 0xABC);
+            let truths = plan_episode(&model, &mut plan_rng, 48, &telemetry);
+            let Some(attack) = truths.iter().find(|t| {
+                matches!(t.kind, Kind::Attack(f) if f != Family::RogueDevice) && t.end_cycle < 96
+            }) else {
+                continue;
+            };
+            let cycle = attack.start_cycle;
+            let run = |masked: &HashSet<u32>| {
+                let mut truths = truths.clone();
+                let ctx = CycleContext {
+                    model: &model,
+                    ips: &ip,
+                    cycle,
+                    start_offset_s: 0,
+                    telemetry: &telemetry,
+                    oracle: &NoBlocks,
+                    rogue: None,
+                    scan_now: cycle % 4 == 0,
+                    masked,
+                };
+                let mut rng = Rng::new(seed_for_cycle(model.seed, cycle));
+                let out = generate_cycle(&ctx, &mut truths, &mut rng);
+                let mut prints: Vec<u64> = out.observations.iter().map(flow_print).collect();
+                prints.sort_unstable();
+                (prints, truths[attack.id as usize].flows_emitted)
+            };
+            let (full, emitted) = run(no_mask());
+            let mask: HashSet<u32> = [attack.id].into_iter().collect();
+            let (without, emitted_masked) = run(&mask);
+            assert_eq!(emitted_masked, 0, "maskovany utok nic neemituje");
+            // `without` je podmultimnozina `full`; rozdil jsou jen toky utoku
+            let mut rest = full.clone();
+            for print in &without {
+                let at = rest
+                    .binary_search(print)
+                    .unwrap_or_else(|_| panic!("sit {id}: tok mimo utok se zmenil"));
+                rest.remove(at);
+            }
+            assert!(rest.len() as u64 <= emitted * 2, "sit {id}");
+            checked += 1;
+        }
+        assert!(checked >= 10, "malo siti s utokem: {checked}");
     }
 
     #[test]
@@ -2643,6 +2753,8 @@ mod tests {
             telemetry: &telemetry,
             oracle: &BlockAll,
             rogue: None,
+            scan_now: true,
+            masked: no_mask(),
         };
         let out = generate_cycle(&ctx, &mut truths, &mut rng);
         assert!(truths[0].flows_emitted > 0);
@@ -2740,6 +2852,8 @@ mod tests {
             telemetry: &telemetry,
             oracle: &NoBlocks,
             rogue: None,
+            scan_now: true,
+            masked: no_mask(),
         };
         let out = generate_cycle(&ctx, &mut truths, &mut rng);
         assert!(out.outage && out.observations.is_empty() && out.alerts.is_empty());
