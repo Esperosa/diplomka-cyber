@@ -1090,3 +1090,36 @@
   opacity: 0.6;
   pointer-events: none;
 }
+
+/* ---- provoz mezi zarizenimi (volitelne trafficEdges): jen na urovni zarizeni, tloustka dle objemu ---- */
+.traffic {
+  pointer-events: none;
+  transition: opacity var(--dur-slow) var(--ease-soft), visibility 0s linear 0s;
+}
+.netmap:not(.lv-nodes) .traffic {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-base) var(--ease-soft), visibility 0s linear var(--dur-base);
+}
+.t-edge {
+  transition: opacity var(--dur-base) var(--ease-soft);
+}
+.t-edge.off {
+  opacity: 0;
+}
+.t-edge path {
+  fill: none;
+  stroke: var(--ink-2);
+  stroke-opacity: 0.42;
+  stroke-linecap: round;
+  stroke-width: calc(var(--w) * var(--u) * 1px);
+}
+.tp {
+  fill: var(--ink);
+  opacity: 0.8;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tp {
+    display: none;
+  }
+}

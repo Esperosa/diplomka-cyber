@@ -2,7 +2,7 @@
 // skutecna spojeni z topologie (LLDP, klient-AP, ARP) a rozlozeni v rovine. Bez DOM, bez vymyslenych dat.
 import { assetOf, classifyHost, isInfrastructure, kindLabel, type DeviceClass, type DeviceKind } from "./devices";
 import { hashString, type P } from "./pebbles";
-import type { Finding, Host, NetworkAsset, Report, TopologyEdge, VerificationResult } from "./types";
+import type { Finding, Host, NetworkAsset, Report, TopologyEdge, TrafficEdge, VerificationResult } from "./types";
 import { hostFindings, hostImportance, hostRisk, hypothesesForHost, maxSeverityLevel, meanUncertainty } from "./ui";
 
 export type Hop = {
@@ -73,6 +73,8 @@ export type NetModel = {
   zoneByKey: Map<string, Zone>;
   gateway: Item | null;
   hops: Hop[];
+  /** provoz mezi zarizenimi z reportu (volitelne, muze byt prazdny) */
+  traffic: TrafficEdge[];
   outsiders: Array<{ ip: string; x: number; y: number }>;
   gate: P;
   internet: P;
@@ -555,6 +557,7 @@ export function buildNetModel(report: Report): NetModel {
     zoneByKey: new Map(zones.map((z) => [z.key, z])),
     gateway,
     hops,
+    traffic: report.trafficEdges ?? [],
     outsiders,
     gate: GATE,
     internet: INTERNET,

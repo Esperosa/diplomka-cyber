@@ -39,6 +39,7 @@ let saved: { run: string; cam: Cam } | null = null;
 let lastHash = "";
 let escBound = false;
 let levelLockUntil = 0;
+const TRAFFIC_VISIBLE = 30;
 export const LEVEL_IN = 1.9;
 export const LEVEL_OUT = 1.25;
 let appliedSig = "";
@@ -209,6 +210,7 @@ export function mapFrameHtml(model: NetModel, runId: string): string {
         <li><i class="lg lg-dash"></i>přerušený obrys: nejistota</li>
         <li><i class="lg lg-agent"></i>lupa: kontrola agenta</li>
         <li><i class="lg lg-hop"></i>tečky: cesta skoků</li>
+        <li>${model.traffic.length ? "šedé čáry: provoz, tloušťka = objem" : "provoz mezi zařízeními: backend zatím neposílá"}</li>
       </ul>
       <p class="map-empty" hidden>Žádné zařízení neodpovídá filtru.</p>
     </div>`;
@@ -320,6 +322,13 @@ function syncBar(c: Ctx, announce: boolean) {
 function routeVisibility(c: Ctx, open: Set<string>, matching: Set<string>) {
   const ok = (zoneKey: string, key: string) => (zoneKey === "" || open.has(zoneKey)) && (key.startsWith("out:") || matching.has(key));
   let allVisible = true;
+  // provoz: z viditelnych spojnic jen TRAFFIC_VISIBLE nejsilnejsich (v DOM jsou serazene podle objemu)
+  let shownTraffic = 0;
+  for (const edge of bySel(c.svg, ".traffic .t-edge")) {
+    const vis = ok(edge.dataset.za ?? "", edge.dataset.a ?? "") && ok(edge.dataset.zb ?? "", edge.dataset.b ?? "") && shownTraffic < TRAFFIC_VISIBLE;
+    if (vis) shownTraffic += 1;
+    edge.classList.toggle("off", !vis);
+  }
   for (const seg of bySel(c.svg, ".route-node .hop-seg")) {
     const vis = ok(seg.dataset.za ?? "", seg.dataset.a ?? "") && ok(seg.dataset.zb ?? "", seg.dataset.b ?? "");
     seg.classList.toggle("off", !vis);

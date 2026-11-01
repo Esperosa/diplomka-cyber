@@ -218,6 +218,18 @@ function showcaseReport(id, nazev, minutesAgo) {
   r.hypotheses = hypotheses;
   r.networkAssets = assets;
   r.topologyEdges = edges;
+  // Provoz mezi zarizenimi (ukazkova data pro volitelne pole trafficEdges; skutecny backend je zatim neposila).
+  // Deterministicke dvojice, objem s tezkym ocasem: par silnych toku, mnoho slabych.
+  r.trafficEdges = hosts.flatMap((h, i) => {
+    const out = [];
+    for (const k of [3, 11, 29]) {
+      const j = (i * 7 + k) % hosts.length;
+      if (j === i) continue;
+      const w = Math.pow(((i * 37 + k * 13) % 100) / 100, 3);
+      out.push({ src: h.ip, dst: hosts[j].ip, bytes: Math.round(2e4 + w * 9e8), flows: 1 + Math.round(w * 400), protocol: [443, 445, 53, 22, 5432][(i + k) % 5] });
+    }
+    return out;
+  });
   r.verification_plans = hypotheses.slice(0, 12).map((h, i) => {
     const base = structuredClone(r.verification_plans[i % r.verification_plans.length]);
     base.in_scope_assets = h.affected_assets;

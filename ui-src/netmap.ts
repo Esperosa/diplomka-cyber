@@ -350,6 +350,51 @@ function hopMarks(model: NetModel, stops: Stop[], level: "node" | "zone"): strin
   return out.join("");
 }
 
+// ---------- provoz mezi zarizenimi ----------
+/** Kandidati v DOM (serazeni podle objemu); mapctl zobrazi nejsilnejsich TRAFFIC_VISIBLE z tech, jejichz oba konce jsou videt. */
+const TRAFFIC_MAX = 160;
+const TRAFFIC_PARTICLES = 60;
+
+/** Nejsilnejsi spojnice provozu: tloustka podle objemu (log), pohyblive castice ve smeru zdroj -> cil. */
+function trafficLayer(model: NetModel, reduced: boolean): string {
+  const rows = model.traffic
+    .map((t) => ({ t, a: model.byIp.get(t.src), b: model.byIp.get(t.dst), v: t.bytes ?? (t.flows ?? 0) * 1000 }))
+    .filter((r) => r.a && r.b && r.a !== r.b && r.v > 0)
+    .sort((x, y) => y.v - x.v)
+    .slice(0, TRAFFIC_MAX);
+  if (!rows.length) return "";
+  const vmax = rows[0].v;
+  const vmin = rows[rows.length - 1].v;
+  const span = Math.log(vmax / Math.max(vmin, 1)) || 1;
+  const parts = rows.map(({ t, a, b, v }, i) => {
+    const A = a!;
+    const B = b!;
+    const k = rows.length === 1 ? 1 : Math.log(v / Math.max(vmin, 1)) / span; // 0..1
+    const dx = B.x - A.x;
+    const dy = B.y - A.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const s = { x: A.x + ux * A.r, y: A.y + uy * A.r };
+    const e = { x: B.x - ux * B.r, y: B.y - uy * B.r };
+    const bend = 0.12 * len * (i % 2 ? 1 : -1);
+    const c = { x: (s.x + e.x) / 2 - uy * bend, y: (s.y + e.y) / 2 + ux * bend };
+    const d = `M${f1(s.x)},${f1(s.y)}Q${f1(c.x)},${f1(c.y)} ${f1(e.x)},${f1(e.y)}`;
+    const w = 1.3 + k * 4.2;
+    const n = 1 + Math.round(k * 2);
+    const dur = 4.2 - k * 2;
+    let dots = "";
+    if (!reduced && i < TRAFFIC_PARTICLES) {
+      for (let j = 0; j < n; j += 1) {
+        dots += `<circle class="tp" r="${f1(1.5 + k * 1.6)}"><animateMotion dur="${dur.toFixed(2)}s" begin="${((j * dur) / n + (i % 5) * 0.37).toFixed(2)}s" repeatCount="indefinite" path="${d}"/></circle>`;
+      }
+    }
+    const label = `${t.src} → ${t.dst}${t.protocol ? ` (${t.protocol})` : ""}: ${t.bytes ? `${(t.bytes / 1e6).toFixed(1)} MB` : `${t.flows} toků`}`;
+    return `<g class="t-edge" data-a="${esc(A.key)}" data-b="${esc(B.key)}" data-za="${esc(A === model.gateway ? "" : A.zone)}" data-zb="${esc(B === model.gateway ? "" : B.zone)}" style="--w:${w.toFixed(2)}"><title>${esc(label)}</title><path d="${d}"/>${dots}</g>`;
+  });
+  return `<g class="traffic" aria-hidden="true">${parts.join("")}</g>`;
+}
+
 // ---------- hlavni vykres ----------
 export function renderNetMap(model: NetModel, selected: string | null, runId: string): string {
   const { bounds: b } = model;
@@ -395,6 +440,7 @@ export function renderNetMap(model: NetModel, selected: string | null, runId: st
     <defs>${nodeRoute.defs}${zoneRoute.defs}</defs>
     <g class="links">${gooFixed}</g>
     <g class="sel-links"></g>
+    ${trafficLayer(model, reduced)}
     <g class="zones">${zones}</g>
     <g class="route-node">${nodeRoute.svg}</g>
     <g class="route-zone">${zoneRoute.svg}</g>

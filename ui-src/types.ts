@@ -155,6 +155,17 @@ export type TopologyEdge = {
   details?: string[];
 };
 
+/** Provoz mezi dvema zarizenimi (volitelne; backend je zatim neposila, ukazkova data jsou v scripts/mock-server.mjs). */
+export type TrafficEdge = {
+  /** IP zdroje a cile; kresli se jen kdyz oba konce na mape existuji */
+  src: string;
+  dst: string;
+  /** objem v bajtech (nebo pocet toku), podle nej se voli tloustka a pocet castic */
+  bytes?: number;
+  flows?: number;
+  protocol?: string | number;
+};
+
 export type MonitoringLane = {
   lane_id: string;
   lane_type: string;
@@ -187,6 +198,8 @@ export type Report = {
   triageActions?: TriageAction[];
   networkAssets?: NetworkAsset[];
   topologyEdges?: TopologyEdge[];
+  /** volitelne: provoz mezi zarizenimi, kresli se nejsilnejsich N spojnic */
+  trafficEdges?: TrafficEdge[];
   monitoringLanes?: MonitoringLane[];
   unmappedEvents?: unknown[];
   diff?: unknown;
