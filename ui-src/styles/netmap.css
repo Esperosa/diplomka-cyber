@@ -534,8 +534,8 @@
 }
 .mb-top {
   position: absolute;
-  top: 0.6rem;
-  left: 0.6rem;
+  top: var(--pane-pad);
+  left: var(--pane-pad);
   z-index: 2;
   display: flex;
   align-items: center;
@@ -641,7 +641,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  padding: 3.6rem 0.9rem 0.9rem;
+  padding: calc(var(--pane-pad) + 2.9rem) var(--pane-pad) var(--pane-pad);
   overflow-y: auto;
   overscroll-behavior: contain;
   background: var(--surface);

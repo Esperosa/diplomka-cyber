@@ -62,6 +62,7 @@
 
 /* Tokeny. Jedna signalni cervena, jinak teple sede. Svetly i tmavy rezim jsou plnohodnotne. */
 :root {
+  --pane-pad: 1.25rem; /* jednotne odsazeni vsech panelu: nahore, dole i po stranach */
   color-scheme: light dark;
 
   --bg: #efeee9;
