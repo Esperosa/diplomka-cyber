@@ -1,53 +1,69 @@
-// Vlastni 5x7 bodove pismo. Zadne pismo z cizich zdroju: kazdy znak je sedm radku po peti
-// bitech. Sousedni body se tekute spoji do tucnych, souvislych, zaoblenych tahu s ostrymi hranami
-// a barvou z currentColor (bez rasterovych filtru).
+// Vlastni pismo z teček: kazdy znak je KOSTRA z malo uzlu (kruhu) spojenych zaoblenymi tahy.
+// B ma 8 uzlu, H 6, I 2. Zadne pismo z cizich zdroju, zadny raster ani rasterovy filtr: znak je kruhy
+// a jedna cesta (path) s kulatymi konci a zaoblenymi rohy, barva z currentColor. Pri kazdem zvetseni,
+// scrollu a zmene velikosti je stejny. Mrizka znaku: 4 x 6 jednotek.
 
-const GLYPHS: Record<string, string[]> = {
-  "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
-  "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
-  "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
-  "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
-  "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
-  "5": ["11111", "10000", "11110", "00001", "00001", "10001", "01110"],
-  "6": ["00110", "01000", "10000", "11110", "10001", "10001", "01110"],
-  "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
-  "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
-  "9": ["01110", "10001", "10001", "01111", "00001", "00010", "01100"],
-  A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
-  B: ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
-  C: ["01110", "10001", "10000", "10000", "10000", "10001", "01110"],
-  D: ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
-  E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
-  F: ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
-  G: ["01110", "10001", "10000", "10111", "10001", "10001", "01111"],
-  H: ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
-  I: ["01110", "00100", "00100", "00100", "00100", "00100", "01110"],
-  J: ["00111", "00010", "00010", "00010", "00010", "10010", "01100"],
-  K: ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
-  L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
-  M: ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
-  N: ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
-  O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
-  P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
-  Q: ["01110", "10001", "10001", "10001", "10101", "10010", "01101"],
-  R: ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
-  S: ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
-  T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
-  U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
-  V: ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
-  W: ["10001", "10001", "10001", "10101", "10101", "10101", "01010"],
-  X: ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
-  Y: ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
-  Z: ["11111", "00001", "00010", "00100", "01000", "10000", "11111"],
-  ".": ["00000", "00000", "00000", "00000", "00000", "01100", "01100"],
-  ":": ["00000", "01100", "01100", "00000", "01100", "01100", "00000"],
-  "-": ["00000", "00000", "00000", "11111", "00000", "00000", "00000"],
-  "%": ["11001", "11010", "00010", "00100", "01000", "01011", "10011"],
-  "/": ["00001", "00010", "00010", "00100", "01000", "01000", "10000"],
-  "+": ["00000", "00100", "00100", "11111", "00100", "00100", "00000"],
-  "?": ["01110", "10001", "00001", "00010", "00100", "00000", "00100"],
-  "!": ["00100", "00100", "00100", "00100", "00100", "00000", "00100"],
-  " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
+type Pt = [number, number];
+/** Tah: body kostry; "z" na konci uzavre tah do smycky. */
+type Stroke = Array<Pt | "z">;
+type Glyph = { strokes: Stroke[]; extra?: Pt[] };
+
+const g = (...strokes: Stroke[]): Glyph => ({ strokes });
+const turn = (glyph: Glyph): Glyph => ({
+  strokes: glyph.strokes.map((s) => s.map((p) => (p === "z" ? p : ([4 - p[0], 6 - p[1]] as Pt)))),
+  extra: glyph.extra?.map((p) => [4 - p[0], 6 - p[1]] as Pt),
+});
+
+const O: Stroke = [[1, 0], [3, 0], [4, 1], [4, 5], [3, 6], [1, 6], [0, 5], [0, 1], "z"];
+const P: Stroke = [[0, 6], [0, 0], [2.6, 0], [4, 1.5], [2.6, 3], [0, 3]];
+const SIX = g([[0, 3.8], [1, 2.8], [3, 2.8], [4, 3.8], [4, 5], [3, 6], [1, 6], [0, 5], "z"], [[3.4, 0], [1.4, 0.4], [0, 3], [0, 5]]);
+
+const GLYPHS: Record<string, Glyph> = {
+  "0": g([[1.2, 0], [2.8, 0], [3.6, 1], [3.6, 5], [2.8, 6], [1.2, 6], [0.4, 5], [0.4, 1], "z"]),
+  "1": g([[0.8, 1.4], [2, 0], [2, 6]]),
+  "2": g([[0, 1.2], [1.2, 0], [2.8, 0], [4, 1.2], [0, 6], [4, 6]]),
+  "3": g([[0, 0], [4, 0], [2, 2.8], [3.2, 3.2], [4, 4.6], [3, 6], [0, 6]]),
+  "4": g([[3, 6], [3, 0], [0, 4], [4, 4]]),
+  "5": g([[4, 0], [0, 0], [0, 2.8], [3, 2.6], [4, 4.2], [3, 6], [0, 6]]),
+  "6": SIX,
+  "7": g([[0, 0], [4, 0], [1.6, 6]]),
+  "8": g([[1, 0], [3, 0], [4, 1], [3, 2.9], [1, 2.9], [0, 1], "z"], [[1, 2.9], [3, 2.9], [4, 4.4], [3, 6], [1, 6], [0, 4.4], "z"]),
+  "9": turn(SIX),
+  A: g([[0, 6], [2, 0], [4, 6]], [[0.67, 4], [3.33, 4]]),
+  B: g([[0, 6], [0, 0], [2.6, 0], [4.2, 1.5], [2.6, 3], [0, 3]], [[2.6, 3], [4.6, 4.5], [2.6, 6], [0, 6]]),
+  C: g([[4, 1], [3, 0], [1, 0], [0, 1], [0, 5], [1, 6], [3, 6], [4, 5]]),
+  D: g([[0, 0], [0, 6], [2, 6], [4, 4.5], [4, 1.5], [2, 0], "z"]),
+  E: g([[4, 0], [0, 0], [0, 3], [0, 6], [4, 6]], [[0, 3], [3, 3]]),
+  F: g([[4, 0], [0, 0], [0, 3], [0, 6]], [[0, 3], [3, 3]]),
+  G: g([[4, 1], [3, 0], [1, 0], [0, 1], [0, 5], [1, 6], [3, 6], [4, 5], [4, 3], [2.2, 3]]),
+  H: g([[0, 0], [0, 3], [0, 6]], [[4, 0], [4, 3], [4, 6]], [[0, 3], [4, 3]]),
+  I: g([[2, 0], [2, 6]]),
+  J: g([[4, 0], [4, 5], [3, 6], [1, 6], [0, 5]]),
+  K: g([[0, 0], [0, 3], [0, 6]], [[4, 0], [0, 3], [4, 6]]),
+  L: g([[0, 0], [0, 6], [4, 6]]),
+  M: g([[0, 6], [0, 0], [2, 3], [4, 0], [4, 6]]),
+  N: g([[0, 6], [0, 0], [4, 6], [4, 0]]),
+  O: g(O),
+  P: g(P),
+  Q: g(O, [[2.6, 4.4], [4, 6]]),
+  R: g(P, [[1.8, 3], [4, 6]]),
+  S: g([[4, 1], [3, 0], [1, 0], [0, 1.2], [1, 3], [3, 3], [4, 4.8], [3, 6], [1, 6], [0, 5]]),
+  T: g([[0, 0], [2, 0], [4, 0]], [[2, 0], [2, 6]]),
+  U: g([[0, 0], [0, 5], [1, 6], [3, 6], [4, 5], [4, 0]]),
+  V: g([[0, 0], [2, 6], [4, 0]]),
+  W: g([[0, 0], [1, 6], [2, 2.5], [3, 6], [4, 0]]),
+  X: g([[0, 0], [2, 3], [4, 6]], [[4, 0], [2, 3], [0, 6]]),
+  Y: g([[0, 0], [2, 3], [4, 0]], [[2, 3], [2, 6]]),
+  Z: g([[0, 0], [4, 0], [0, 6], [4, 6]]),
+  ".": { strokes: [], extra: [[2, 5.6]] },
+  ":": { strokes: [], extra: [[2, 1.9], [2, 5.1]] },
+  "-": g([[0.6, 3], [3.4, 3]]),
+  "%": { strokes: [[[0, 6], [4, 0]]], extra: [[0.8, 1], [3.2, 5]] },
+  "/": g([[0.6, 6], [3.4, 0]]),
+  "+": g([[0, 3], [2, 3], [4, 3]], [[2, 1], [2, 3], [2, 5]]),
+  "?": { strokes: [[[0, 1], [1, 0], [3, 0], [4, 1], [2, 3], [2, 4]]], extra: [[2, 5.7]] },
+  "!": { strokes: [[[2, 0], [2, 3.8]]], extra: [[2, 5.7]] },
+  " ": g(),
 };
 
 export function normalizeForMatrix(text: string): string {
@@ -59,48 +75,79 @@ export function normalizeForMatrix(text: string): string {
 }
 
 export type DotOptions = {
-  /** Vyska jednoho radku v em (pro CSS); sirka se dopocte z pomeru stran. */
+  /** Ponechano pro zpetnou kompatibilitu volani; kostra nema "zhasnute" body. */
   offDots?: boolean;
 };
 
+const ADVANCE = 6;
+const CORNER = 0.9; // polomer zaobleni rohu tahu
+const BEAD = 0.62; // polomer uzlu
+const WIDTH = 1.04; // sirka tahu
+
+const f = (v: number) => +v.toFixed(2);
+
+/** Cesta tahu se zaoblenymi rohy (kvadraticka krivka pres roh, G1 napojeni na rovne useky). */
+function strokePath(stroke: Stroke, dx: number): string {
+  const closed = stroke[stroke.length - 1] === "z";
+  const pts = stroke.filter((p): p is Pt => p !== "z").map((p) => [p[0] + dx, p[1]] as Pt);
+  const n = pts.length;
+  if (n < 2) return "";
+  const cut = (v: Pt, to: Pt): Pt => {
+    const len = Math.hypot(to[0] - v[0], to[1] - v[1]) || 1;
+    const t = Math.min(CORNER, len / 2) / len;
+    return [v[0] + (to[0] - v[0]) * t, v[1] + (to[1] - v[1]) * t];
+  };
+  if (!closed) {
+    let d = `M${f(pts[0][0])} ${f(pts[0][1])}`;
+    for (let i = 1; i < n - 1; i += 1) {
+      const a = cut(pts[i], pts[i - 1]);
+      const b = cut(pts[i], pts[i + 1]);
+      d += `L${f(a[0])} ${f(a[1])}Q${f(pts[i][0])} ${f(pts[i][1])} ${f(b[0])} ${f(b[1])}`;
+    }
+    return `${d}L${f(pts[n - 1][0])} ${f(pts[n - 1][1])}`;
+  }
+  const start = cut(pts[0], pts[1]);
+  let d = `M${f(start[0])} ${f(start[1])}`;
+  for (let k = 1; k <= n; k += 1) {
+    const i = k % n;
+    const a = cut(pts[i], pts[(i - 1 + n) % n]);
+    const b = cut(pts[i], pts[(i + 1) % n]);
+    d += `L${f(a[0])} ${f(a[1])}Q${f(pts[i][0])} ${f(pts[i][1])} ${f(b[0])} ${f(b[1])}`;
+  }
+  return `${d}Z`;
+}
+
+/** Pocet uzlu znaku (pro kontrolu a testy): jedinecne body vsech tahu plus samostatne tecky. */
+export function glyphNodeCount(char: string): number {
+  const glyph = GLYPHS[char];
+  if (!glyph) return 0;
+  const set = new Set<string>();
+  for (const s of glyph.strokes) for (const p of s) if (p !== "z") set.add(`${p[0]},${p[1]}`);
+  for (const p of glyph.extra ?? []) set.add(`${p[0]},${p[1]}`);
+  return set.size;
+}
+
 /**
  * Vraci SVG retezec. Velikost se ridi CSS (vyska prvku), ne atributy. Hodnota je v aria-label.
- *
- * Goo bez filtru: kazdy bod je kruh a sousedni body (i diagonalne) spojuje tucna ocka se zaoblenymi
- * konci. Vysledek je jedna souvisla zaoblena silueta s ostrymi hranami, ktera je pri kazdem zvetseni,
- * scrollu i zmene velikosti stejna (zadny rasterovy filtr, ktery by mohl blikat nebo se rozsypat).
+ * Kazdy znak: kruhy v uzlech kostry + jedna cesta zaoblenych tahu (bez filtru).
  */
-export function dotMatrix(text: string, options: DotOptions = {}): string {
-  const clean = normalizeForMatrix(String(text));
-  const chars = [...clean];
-  const cols = Math.max(1, chars.length * 6 - 1);
-  const rows = 7;
-  const pad = 0.4;
-  const beads: string[] = [];
-  const links: string[] = [];
-  const offs: string[] = [];
+export function dotMatrix(text: string, _options: DotOptions = {}): string {
+  const chars = [...normalizeForMatrix(String(text))];
+  const pad = BEAD + 0.25;
+  const cols = Math.max(1, chars.length * ADVANCE - (ADVANCE - 4));
+  let paths = "";
+  let beads = "";
   chars.forEach((char, index) => {
     const glyph = GLYPHS[char] ?? GLYPHS["?"];
-    const on = (x: number, y: number) => glyph[y]?.[x] === "1";
-    glyph.forEach((line, y) => {
-      [...line].forEach((bit, x) => {
-        const cx = index * 6 + x + 0.5;
-        const cy = y + 0.5;
-        if (bit !== "1") {
-          if (options.offDots) offs.push(`<circle class="off" cx="${cx}" cy="${cy}" r="0.2"/>`);
-          return;
-        }
-        beads.push(`<circle cx="${cx}" cy="${cy}" r="0.62"/>`);
-        // spoj k sousedum vpravo, dolu a po obou diagonalach dolu (kazda dvojice jednou)
-        for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [-1, 1]] as const) {
-          if (on(x + dx, y + dy)) links.push(`M${cx} ${cy}L${cx + dx} ${cy + dy}`);
-        }
-      });
-    });
+    const dx = index * ADVANCE;
+    paths += glyph.strokes.map((s) => strokePath(s, dx)).join("");
+    const nodes = new Map<string, Pt>();
+    for (const s of glyph.strokes) for (const p of s) if (p !== "z") nodes.set(`${p[0]},${p[1]}`, [p[0] + dx, p[1]]);
+    for (const p of glyph.extra ?? []) nodes.set(`${p[0]},${p[1]}`, [p[0] + dx, p[1]]);
+    for (const [x, y] of nodes.values()) beads += `<circle cx="${f(x)}" cy="${f(y)}" r="${BEAD}"/>`;
   });
-  const off = offs.length ? `<g>${offs.join("")}</g>` : "";
-  const body = `<g>${beads.join("")}</g><path d="${links.join("")}" fill="none" stroke="currentColor" stroke-width="1.04" stroke-linecap="round"/>`;
-  return `<svg class="dm" viewBox="${-pad} ${-pad} ${cols + 2 * pad} ${rows + 2 * pad}" role="img" aria-label="${escapeAttr(String(text))}" focusable="false">${off}${body}</svg>`;
+  const path = paths ? `<path d="${paths}" fill="none" stroke="currentColor" stroke-width="${WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>` : "";
+  return `<svg class="dm" viewBox="${f(-pad)} ${f(-pad)} ${f(cols + 2 * pad)} ${f(6 + 2 * pad)}" role="img" aria-label="${escapeAttr(String(text))}" focusable="false"><g>${beads}</g>${path}</svg>`;
 }
 
 function escapeAttr(value: string) {
