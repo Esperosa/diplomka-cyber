@@ -99,7 +99,7 @@ function render(): string {
   const selected = report.findings.find((f) => f.finding_id === state.selectedFinding) ?? null;
   return `${paneHead("Nálezy a hypotézy", filters())}
   <div class="split${selected ? " has-detail" : ""}">
-    <div class="split-list"><nav class="list" aria-label="Seznam nálezů" data-keep="findings-list">${
+    <div class="split-list" data-keep="findings-list"><nav class="list" aria-label="Seznam nálezů">${
       list.length
         ? list
             .map((f) => {

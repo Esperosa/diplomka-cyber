@@ -21,7 +21,6 @@ function sideHtml(): string {
   const hops = model.hops;
   return `${sel ? `<div class="host-card profile" role="region" aria-label="Profil zařízení ${esc(sel.ip)}">${profileHtml(model, report, sel)}</div>` : ""}
     ${statsHtml(model, report, currentScope())}
-    ${sel ? "" : `<p class="small muted side-hint">Klepnutím na podsíť ji rozbalíš, klepnutím na zařízení uvidíš jeho profil. Esc se vrací o úroveň zpět.</p>`}
     ${hops.length ? hopList(hops) : ""}
     <div class="run-meta">
       <p class="eyebrow">Běh</p>
@@ -54,7 +53,7 @@ function render(): string {
   const model = modelFor(report);
   loadFromHash(model);
   if (state.selectedHost && !model.byKey.has(state.selectedHost)) state.selectedHost = null;
-  return `${paneHead("Mapa sítě")}
+  return `<h1 class="sr-only">Mapa sítě</h1>
   <div class="overview${state.selectedHost ? " has-profile" : ""}">
     <section class="field-wrap" aria-label="Mapa sítě">
       ${barHtml(model)}

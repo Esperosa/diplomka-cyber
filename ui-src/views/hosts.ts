@@ -29,7 +29,7 @@ function plural(n: number, one: string, few: string, many: string): string {
 function list(): string {
   const report = state.report!;
   const hosts = [...report.hosts].sort((a, b) => a.ip.localeCompare(b.ip, "cs", { numeric: true }));
-  return `<nav class="list" aria-label="Seznam stanic" data-keep="hosts-list">${hosts
+  return `<nav class="list" aria-label="Seznam stanic">${hosts
     .map((host) => {
       const findings = hostFindings(report, host);
       const sev = maxSeverityLevel(findings);
@@ -123,7 +123,7 @@ function render(): string {
   const host = activeHost();
   return `${paneHead("Stanice", tabs())}
   <div class="split${host ? " has-detail" : ""}">
-    <div class="split-list">${list()}</div>
+    <div class="split-list" data-keep="hosts-list">${list()}</div>
     <article class="split-detail scroll" data-keep="host-detail" aria-label="Detail stanice">${
       host ? detail(host) : emptyState("Vyber stanici", `V běhu je ${report.hosts.length} stanic. Poslední průchod: ${fmtDate(report.run.finished_at)}.`)
     }</article>

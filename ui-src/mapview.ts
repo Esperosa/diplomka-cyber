@@ -69,6 +69,9 @@ export type MapView = {
   destroy: () => void;
 };
 
+/** Nejmensi polomer bubliny zarizeni na obrazovce (px). Pod tim by ikona v bublině nebyla citelna. */
+const MIN_NODE_PX = 7;
+
 export function bindMapView(host: HTMLElement, svg: SVGSVGElement, opts: MapViewOptions, start?: Cam | null): MapView {
   const { bounds } = opts;
   const bx = bounds.x;
@@ -81,6 +84,7 @@ export function bindMapView(host: HTMLElement, svg: SVGSVGElement, opts: MapView
   let anim = 0;
   let classes = "";
   let lockUntil = 0;
+  let minNodeR = 0;
   const btn = (name: string) => host.querySelector<HTMLButtonElement>(`[data-map="${name}"]`);
 
   const measure = () => {
@@ -105,6 +109,14 @@ export function bindMapView(host: HTMLElement, svg: SVGSVGElement, opts: MapView
     svg.setAttribute("viewBox", `${(cam.cx - w / 2).toFixed(2)} ${(cam.cy - h / 2).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)}`);
     svg.style.setProperty("--u", Math.min(1 / cam.s, 3.2).toFixed(4));
     svg.style.setProperty("--um", Math.min(1 / cam.s, 2.2).toFixed(4));
+    // Nejmensi bublina musi mit na obrazovce aspon MIN_NODE_PX polomeru, aby v ni byla ikona.
+    // Skaluje se jen vnitrek uzlu (.nk), ne .nb (ten nese prechody sbaleni a vypnuti).
+    if (!minNodeR) {
+      const radii = [...svg.querySelectorAll<SVGGElement>(".nb")].map((g) => Number(g.dataset.r)).filter(Number.isFinite);
+      if (radii.length) minNodeR = Math.min(...radii);
+    }
+    const nk = minNodeR ? Math.min(6, Math.max(1, MIN_NODE_PX / (minNodeR * cam.s))) : 1;
+    svg.style.setProperty("--nk", nk.toFixed(3));
     const next = [cam.s >= 0.95 ? "show-icons" : "", cam.s >= 1.9 ? "show-labels" : "", cam.s < 0.55 ? "is-far" : ""].filter(Boolean).join(" ");
     if (next !== classes) {
       for (const c of ["show-icons", "show-labels", "is-far"]) svg.classList.toggle(c, next.includes(c));

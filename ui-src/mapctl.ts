@@ -174,20 +174,25 @@ export function barHtml(model: NetModel): string {
     ([level, label]) =>
       `<button type="button" class="mchip" data-action="chip-sev" data-sev="${level}" aria-pressed="false">${level ? `<span class="sev ${level === 3 ? "sev-high" : level === 2 ? "sev-medium" : "sev-low"}" aria-hidden="true"></span>` : `<span class="sev sev-none" aria-hidden="true"></span>`}<span class="mc-name">${label}</span><span class="mc-n mono" data-n>0</span></button>`,
   ).join("");
-  const open = ui.barOpen ?? !window.matchMedia("(max-width: 40rem)").matches;
+  // Lista filtru je rozbalovaci levy panel uvnitr mapy (vychozi zavreny). Sekce jsou <details>,
+  // aby sly sbalit; pocet v zahlavi ukazuje kolik voleb sekce nabizi a kolik je aktivnich.
+  const open = ui.barOpen ?? false;
+  const sec = (title: string, total: string, body: string, actKey: string) =>
+    `<details class="mb-sec" open><summary class="mb-sec-h"><span class="mb-sec-t">${title}</span><span class="mb-sec-n mono">${total}</span><span class="mb-sec-act mono" data-sec-act="${actKey}" hidden></span></summary>${body}</details>`;
+  const searchBody = `<label class="mb-search"><span class="sr-only">Hledat zařízení</span><input type="search" id="mapSearch" autocomplete="off" spellcheck="false" placeholder="IP, název, výrobce, služba" value="${esc(ui.filter.q)}"></label>`;
   return `<div class="mapbar${open ? " is-open" : ""}" role="region" aria-label="Filtry a poloha na mapě">
     <div class="mb-top">
-      <nav class="crumbs" aria-label="Kde jsem"></nav>
-      <p class="mb-count" id="mapCount"><span class="mb-shown"></span><button type="button" class="link" data-action="clear-filter" hidden>Zrušit filtr</button></p>
-      <button type="button" class="mb-toggle" data-action="toggle-bar" aria-expanded="${open}" aria-controls="mapFilters">Filtry<span class="mb-badge mono" data-badge hidden></span></button>
+      <button type="button" class="mb-toggle" data-action="toggle-bar" aria-expanded="${open}" aria-controls="mapFilters"><svg class="mb-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12l-4.6 5.4V13l-2.8-1.6V8.4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg><span>Filtry</span><span class="mb-badge mono" data-badge hidden></span></button>
+      <div class="mb-caption">
+        <nav class="crumbs" aria-label="Kde jsem"></nav>
+        <span class="mb-count mono" id="mapCount"><span class="mb-shown"></span><button type="button" class="link mb-clear" data-action="clear-filter" hidden>zrušit</button></span>
+      </div>
     </div>
     <div class="mb-body" id="mapFilters">
-      <div class="mb-row mb-row-main">
-        <label class="mb-search"><span class="sr-only">Hledat zařízení</span><input type="search" id="mapSearch" autocomplete="off" spellcheck="false" placeholder="Hledat IP, název, výrobce, službu" value="${esc(ui.filter.q)}"></label>
-        <div class="chiprow" role="group" aria-label="Závažnost nálezů">${sevChips}</div>
-      </div>
-      <div class="mb-row"><span class="mb-label">Podsíť / VLAN</span><div class="chiprow" role="group" aria-label="Podsítě a VLAN">${zoneChips}</div></div>
-      <div class="mb-row"><span class="mb-label">Typ</span><div class="chiprow" role="group" aria-label="Typ zařízení">${kindChips}</div></div>
+      ${sec("Hledat", "", searchBody, "q")}
+      ${sec("Závažnost", String(SEV_CHIPS.length), `<div class="chiprow" role="group" aria-label="Závažnost nálezů">${sevChips}</div>`, "sev")}
+      ${sec("Podsíť / VLAN", String(model.zones.length), `<div class="chiprow" role="group" aria-label="Podsítě a VLAN">${zoneChips}</div>`, "zone")}
+      ${sec("Typ zařízení", String(present.size), `<div class="chiprow" role="group" aria-label="Typ zařízení">${kindChips}</div>`, "kind")}
     </div>
     <p class="sr-only" id="mapLive" role="status" aria-live="polite"></p>
   </div>`;
@@ -297,6 +302,12 @@ function syncBar(c: Ctx, announce: boolean) {
   const nActive = f.zones.length + f.kinds.length + f.sev.length + (f.q.trim() ? 1 : 0);
   badge.hidden = !nActive;
   badge.textContent = String(nActive);
+  const actives: Record<string, number> = { q: f.q.trim() ? 1 : 0, sev: f.sev.length, zone: f.zones.length, kind: f.kinds.length };
+  for (const el of bySel(bar, "[data-sec-act]")) {
+    const n = actives[el.dataset.secAct ?? ""] ?? 0;
+    el.hidden = !n;
+    el.textContent = String(n);
+  }
   c.host.querySelector<HTMLElement>(".map-empty")!.hidden = !(active && shown === 0);
   const search = bar.querySelector<HTMLInputElement>("#mapSearch");
   if (search && document.activeElement !== search && search.value !== f.q) search.value = f.q;

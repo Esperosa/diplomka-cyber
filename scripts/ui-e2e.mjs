@@ -483,6 +483,8 @@ try {
   await test("Mapa (filtry): jen AP, hledani, 'Zobrazeno N z M', zruseni filtru a sdileny odkaz", async () => {
     const { page, context } = await open(showUrl);
     await settle(page, 600);
+    await page.locator('.mb-toggle').click(); // filtry jsou v rozbalovacim panelu, ve vychozim stavu zavrenem
+    await settle(page, 300);
     await page.locator('.mchip[data-kind="ap"]').click();
     await settle(page);
     assert(/Zobrazeno 4 z 100/.test((await page.locator(".mb-shown").textContent()) ?? ""), "filtr AP nehlasi Zobrazeno 4 z 100");
@@ -529,6 +531,8 @@ try {
     await settle(page, 600);
     const all = (await page.locator(".stats").textContent()) ?? "";
     assert(/Celá síť/.test(all) && /Pokrytí identity/.test(all) && /Nálezy podle závažnosti/.test(all), "statistika cele site neni uplna");
+    await page.locator('.mb-toggle').click();
+    await settle(page, 300);
     await page.locator('.mchip[data-zone="vlan:30"]').click();
     await settle(page);
     const vlan = (await page.locator(".stats").textContent()) ?? "";
@@ -536,7 +540,7 @@ try {
     await context.close();
   });
 
-  await test("Mapa (mobil 390): filtry jako vodorovne cipy za tlacitkem, profil jako spodni panel, cile >= 44 px, bez stranky scrollu", async () => {
+  await test("Mapa (mobil 390): filtry v rozbalovacim panelu bez vodorovneho scrollu, profil jako spodni panel, cile >= 44 px, bez stranky scrollu", async () => {
     const { page, context } = await open(showUrl, { width: 390, height: 844 });
     await settle(page);
     await page.locator('[data-action="toggle-bar"]').click();
@@ -546,7 +550,7 @@ try {
         .map((e) => `${e.className} ${Math.round(e.getBoundingClientRect().height)}`),
     );
     assert(small.length === 0, `male dotykove cile ve filtrech: ${small.join(", ")}`);
-    assert(await page.evaluate(() => document.querySelector(".chiprow").scrollWidth > document.querySelector(".chiprow").clientWidth), "cipy se nescrolluji vodorovne");
+    assert(await page.evaluate(() => [...document.querySelectorAll(".chiprow")].every((r) => r.scrollWidth <= r.clientWidth + 1)), "cipy presahuji sirku panelu (vodorovny scroll)");
     await page.locator('[data-action="toggle-bar"]').click();
     await page.evaluate(() => { location.hash = "#/prehled?v=vlan%3A30&h=10.20.3.31"; });
     await settle(page, 900);

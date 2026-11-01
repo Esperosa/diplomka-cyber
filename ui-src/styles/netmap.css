@@ -23,6 +23,14 @@
   user-select: none;
   -webkit-user-select: none;
 }
+/* Okraj pole: obsah se nerezne hranou, ale plynule mizi do ztracena (maska, pasmo 18 px na vsech stranach). */
+.netmap {
+  --edge: 18px;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--edge), #000 calc(100% - var(--edge)), transparent), linear-gradient(to bottom, transparent, #000 var(--edge), #000 calc(100% - var(--edge)), transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 var(--edge), #000 calc(100% - var(--edge)), transparent), linear-gradient(to bottom, transparent, #000 var(--edge), #000 calc(100% - var(--edge)), transparent);
+  mask-composite: intersect;
+}
 .netmap.is-dragging {
   cursor: grabbing;
 }
@@ -241,6 +249,10 @@
 }
 
 /* ---- zarizeni: tekute bubliny ---- */
+/* Minimalni velikost na obrazovce: vnitrek uzlu (bublina + ikona + odznak) se skaluje kolem stredu (0 0). */
+.nk {
+  transform: scale(var(--nk, 1));
+}
 .nb {
   transition: opacity var(--dur-slow) var(--ease-soft) var(--d, 0ms), transform var(--dur-slow) var(--ease-soft) var(--d, 0ms), visibility 0s linear 0s;
 }
@@ -290,12 +302,9 @@
   stroke-width: 2.1px;
   stroke-linecap: round;
   stroke-linejoin: round;
-  display: none; /* pryc z vykreslovani, dokud je mala (levne prekreslovani 300 zarizeni) */
-  pointer-events: none;
-}
-.show-icons .nicon {
+  /* Ikona typu je vzdy soucasti bubliny (ne az od urciteho priblizeni); popisek se resi zvlast (.show-labels). */
   display: inline;
-  animation: fade-in var(--dur-base) var(--ease-soft) both;
+  pointer-events: none;
 }
 @keyframes fade-in {
   from {
@@ -505,42 +514,58 @@
   color: var(--ink-2);
 }
 
-/* ---------- pas filtru ---------- */
+/* ---------- filtry: rozbalovaci levy panel uvnitr mapy (vychozi zavreny) ----------
+   Lista neni nad mapou. Mapa zabira celou plochu pole; v rohu zustava tlacitko Filtry a drobny
+   radek (drobecek), panel vyjizdi zleva transformem a neresi rozmery mapy. */
+.field-wrap {
+  position: relative;
+}
 .mapbar {
-  display: grid;
-  gap: 0.2rem;
-  padding: 0 0 0.6rem;
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
   min-width: 0;
 }
 .mb-top {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  z-index: 2;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem 1rem;
+  gap: 0.6rem;
+  max-width: calc(100% - 1.2rem);
+  pointer-events: auto;
+}
+.mb-caption {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   min-width: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
 }
 .crumbs {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.15rem;
-  font-family: var(--mono);
-  font-size: var(--fs-sm);
   min-width: 0;
 }
 .crumb {
   border: 0;
   background: transparent;
-  padding: 0.15rem 0.5rem;
+  padding: 0.1rem 0.3rem;
   border-radius: var(--r-pill);
   color: var(--ink-2);
+  font: inherit;
   text-decoration: underline;
   text-underline-offset: 0.2em;
-  max-width: 18rem;
+  max-width: 12rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: background var(--dur-fast) var(--ease-out);
 }
 .crumb:hover {
   background: var(--surface-2);
@@ -550,39 +575,46 @@
   font-weight: 600;
   text-decoration: none;
   cursor: default;
-  max-width: 22rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .crumb-sep {
   color: var(--ink-2);
+  padding: 0 0.1rem;
 }
 .mb-count {
-  margin-left: auto;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.8rem;
-  font-family: var(--mono);
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+.mb-clear {
+  font-size: inherit;
 }
 .mb-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
   min-height: 2.2rem;
-  padding: 0 1rem;
+  padding: 0 0.9rem;
   border: 1px solid var(--line-2);
   border-radius: var(--r-pill);
-  background: transparent;
+  background: var(--surface);
+  color: var(--ink);
   font-family: var(--mono);
   font-size: var(--fs-xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-base) var(--ease-spring);
+}
+.mb-toggle:active {
+  transform: scale(0.96);
 }
 .mb-toggle[aria-expanded="true"] {
   background: var(--surface-2);
+}
+.mb-ico {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
 }
 .mb-badge {
   min-width: 1.3rem;
@@ -596,31 +628,84 @@
   font-size: var(--fs-xs);
 }
 .mb-body {
-  display: none;
-  gap: 0.5rem;
-  min-width: 0;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(21rem, 86%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 3.6rem 0.9rem 0.9rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border-right: 1px solid var(--line-2);
+  border-radius: 0 var(--r-soft) var(--r-soft) 0;
+  box-shadow: 0.6rem 0 2.4rem color-mix(in srgb, var(--ink) 14%, transparent);
+  pointer-events: auto;
+  transform: translate3d(-104%, 0, 0);
+  visibility: hidden;
+  transition: transform var(--dur-slow) var(--ease-soft), visibility 0s linear var(--dur-slow);
 }
 .mapbar.is-open .mb-body {
-  display: grid;
+  transform: none;
+  visibility: visible;
+  transition: transform var(--dur-slow) var(--ease-soft), visibility 0s;
 }
-.mb-row {
+.mb-sec {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 0.3rem;
+}
+.mb-sec-h {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  min-width: 0;
-}
-.mb-label {
-  flex: none;
-  width: 6.4rem;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  list-style: none;
+  cursor: pointer;
   font-family: var(--mono);
   font-size: var(--fs-xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-2);
 }
+.mb-sec-h::-webkit-details-marker {
+  display: none;
+}
+.mb-sec-t {
+  flex: 1;
+  min-width: 0;
+}
+.mb-sec-n,
+.mb-sec-act {
+  min-width: 1.3rem;
+  text-align: center;
+}
+.mb-sec-act {
+  padding: 0 0.3rem;
+  border-radius: var(--r-pill);
+  background: var(--signal);
+  color: var(--on-signal);
+}
+.mb-sec-h::after {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  flex: none;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translate(-0.1rem, -0.1rem);
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+.mb-sec:not([open]) .mb-sec-h::after {
+  transform: rotate(-45deg);
+}
 .mb-search {
-  flex: 0 1 19rem;
-  min-width: 10rem;
+  display: block;
+  width: 100%;
+  margin-bottom: 0.4rem;
 }
 .mb-search input {
   width: 100%;
@@ -628,42 +713,34 @@
   padding: 0 1rem;
   border: 1px solid var(--line-2);
   border-radius: var(--r-pill);
-  background: var(--surface);
+  background: var(--bg);
   font-size: var(--fs-sm);
 }
 .mb-search input:focus-visible {
   outline-offset: 0.1rem;
 }
+/* Volby se zalamuji do vice radku uvnitr panelu: zadny vodorovny scroll. */
 .chiprow {
-  flex: 1;
-  min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
-  overflow-x: auto;
-  padding: 0.1rem 0.1rem 0.1rem;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
-  mask-image: linear-gradient(90deg, #000 calc(100% - 1.6rem), transparent);
-}
-.chiprow::-webkit-scrollbar {
-  display: none;
+  min-width: 0;
+  padding: 0.1rem 0 0.4rem;
 }
 .mchip {
-  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
   min-height: 2.1rem;
+  max-width: 100%;
   padding: 0 0.8rem;
   border: 1px solid var(--line-2);
-  border-radius: 62% 38% 56% 44% / 50% 50% 50% 50%;
   border-radius: var(--r-pill);
   background: transparent;
   color: var(--ink);
   font-family: var(--mono);
   font-size: var(--fs-xs);
   white-space: nowrap;
-  scroll-snap-align: start;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-spring);
 }
 @media (hover: hover) {
@@ -684,6 +761,11 @@
 }
 .mchip .ico {
   flex: none;
+}
+.mc-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .mc-n {
   opacity: 0.75;
@@ -716,9 +798,6 @@
 }
 
 /* ---------- postranni panel: statistika a profil ---------- */
-.side-hint {
-  padding: 0 0.2rem;
-}
 .stats {
   display: flex;
   flex-direction: column;
@@ -946,24 +1025,6 @@
 
 /* ---------- uzsi obrazovky ---------- */
 @media (max-width: 40rem) {
-  .mapbar {
-    padding-bottom: 0.4rem;
-  }
-  .mb-count {
-    margin-left: 0;
-    width: 100%;
-    order: 3;
-    justify-content: space-between;
-  }
-  .mb-label {
-    display: none;
-  }
-  .mb-row-main {
-    flex-wrap: wrap;
-  }
-  .mb-search {
-    flex: 1 1 100%;
-  }
   .mb-search input,
   .mb-toggle,
   .mchip {
@@ -974,30 +1035,9 @@
     display: inline-flex;
     align-items: center;
   }
-  .crumb.is-current {
-    min-height: 0;
-  }
   .kind-row,
   .top-row {
     min-height: var(--tap);
-  }
-  .mapbar {
-    position: relative;
-  }
-  .mapbar.is-open .mb-body {
-    position: absolute;
-    z-index: 8;
-    top: 100%;
-    left: 0;
-    right: 0;
-    max-height: 46vh;
-    overflow-y: auto;
-    padding: 0.7rem;
-    background: var(--surface);
-    border: 1px solid var(--line-2);
-    border-radius: var(--r-soft);
-    box-shadow: 0 1rem 2.4rem color-mix(in srgb, var(--ink) 20%, transparent);
-    animation: sheet-in var(--dur-base) var(--ease-soft) both;
   }
   .overview {
     grid-template-rows: minmax(0, 1fr) auto;

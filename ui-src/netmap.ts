@@ -115,6 +115,7 @@ function nodeMarkup(item: Item, zone: Zone | null, selected: string | null, inde
   return `<g class="n" transform="translate(${f1(item.x)} ${f1(item.y)})">
     <g class="node nb s${item.sev} k-${item.kind}${sel ? " is-selected" : ""}" data-x="${f1(item.x)}" data-y="${f1(item.y)}" data-r="${f1(item.r)}" tabindex="-1" role="button" aria-pressed="${sel}" aria-label="${esc(label)}" data-action="select-pebble" data-host="${esc(item.key)}" data-zone="${esc(item.zone)}" style="--bx:${f1(bx)}px;--by:${f1(by)}px;--d:${delay}ms">
       <title>${esc(label)}</title>
+      <g class="nk">
       <circle class="hit" r="${f1(item.r + 8)}"/>
       ${ring}
       <circle class="nbody" r="${f1(item.r)}"/>
@@ -123,6 +124,7 @@ function nodeMarkup(item: Item, zone: Zone | null, selected: string | null, inde
       <text class="nlabel" y="${f1(item.r + 3)}">${esc(name ? name.slice(0, 14) : octet)}</text>
       ${agentBadge(item)}
       <circle class="sel-ring" r="${f1(item.r + 12)}"/>
+      </g>
     </g></g>`;
 }
 

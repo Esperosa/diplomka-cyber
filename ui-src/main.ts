@@ -68,6 +68,7 @@ function renderShell() {
     ${shellHtml()}
   </div>`;
   stage = app.querySelector<HTMLElement>("#stage")!;
+  lastStage = { section: "", html: "" };
   applyTheme();
 }
 
@@ -156,13 +157,21 @@ function focusSignature(el: Element | null): string | null {
   return JSON.stringify([el.tagName, d.action ?? "", d.key ?? d.host ?? d.plan ?? "", el.id, el.getAttribute("name") ?? ""]);
 }
 
+// Posledni vykreslene HTML sekce. Kdyz obnova dat HTML nezmeni, nic se neprepisuje (zadne blikani,
+// zadny reset zoomu, vyberu, scrollu ani fokusu). Mapa i seznamy zustavaji v DOM, jak jsou.
+let lastStage = { section: "", html: "" };
+
 function renderStage() {
+  const html = currentView().render();
+  if (state.section === lastStage.section && html === lastStage.html && stage.childElementCount) return;
+  lastStage = { section: state.section, html };
+
   const sigBefore = focusSignature(document.activeElement);
   const scrolls = new Map<string, number>();
   stage.querySelectorAll<HTMLElement>("[data-keep]").forEach((node) => scrolls.set(node.dataset.keep!, node.scrollTop));
   const hadStageScroll = stage.scrollTop;
 
-  stage.innerHTML = currentView().render();
+  stage.innerHTML = html;
   stage.dataset.section = state.section;
 
   stage.querySelectorAll<HTMLElement>("[data-keep]").forEach((node) => {
