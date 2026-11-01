@@ -21,6 +21,8 @@ use std::{
     time::Instant,
 };
 
+mod v3;
+
 use chrono::Utc;
 use clap::Args;
 use ipnet::IpNet;
@@ -827,6 +829,19 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
+    // Engine v3 (krok 1): stavovy detektor a perzistentni stav ve workspace.
+    let mut v3_session = v3::V3Session::open(
+        &args.workspace,
+        app_config.engine,
+        &hosts,
+        passive_window.start,
+    )
+    .map_err(|error| anyhow::Error::new(error).context("Stav jadra v3 se nenacetl"))?;
+    let detector_ref: &(dyn passive::ConnectionDetector + Sync) =
+        match v3_session.as_ref().and_then(|session| session.detector()) {
+            Some(detector) => detector,
+            None => &passive::LegacyAnomalyDetector,
+        };
     let hosts_ref = &hosts;
     let context_config_ref = &context_config;
     let lane_config_ref = &lane_config;
@@ -866,7 +881,7 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
                             passive_window.start,
                             passive_window.end,
                             hosts_ref,
-                            &passive::LegacyAnomalyDetector,
+                            detector_ref,
                         )
                         .map_err(|error| {
                             anyhow::Error::new(error).context("Pasivni import selhal")
@@ -913,6 +928,11 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
             metrics,
         ))
     })?;
+    if let Some(session) = v3_session.as_mut() {
+        session
+            .finish_detection()
+            .map_err(|error| anyhow::Error::new(error).context("Ulozeni stavu detektoru v3"))?;
+    }
     let parallel_stage_wall_ms = parallel_started_at.elapsed().as_millis() as u64;
     let parallel_stage_workers = parallel_metrics.len();
     mas_agent_metrics.extend(parallel_metrics);
@@ -938,9 +958,15 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     // `asset_id`/`identity_note` na každý host, beze změny `host_key`/
     // decision/triage logiky. Musí běžet AŽ TADY (ne dřív), protože hloubkové
     // ověření výš může `hosts` znovu sestavit z `normalize_inventory`.
-    let identity_matches =
+    let identity_matches = if app_config.engine.identity_v3() {
+        identity::resolve_and_annotate_v3(
+            &mut hosts,
+            &args.workspace.join("identity-registry-v3.json"),
+        )
+    } else {
         identity::resolve_and_annotate(&mut hosts, &args.workspace.join("identity-registry.json"))
-            .map_err(|error| anyhow::Error::new(error).context("Identity resolver selhal"))?;
+    }
+    .map_err(|error| anyhow::Error::new(error).context("Identity resolver selhal"))?;
     // `hypothesis::build_hypotheses_for_report` potrebuje tuhle mapu POSTAVENOU
     // TADY, dokud `hosts`'s poradi jiste odpovida `identity_matches` - `hosts`
     // se nize predava (moved) do `report::build_report`, ktere ho znovu seradi
@@ -1379,6 +1405,12 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     report
         .findings
         .dedup_by(|left, right| left.finding_id == right.finding_id);
+    if let Some(session) = v3_session.as_mut() {
+        let now = report.run.started_at;
+        session
+            .post_findings(&args.workspace, &mut report, &identity_by_host_key, now)
+            .map_err(|error| anyhow::Error::new(error).context("Pamet nalezu v3"))?;
+    }
     // Case Memory (chybejici soubor = prazdna pamet, nic se nemeni) + historie
     // vykonanych kontrol: odhady pro hypotezy a planner pochazeji z overenych dat.
     let case_memory =

@@ -120,6 +120,14 @@ pub struct RunReport {
     #[serde(default)]
     pub verification_results: Vec<crate::verification_exec::VerificationResult>,
     pub diff: Option<DiffReport>,
+    /// Engine v3 (pamet nalezu): zivotni cyklus kazdeho nalezu (novy, opakovany,
+    /// eskalovany, automaticky vyreseny s duvodem). Prazdne v rezimu legacy.
+    #[serde(
+        default,
+        rename = "findingLifecycle",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub finding_lifecycle: Vec<crate::finding_memory::LifecycleRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

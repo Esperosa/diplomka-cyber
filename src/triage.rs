@@ -288,6 +288,7 @@ mod tests {
             verification_plans: Vec::new(),
             verification_results: Vec::new(),
             diff: None,
+            finding_lifecycle: Vec::new(),
         }
     }
 
