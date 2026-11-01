@@ -812,9 +812,12 @@ impl Ladder {
         let mut keys: Vec<FindingKey> = self.cases.keys().cloned().collect();
         keys.sort();
         let mut touched: HashSet<FindingKey> = HashSet::new();
-        // opakovane vybirat nejlepsi pripravenou kontrolu, dokud je rozpocet
-        loop {
-            let ready: Vec<(f64, &FindingKey)> = keys
+        // po kolech: v kazdem kole jedna kontrola kazdeho pripraveneho pripadu, poradi
+        // podle EVOI proxy s castecnym losovanim (O(n log n) na kolo, kol <= delka planu)
+        let mut exhausted = false;
+        let mut round = 0u64;
+        while !exhausted {
+            let mut ready: Vec<(f64, u64, FindingKey)> = keys
                 .iter()
                 .filter_map(|key| {
                     let case = self.cases.get(key)?;
@@ -824,48 +827,58 @@ impl Ladder {
                         return None;
                     }
                     let check = *case.plan.front()?;
-                    if check.level() == Level::L3 && active_left == 0 {
-                        return None;
-                    }
                     let impact = if case.input.high_impact { 1.0 } else { 0.5 };
                     let score = impact * entropy(case.posterior()) / cost(check);
-                    Some((score, key))
+                    Some((
+                        score,
+                        hash_text(&key.entity) ^ hash_text(&key.finding_type),
+                        key.clone(),
+                    ))
                 })
                 .collect();
             if ready.is_empty() {
                 break;
             }
-            let roll = mix(self.secret
-                ^ cycle.wrapping_mul(0x51ED)
-                ^ self.stats.checks_by_level.values().sum::<u64>());
-            let explore = (roll % 10_000) as f64 / 10_000.0 < self.policy.explore;
-            let pick = if explore {
-                self.stats.explored += 1;
-                ready[(mix(roll) % ready.len() as u64) as usize].1.clone()
-            } else {
-                ready
-                    .iter()
-                    .max_by(|a, b| {
-                        a.0.total_cmp(&b.0)
-                            .then_with(|| hash_text(&b.1.entity).cmp(&hash_text(&a.1.entity)))
-                            .then_with(|| b.1.cmp(a.1))
-                    })
-                    .map(|(_, key)| (*key).clone())
-                    .expect("neprazdne")
-            };
-            let check = *self.cases[&pick].plan.front().expect("plan");
-            let price = cost(check);
-            if price > budget {
+            ready.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+            // losovani (RQ3 Z11): podil `explore` pozic se prohodi s nahodnou pozdejsi
+            let n = ready.len();
+            for i in 0..n {
+                let roll = mix(self.secret
+                    ^ cycle.wrapping_mul(0x51ED)
+                    ^ round.wrapping_mul(0x9E37)
+                    ^ i as u64);
+                if (roll % 10_000) as f64 / 10_000.0 < self.policy.explore && i + 1 < n {
+                    let j = i + 1 + (mix(roll) % (n - i - 1) as u64) as usize;
+                    ready.swap(i, j);
+                    self.stats.explored += 1;
+                }
+            }
+            round += 1;
+            let mut progressed = false;
+            for (_, _, key) in ready {
+                let Some(check) = self.cases.get(&key).and_then(|c| c.plan.front().copied()) else {
+                    continue;
+                };
+                if check.level() == Level::L3 && active_left == 0 {
+                    continue;
+                }
+                let price = cost(check);
+                if price > budget {
+                    exhausted = true;
+                    break;
+                }
+                budget -= price;
+                if check.level() == Level::L3 {
+                    active_left -= 1;
+                }
+                touched.insert(key.clone());
+                progressed = true;
+                if let Some(decision) = self.run_check(&key, check, cycle, env) {
+                    decisions.push(decision);
+                }
+            }
+            if !progressed {
                 break;
-            }
-            budget -= price;
-            if check.level() == Level::L3 {
-                active_left -= 1;
-            }
-            touched.insert(pick.clone());
-            let decision = self.run_check(&pick, check, cycle, env);
-            if let Some(decision) = decision {
-                decisions.push(decision);
             }
         }
         // pripady, na ktere nezbyl rozpocet: odlozit, po `max_deferred` eskalovat

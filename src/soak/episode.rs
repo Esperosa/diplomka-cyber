@@ -982,6 +982,8 @@ fn run_episode_inner(
             .collect();
         let memory_started = Instant::now();
         let mut lc = LadderCycle::default();
+        // odhady prioru z Case Memory jednou za cyklus (odhad prochazi vsechny zaznamy)
+        let mut prior_cache: HashMap<String, f64> = HashMap::new();
         let mut shown: Vec<Shown> = match v3.as_mut() {
             None => run_report
                 .findings
@@ -1155,6 +1157,7 @@ fn run_episode_inner(
                                 prior: if learning_on {
                                     learned_prior(
                                         &memory,
+                                        &mut prior_cache,
                                         &finding.finding_type,
                                         runtime.device_classes.get(&host_ip),
                                     )
@@ -2382,15 +2385,19 @@ fn run_episode_inner(
 /// typ zařízení), jinak typ, jinak výchozí. Hierarchický ústup (R12b, A21).
 fn learned_prior(
     memory: &CaseMemory,
+    cache: &mut HashMap<String, f64>,
     finding_type: &str,
     class: Option<&crate::device_class::DeviceClass>,
 ) -> f64 {
     let kind = class.map(|c| c.kind.label()).unwrap_or("unknown");
-    memory
-        .estimate(&format!("ladder:{finding_type}@{kind}"))
-        .or_else(|| memory.estimate(&format!("ladder:{finding_type}")))
-        .map(|e| e.probability.clamp(0.01, 0.99))
-        .unwrap_or(crate::verify_ladder::DEFAULT_PRIOR)
+    let key = format!("{finding_type}@{kind}");
+    *cache.entry(key).or_insert_with(|| {
+        memory
+            .estimate(&format!("ladder:{finding_type}@{kind}"))
+            .or_else(|| memory.estimate(&format!("ladder:{finding_type}")))
+            .map(|e| e.probability.clamp(0.01, 0.99))
+            .unwrap_or(crate::verify_ladder::DEFAULT_PRIOR)
+    })
 }
 
 /// Poradi zdroju podle `score_source_hosts` (sestupne, deterministicky pri shode).
@@ -2709,5 +2716,30 @@ mod engine_v3_tests {
             "{:?}",
             on.agg.violation_samples
         );
+    }
+
+    /// Ruční profil kroku 2 (nejpomalejší síť ladicích seedů):
+    /// `cargo test --release --lib profile_step2 -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn profile_step2_slowest_network() {
+        let result = run_episode(&EpisodeConfig {
+            run_seed: 20261104,
+            network_id: 36,
+            hours: 0,
+            scratch: std::env::temp_dir().join("bakula-soak-profile2"),
+            engine: EngineConfig::v3(),
+            feedback: false,
+            mask: WorldMask::None,
+            counterfactual: None,
+            calibration: None,
+        });
+        for (stage, hist) in &result.agg.perf {
+            println!(
+                "{stage:<22} prumer {:.1} ms  p99 {:.1} ms",
+                hist.mean() * 1000.0,
+                hist.percentile(0.99) * 1000.0
+            );
+        }
     }
 }
