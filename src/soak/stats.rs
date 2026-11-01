@@ -155,6 +155,9 @@ pub struct OutputStats {
     /// Zavreno omylem PRICINNE: utok v tomto cyklu posilal toky na cil nalezu nebo z jeho
     /// dominantniho zdroje (sirsi `auto_closures_wrong` = nalez jen zminuje klicovou IP).
     pub auto_closures_wrong_causal: u64,
+    /// Zavreno omylem KONTRAFAKTUALNE (sjednocena definice kroku 3, stejna jako
+    /// `ladder_refuted_wrong_cf`): uzavreny nalez ve svete bez utoku chybi.
+    pub auto_closures_wrong_cf: u64,
     pub audit_wrong_causal: u64,
     /// Zavreno omylem podle `duvod|typ nalezu|rodina utoku` (diagnostika).
     pub auto_closures_wrong_detail: BTreeMap<String, u64>,
@@ -257,6 +260,7 @@ impl OutputStats {
         );
         self.audit_sampled += o.audit_sampled;
         self.auto_closures_wrong_causal += o.auto_closures_wrong_causal;
+        self.auto_closures_wrong_cf += o.auto_closures_wrong_cf;
         self.audit_wrong_causal += o.audit_wrong_causal;
         self.audit_wrong += o.audit_wrong;
         self.memory_peak_entries = self.memory_peak_entries.max(o.memory_peak_entries);

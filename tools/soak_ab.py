@@ -63,6 +63,11 @@ def get(row, path):
     return 0 if value is None else value
 
 
+def getd(row, path):
+    value = get(row, path)
+    return value if isinstance(value, dict) else {}
+
+
 def boot_indices(keys, rng):
     by_seed = defaultdict(list)
     for index, key in enumerate(keys):
@@ -477,6 +482,52 @@ def main():
         lines.append(f"Identita {side}: falesne rozdeleno {p1 * 100:.1f} % ({l1 * 100:.1f} az {h1 * 100:.1f}, n={dev}), "
                      f"falesne slouceno {p2 * 100:.1f} % ({l2 * 100:.1f} az {h2 * 100:.1f}, n={assets}).")
     lines.append("")
+    # krok 3: sjednocene "zavreno omylem" a nestkodne pravidelne vzory
+    lines.append("**zavreno omylem, sjednocena definice (krok 3): automaticke uzavreni (kontext v cyklu "
+                 "nebo vyvraceni zebrikem), jehoz nalez ve svete bez utoku chybi**")
+    lines.append("")
+    lines.append("| rameno | uzavreni | omylem | podil (95% CI) | z toho kontext | z toho zebrik |")
+    lines.append("|---|---:|---:|---|---:|---:|")
+    for side, rows in (("A", a_rows), ("B", b_rows)):
+        s = lambda m: sum(get(rows[k], m) for k in common)
+        n = s("output.auto_closures") + s("output.ladder_refuted")
+        w_ctx, w_lad = s("output.auto_closures_wrong_cf"), s("output.ladder_refuted_wrong_cf")
+        p, lo, hi = wilson(w_ctx + w_lad, n)
+        lines.append(f"| {side} | {n} | {w_ctx + w_lad} | {p * 100:.2f} % ({lo * 100:.2f} az {hi * 100:.2f}) | "
+                     f"{w_ctx}/{s('output.auto_closures')} | {w_lad}/{s('output.ladder_refuted')} |")
+    lines.append("")
+    for side, rows in (("A", a_rows), ("B", b_rows)):
+        s = lambda m: sum(get(rows[k], m) for k in common)
+        p, lo, hi = wilson(s("output.states_auto_resolved"), s("output.states_captured"))
+        lines.append(f"Automaticky vyresene odlisne stavy {side}: {p * 100:.1f} % ({lo * 100:.1f} az {hi * 100:.1f}).")
+    lines.append("")
+    pats = sorted({key for k in common for rows in (a_rows, b_rows) for key in getd(rows[k], "output.regular_fp")})
+    if pats:
+        lines.append("**falesne poplachy na neskodnych pravidelnych vzorech (vzor|typ, na sit-den)**")
+        lines.append("")
+        lines.append("| vzor|typ | A vse | A zobrazene | B vse | B zobrazene |")
+        lines.append("|---|---:|---:|---:|---:|")
+        tot = [0, 0, 0, 0]
+        for pat in pats:
+            vals = [sum(getd(rows[k], f"output.{m}").get(pat, 0) for k in common) / days
+                    for rows in (a_rows, b_rows) for m in ("regular_fp", "regular_fp_displayed")]
+            tot = [t + v for t, v in zip(tot, vals)]
+            if max(vals) >= 0.01:
+                lines.append(f"| {pat} | " + " | ".join(num(v) for v in vals) + " |")
+        lines.append("| **celkem** | " + " | ".join(num(v) for v in tot) + " |")
+        flows = sum(get(b_rows[k], "output.regular_flows") for k in common) / days
+        lines.append("")
+        lines.append(f"Toky neskodnych vzoru: {num(flows)} na sit-den.")
+        lines.append("")
+    kinds = sorted({t for k in common for rows in (a_rows, b_rows) for t in getd(rows[k], "output.behavior_findings_by_type")})
+    if kinds:
+        lines.append("| behavioralni nalezy x cykly (na sit-den) | A | B |")
+        lines.append("|---|---:|---:|")
+        for t in kinds:
+            va = sum(getd(a_rows[k], "output.behavior_findings_by_type").get(t, 0) for k in common) / days
+            vb = sum(getd(b_rows[k], "output.behavior_findings_by_type").get(t, 0) for k in common) / days
+            lines.append(f"| {t} | {num(va)} | {num(vb)} |")
+        lines.append("")
     for side, rows in (("A", a_rows), ("B", b_rows)):
         p99 = sorted(get(rows[k], "cycle_p99_s") for k in common)
         wall = sum(get(rows[k], "wall_s") for k in common)

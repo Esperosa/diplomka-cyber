@@ -809,6 +809,7 @@ fn run_episode_inner(
         agg.enforcement.benign_flows_total += output.benign_flows;
         agg.enforcement.collateral_flows += output.benign_flows_blocked;
 
+        let inventory_started = Instant::now();
         if let Some(inventory) = &output.inventory {
             let mut hosts = report::normalize_inventory(inventory.clone());
             for host in &mut hosts {
@@ -871,6 +872,7 @@ fn run_episode_inner(
             restart_cold = false;
             hosts_cache = hosts;
         }
+        agg.perf_record("inventory", inventory_started.elapsed().as_secs_f64());
         let mut hosts = match v3.as_ref() {
             Some(runtime) if cfg.engine.unexpected_v3() => runtime.inventory.hosts(),
             _ => hosts_cache.clone(),
@@ -1550,6 +1552,7 @@ fn run_episode_inner(
         }
         run_report.verification_plans = plans;
 
+        let scoring_started = Instant::now();
         // --- 5. skorovani proti ground truth ---
         let behavioral: Vec<&Finding> = run_report
             .findings
@@ -1796,6 +1799,13 @@ fn run_episode_inner(
                             || show.sources.iter().any(|s| truth.cycle_sources.contains(s)))
                 });
                 agg.output.auto_closures_wrong_causal += causal as u64;
+                // sjednocena definice (krok 3): nalez kontrafaktualne zpusobil utok
+                // (ve svete bez utoku v tomto cyklu chybi)
+                let cf_caused = attacked
+                    && cf
+                        .as_deref()
+                        .is_some_and(|cf| cf.all.absent(cycle, fhash, false));
+                agg.output.auto_closures_wrong_cf += cf_caused as u64;
                 let reason = kind.label().to_string();
                 agg.output.auto_closures += 1;
                 *agg.output
@@ -2176,6 +2186,7 @@ fn run_episode_inner(
         }
 
         // --- 6. zasahy ---
+        agg.perf_record("scoring", scoring_started.elapsed().as_secs_f64());
         let enforcement_started = Instant::now();
         (|| -> Result<()> {
             // 6a. rozhodnuti operatora o navrzich z drivejsich cyklu
@@ -2306,6 +2317,7 @@ fn run_episode_inner(
             Ok(())
         })()?;
         agg.perf_record("enforcement", enforcement_started.elapsed().as_secs_f64());
+        let history_started = Instant::now();
 
         if let Some(runtime) = v3.as_mut() {
             if ladder_on {
@@ -2330,6 +2342,7 @@ fn run_episode_inner(
             }
             runtime.end_cycle(ts(t0 + CYCLE_SECS))?;
         }
+        agg.perf_record("history_end", history_started.elapsed().as_secs_f64());
         if cycle % 48 == 47 {
             tracker.sweep(cycle, &mut agg.output);
         }
