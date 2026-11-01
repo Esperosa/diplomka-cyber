@@ -669,6 +669,19 @@ fn profile(archetype: Archetype) -> Profile {
     }
 }
 
+/// Minimalni pocet /24 podsiti pro `total` zarizeni: z celku (~110 na /24) i ze
+/// statickych adres (horni odhad podilu statickych + 15 % rezerva, ~90 na /24,
+/// staticky rozsah 2..=99 bez brany a DNS). Regrese: panika "kapacita podsiti"
+/// v soak v2b (sit 808) u huste serverovych archetypu.
+fn subnets_needed(total: usize, server_share: f64, dhcp_share: f64) -> u64 {
+    let static_share = (server_share + (1.0 - server_share) * (1.0 - dhcp_share)).clamp(0.0, 1.0);
+    let statics = (total as f64 * static_share * 1.15).ceil() as u64;
+    (total as u64)
+        .div_ceil(110)
+        .max(statics.div_ceil(90))
+        .max(1)
+}
+
 fn pick_weighted(rng: &mut Rng, table: &[(Role, f64)]) -> Role {
     let weights: Vec<f64> = table.iter().map(|(_, w)| *w).collect();
     table[rng.weighted(&weights)].0
@@ -682,8 +695,11 @@ impl NetworkModel {
         let archetype = Archetype::ALL[rng.weighted(&weights)];
         let prof = profile(archetype);
         let total = rng.range(prof.devices.0, prof.devices.1) as usize;
-        // kapacita jedne /24: ~98 statickych + ~150 DHCP adres; drzime se hluboko pod nimi
-        let needed = (total as u64).div_ceil(110).max(1);
+        // kapacita jedne /24: ~98 statickych (2..=99) + ~150 DHCP adres (100..=250).
+        // Hustě serverové archetypy (Cloud, Datacenter, Industrial) mají skoro jen
+        // statické adresy, proto se počet podsítí odvozuje i ze statických adres
+        // (horní odhad podílu + 15 % rezerva, ~90 na /24), ne jen z celku / 110.
+        let needed = subnets_needed(total, prof.server_share, prof.dhcp_share);
         let subnets = rng
             .range(prof.subnets.0, prof.subnets.1)
             .max(needed)
@@ -734,7 +750,18 @@ impl NetworkModel {
                     }
                 }
             }
-            let (subnet, octet) = chosen.expect("kapacita podsiti");
+            // Pojistka: preferovany rozsah je vsude plny -> libovolna volna adresa
+            // 2..=250 (zadna panika); kdyz neni ani ta, zarizeni se neprida.
+            if chosen.is_none() {
+                chosen = (0..subnets).find_map(|subnet| {
+                    (2usize..=250)
+                        .find(|candidate| !octets_used[subnet][*candidate])
+                        .map(|free| (subnet, free as u8))
+                });
+            }
+            let Some((subnet, octet)) = chosen else {
+                return false;
+            };
             octets_used[subnet][octet as usize] = true;
             let id = devices.len() as u32;
             let services = services_for(role, rng);
@@ -770,6 +797,7 @@ impl NetworkModel {
                 peers: Vec::new(),
                 up: true,
             });
+            true
         };
 
         add(&mut devices, &mut rng, Role::Gateway, 0, Some(1), false);
@@ -794,7 +822,9 @@ impl NetworkModel {
             let dhcp = (!role.is_server() && role != Role::Hmi && rng.chance(prof.dhcp_share))
                 || role == Role::Mobile
                 || (archetype == Archetype::Cloud && role == Role::Container);
-            add(&mut devices, &mut rng, role, preferred, None, dhcp);
+            if !add(&mut devices, &mut rng, role, preferred, None, dhcp) {
+                break; // vsechny podsite plne (nenastava pri spravnem `subnets_needed`)
+            }
         }
 
         let server_ids: Vec<u32> = devices
@@ -1215,5 +1245,34 @@ mod tests {
         assert_eq!(roles.len(), Role::ALL.len(), "{roles:?}");
         assert!(max_devices > 2500, "nejvetsi sit {max_devices}");
         assert!(max_subnets >= 30, "nejvic podsiti {max_subnets}");
+    }
+
+    /// Regrese soak v2b: sit 808 (seed 20261101) padala na "kapacita podsiti".
+    #[test]
+    fn dense_server_networks_never_run_out_of_static_addresses() {
+        let net = NetworkModel::generate(20261101, 808);
+        assert!(!net.devices.is_empty());
+        for seed in [20261101u64, 20261102, 20261103, 20261104] {
+            for id in 0..1500 {
+                let net = NetworkModel::generate(seed, id);
+                let prof = profile(net.archetype);
+                assert!(
+                    net.devices.len() as u64 >= prof.devices.0,
+                    "sit {seed}/{id}: {} zarizeni",
+                    net.devices.len()
+                );
+                let statics = net.devices.iter().filter(|d| !d.dhcp).count();
+                assert!(statics <= net.prefixes.len() * 98, "sit {seed}/{id}");
+            }
+        }
+    }
+
+    #[test]
+    fn subnets_needed_counts_static_addresses() {
+        // Cloud-like: 800 zarizeni, 90 % serveru, zadne DHCP -> skoro vse staticke
+        assert!(subnets_needed(800, 0.9, 0.0) >= 10);
+        // Kancelar: 800 zarizeni, vetsina DHCP -> rozhoduje celkovy pocet
+        assert_eq!(subnets_needed(800, 0.1, 0.8), 800u64.div_ceil(110));
+        assert_eq!(subnets_needed(1, 0.0, 1.0), 1);
     }
 }
