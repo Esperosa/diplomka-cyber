@@ -185,7 +185,7 @@ impl V3Session {
             inventory.merge_scan(hosts);
         }
         let tables = crate::device_class::ClassifierTables::default();
-        let peer_groups: std::collections::HashMap<String, String> = if engine.devices() {
+        let peer_groups: std::collections::HashMap<String, String> = if engine.peer_baseline() {
             inventory
                 .hosts()
                 .iter()

@@ -40,6 +40,7 @@ pub struct V3Runtime {
     sources: SourceMap,
     /// IP -> peer skupina (typ zarizeni + podsit), obnovuje se po kazdem skenu (krok 2D).
     pub peer_groups: std::collections::HashMap<String, String>,
+    no_groups: std::collections::HashMap<String, String>,
     /// IP -> typ zarizeni z posledniho skenu (krok 2D).
     pub device_classes: std::collections::HashMap<String, crate::device_class::DeviceClass>,
     /// Ulozena historie toku (L0, krok 2B).
@@ -67,6 +68,7 @@ impl V3Runtime {
             identity: IdentityResolverV3::new(),
             sources: SourceMap::new(),
             peer_groups: Default::default(),
+            no_groups: Default::default(),
             device_classes: Default::default(),
             history: Default::default(),
             ladder: crate::verify_ladder::Ladder::new(
@@ -132,7 +134,11 @@ impl V3Runtime {
             switches,
             &self.thresholds,
             now,
-            &self.peer_groups,
+            if self.engine.peer_baseline() {
+                &self.peer_groups
+            } else {
+                &self.no_groups
+            },
         );
         self.sources = out.sources;
         out.events

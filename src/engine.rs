@@ -67,8 +67,15 @@ pub struct V3Features {
     pub ladder: bool,
     /// Učení z výsledků ověření a kalibrace (krok 2C).
     pub learning: bool,
-    /// Typ zařízení v jádru: peer skupiny a kontext ověřování (krok 2D).
+    /// Typ zařízení v jádru: kontext ověřování a ochrana křehkých zařízení (krok 2D).
     pub devices: bool,
+    /// Peer baseline detektoru podle typu zařízení a podsítě (krok 2D, zvlášť měřeno).
+    #[serde(default = "default_true")]
+    pub peers: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for V3Features {
@@ -78,7 +85,7 @@ impl Default for V3Features {
 }
 
 impl V3Features {
-    pub const NAMES: [&'static str; 10] = [
+    pub const NAMES: [&'static str; 11] = [
         "memory",
         "rate",
         "volume",
@@ -89,6 +96,7 @@ impl V3Features {
         "ladder",
         "learning",
         "devices",
+        "peers",
     ];
 
     pub fn all() -> Self {
@@ -103,6 +111,7 @@ impl V3Features {
             ladder: true,
             learning: true,
             devices: true,
+            peers: true,
         }
     }
 
@@ -118,6 +127,7 @@ impl V3Features {
             ladder: false,
             learning: false,
             devices: false,
+            peers: false,
         }
     }
 
@@ -128,6 +138,7 @@ impl V3Features {
             ladder: false,
             learning: false,
             devices: false,
+            peers: false,
             ..Self::all()
         }
     }
@@ -144,6 +155,7 @@ impl V3Features {
             "ladder" => &mut self.ladder,
             "learning" => &mut self.learning,
             "devices" => &mut self.devices,
+            "peers" => &mut self.peers,
             _ => return None,
         })
     }
@@ -231,6 +243,10 @@ impl EngineConfig {
     pub fn devices(&self) -> bool {
         self.on(|f| f.devices)
     }
+    /// Peer baseline detektoru podle typu zařízení (vyžaduje rozpoznání zařízení).
+    pub fn peer_baseline(&self) -> bool {
+        self.on(|f| f.devices && f.peers)
+    }
     /// Běží v3 detektor (aspoň jedna detekční změna)?
     pub fn v3_detector(&self) -> bool {
         self.robust_rate() || self.volume_baseline() || self.unexpected_v3()
@@ -277,7 +293,7 @@ mod tests {
         };
         assert_eq!(
             cfg.label(),
-            "v3[memory+unexpected+context+identity+recall+ladder+learning+devices]"
+            "v3[memory+unexpected+context+identity+recall+ladder+learning+devices+peers]"
         );
         let step1 = EngineConfig {
             mode: EngineMode::V3,
