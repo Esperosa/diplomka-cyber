@@ -84,6 +84,31 @@ pub struct EpisodeConfig {
     pub counterfactual: Option<Arc<Counterfactual>>,
     /// Kalibrace posteriory zebriku (krok 2C), fit na jinych sitich nez tato.
     pub calibration: Option<Arc<crate::calibration::IsotonicCalibrator>>,
+    /// Volby sveta (krok 3): sum neskodnych pravidelnych vzoru.
+    pub world: WorldOptions,
+}
+
+/// Volby generovaneho sveta (stejne ve vsech ramenech A/B).
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct WorldOptions {
+    /// Nasobek objemu neskodnych pravidelnych a dlouhych vzoru (`--noise`, 0 = vypnuto).
+    pub noise: f64,
+    /// Vynucena trida XXXL (8 000 az 10 000 zarizeni, `--size xxxl`).
+    pub xxxl: bool,
+    /// Rodiny utoku ve svete (`--families`); ostatni utoky se z planu vyradi, svet
+    /// zbylych utoku a pozadi je beze zmeny (kazda udalost ma vlastni proud).
+    pub families: crate::soak::traffic::FamilySet,
+}
+
+impl Default for WorldOptions {
+    fn default() -> Self {
+        Self {
+            noise: 1.0,
+            xxxl: false,
+            families: Default::default(),
+        }
+    }
 }
 
 /// Maska udalosti sveta. Kontrafaktual = stejny seed, stejny svet, jen bez utoku.
@@ -405,7 +430,7 @@ fn run_episode_inner(
     world: &mut CfWorld,
     attack_ids: &mut Vec<u32>,
 ) -> Result<()> {
-    let mut model = NetworkModel::generate(cfg.run_seed, cfg.network_id);
+    let mut model = NetworkModel::generate_with(cfg.run_seed, cfg.network_id, cfg.world.xxxl);
     *agg.archetypes
         .entry(format!("{:?}", model.archetype))
         .or_default() += 1;
@@ -413,6 +438,8 @@ fn run_episode_inner(
     let telemetry: Telemetry = random_telemetry(&mut rng, model.prefixes.len());
     let hours = if cfg.hours > 0 {
         cfg.hours
+    } else if cfg.world.xxxl {
+        48
     } else {
         // dlouhodobost: male site bezi i mesic virtualniho provozu, velke max tyden
         match model.archetype {
@@ -442,6 +469,12 @@ fn run_episode_inner(
         }
     }
     let mut truths = plan_episode(&model, &mut rng, hours, &telemetry);
+    truths.retain(|t| match t.kind {
+        Kind::Attack(family) => cfg.world.families.includes(family),
+        Kind::Benign(_) => true,
+    });
+    // krok 3: neskodne pravidelne vzory (vlastni proud, svet utoku beze zmeny)
+    let regular = crate::soak::benign_regular::plan(&model, cfg.world.noise);
     *attack_ids = truths
         .iter()
         .filter(|t| matches!(t.kind, Kind::Attack(_)))
@@ -758,6 +791,7 @@ fn run_episode_inner(
                 rogue: rogue.clone(),
                 scan_now: cycle % 4 == 0 || rogue_scheduled,
                 masked: &masked,
+                regular: &regular,
             };
             generate_cycle(&ctx, &mut truths, &mut cycle_rng)
         });
@@ -1530,6 +1564,18 @@ fn run_episode_inner(
         let ranks_prod = rank_sources(&in_scope_obs);
         let ranks_egress = rank_sources(&output.observations);
         let inventory_ips: HashSet<&str> = hosts.iter().map(|h| h.ip.as_str()).collect();
+        agg.output.regular_flows += output.regular_flows;
+        // dvojice neskodnych pravidelnych vzoru v cyklu (oba smery) pro mereni FP
+        let regular_pairs: HashMap<(&str, &str), &'static str> = output
+            .regular_pairs
+            .iter()
+            .flat_map(|(a, b, kind)| {
+                [
+                    ((a.as_str(), b.as_str()), kind.label()),
+                    ((b.as_str(), a.as_str()), kind.label()),
+                ]
+            })
+            .collect();
         let unmapped_by_id: HashMap<&str, &NormalizedEvent> = run_report
             .unmapped_events
             .iter()
@@ -1637,6 +1683,19 @@ fn run_episode_inner(
                 }
                 labels.insert(finding.finding_id.clone(), attacked);
                 if !attributed {
+                    if !regular_pairs.is_empty()
+                        && let Some(kind) = regular_kind_of(
+                            finding,
+                            lc.sources.get(finding_index).map(Vec::as_slice),
+                            &regular_pairs,
+                        )
+                    {
+                        let key = format!("{kind}|{}", finding.finding_type);
+                        *agg.output.regular_fp.entry(key.clone()).or_default() += 1;
+                        if show.displayed {
+                            *agg.output.regular_fp_displayed.entry(key).or_default() += 1;
+                        }
+                    }
                     agg.fp_noise += 1;
                     *agg.fp_noise_by_type
                         .entry(finding.finding_type.clone())
@@ -2518,6 +2577,27 @@ fn learned_prior(
 }
 
 /// Poradi zdroju podle `score_source_hosts` (sestupne, deterministicky pri shode).
+/// Patri falesny poplach k dvojici neskodneho pravidelneho vzoru? Host nalezu a jeho
+/// protistrana (IP ze sluzby nebo zdroj) tvori dvojici vzoru v tomto cyklu.
+fn regular_kind_of(
+    finding: &Finding,
+    sources: Option<&[String]>,
+    pairs: &HashMap<(&str, &str), &'static str>,
+) -> Option<&'static str> {
+    let service = finding.service_key.as_deref().unwrap_or("");
+    let host = finding
+        .host_key
+        .as_deref()
+        .unwrap_or_else(|| split_service_key(service).1);
+    let ip_like = |s: &&str| s.parse::<std::net::IpAddr>().is_ok();
+    service
+        .split(['/', '#'])
+        .filter(ip_like)
+        .chain(sources.unwrap_or(&[]).iter().map(String::as_str))
+        .filter(|other| *other != host)
+        .find_map(|other| pairs.get(&(host, other)).copied())
+}
+
 fn rank_sources(observations: &[ConnectionObservation]) -> Vec<String> {
     let mut scored: Vec<(String, f64)> = score_source_hosts(observations).into_iter().collect();
     scored.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
@@ -2548,6 +2628,7 @@ mod tests {
             mask: WorldMask::None,
             counterfactual: None,
             calibration: None,
+            world: WorldOptions::default(),
         }
     }
 
@@ -2621,6 +2702,7 @@ mod tests {
                     mask: WorldMask::None,
                     counterfactual: None,
                     calibration: None,
+                    world: WorldOptions::default(),
                 })
             });
             assert!(result.is_ok(), "sit {id} spadla");
@@ -2682,6 +2764,7 @@ mod engine_v3_tests {
             mask: WorldMask::None,
             counterfactual: None,
             calibration: None,
+            world: WorldOptions::default(),
         })
     }
 
@@ -2740,6 +2823,7 @@ mod engine_v3_tests {
                 mask: WorldMask::None,
                 counterfactual: None,
                 calibration: None,
+                world: WorldOptions::default(),
             };
             let background = run_episode(&EpisodeConfig {
                 mask: WorldMask::AllAttacks,
@@ -2848,6 +2932,86 @@ mod engine_v3_tests {
         assert!(!by_type.is_empty(), "vrstva nic nevydala: {by_type:?}");
     }
 
+    /// Krok 3, bod 2: šum neškodných pravidelných vzorů dojde do epizody a falešné
+    /// poplachy na nich se počítají podle vzoru; bez šumu žádné toky vzorů nejsou.
+    #[test]
+    fn regular_benign_noise_reaches_episode_and_fp_is_attributed_to_pattern() {
+        let with = |noise: f64| {
+            run_episode(&EpisodeConfig {
+                world: WorldOptions {
+                    noise,
+                    ..Default::default()
+                },
+                ..cfg_v3(5, 96)
+            })
+        };
+        let off = with(0.0);
+        assert_eq!(off.agg.output.regular_flows, 0);
+        assert!(off.agg.output.regular_fp.is_empty());
+        let on = with(10.0);
+        assert!(on.agg.output.regular_flows > 0);
+        assert!(on.agg.invariant_violations.is_empty());
+        let labels: Vec<&str> = crate::soak::benign_regular::RegularKind::ALL
+            .iter()
+            .map(|k| k.label())
+            .collect();
+        for key in on.agg.output.regular_fp.keys() {
+            let kind = key.split('|').next().unwrap_or("");
+            assert!(labels.contains(&kind), "{key}");
+        }
+        for (key, shown) in &on.agg.output.regular_fp_displayed {
+            assert!(*shown <= on.agg.output.regular_fp[key]);
+        }
+    }
+
+    /// Krok 3, bod 4: `--families tuning` vyradi drzene rodiny, pozadi zustane stejne.
+    #[test]
+    fn family_set_filters_attacks_without_changing_background() {
+        let mut seen_tuning = 0u64;
+        for id in [2u64, 6, 13] {
+            let all = run_episode(&cfg_v3(id, 72));
+            let tuning = run_episode(&EpisodeConfig {
+                world: WorldOptions {
+                    families: crate::soak::traffic::FamilySet::Tuning,
+                    ..Default::default()
+                },
+                ..cfg_v3(id, 72)
+            });
+            for (label, stats) in &tuning.agg.families {
+                // klice jsou rodiny utoku i benigni udalosti
+                let Some(family) = crate::soak::traffic::Family::ALL
+                    .iter()
+                    .find(|f| f.label() == label)
+                else {
+                    continue;
+                };
+                assert!(!family.held_out() || stats.truth == 0, "{label}");
+                seen_tuning += stats.truth;
+            }
+            assert!(tuning.agg.observations <= all.agg.observations);
+            assert_eq!(
+                tuning.agg.output.regular_flows,
+                all.agg.output.regular_flows
+            );
+        }
+        assert!(seen_tuning > 0);
+    }
+
+    fn cfg_v3(id: u64, hours: u32) -> EpisodeConfig {
+        EpisodeConfig {
+            run_seed: 20261102,
+            network_id: id,
+            hours,
+            scratch: std::env::temp_dir().join("bakula-soak-v3-test"),
+            engine: EngineConfig::v3(),
+            feedback: false,
+            mask: WorldMask::None,
+            counterfactual: None,
+            calibration: None,
+            world: WorldOptions::default(),
+        }
+    }
+
     /// Krok 2C: verdikty k rozhodnutým případům jdou přes Case Memory a plní kalibrační
     /// koše; bez učení zůstává autorský prior.
     #[test]
@@ -2882,6 +3046,7 @@ mod engine_v3_tests {
             mask: WorldMask::None,
             counterfactual: None,
             calibration: None,
+            world: WorldOptions::default(),
         });
         for (stage, hist) in &result.agg.perf {
             println!(

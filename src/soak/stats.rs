@@ -210,6 +210,11 @@ pub struct OutputStats {
     pub behavior_chains: u64,
     /// Nálezy behaviorální vrstvy podle typu (všechny, ne jen falešné).
     pub behavior_findings_by_type: BTreeMap<String, u64>,
+    /// Neškodné pravidelné vzory (krok 3, `--noise`): toky a falešné poplachy na nich
+    /// (`vzor|typ nálezu`), všechny a zobrazené.
+    pub regular_flows: u64,
+    pub regular_fp: BTreeMap<String, u64>,
+    pub regular_fp_displayed: BTreeMap<String, u64>,
 }
 
 impl OutputStats {
@@ -225,6 +230,9 @@ impl OutputStats {
             &mut self.behavior_findings_by_type,
             &o.behavior_findings_by_type,
         );
+        self.regular_flows += o.regular_flows;
+        merge_map(&mut self.regular_fp, &o.regular_fp);
+        merge_map(&mut self.regular_fp_displayed, &o.regular_fp_displayed);
         merge_map(&mut self.displayed_by_reason, &o.displayed_by_reason);
         self.states_captured += o.states_captured;
         self.states_behavioral += o.states_behavioral;

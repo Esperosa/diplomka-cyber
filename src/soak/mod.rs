@@ -2,6 +2,7 @@
 //! truth, mereni a invariantami. Viz docs/diplomka/eval/soak-harness.md.
 
 pub mod alloc;
+pub mod benign_regular;
 pub mod episode;
 pub mod hist;
 pub mod kernel;

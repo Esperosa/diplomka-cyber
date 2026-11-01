@@ -100,6 +100,26 @@ impl Family {
         }
     }
 
+    /// Drzena rodina (krok 3, `--families held-out`): ke kazdemu mechanismu z ladici
+    /// sady jedno "dvojce" jineho tvaru (fleet_beacon k c2_beacon, insider_hoarding
+    /// k exfiltration, slow_scan k port_scan_*, web_exploit k exploit_attempt) a vicefazove
+    /// rodiny, ktere kombinuji mechanismy (apt_chain, ransomware, cryptomining, ics).
+    /// Ladi se jen na `tuning`; kroky 1 a 2 ale videly vsechny rodiny, takze skutecne
+    /// slepy test jsou drzene seedy a zamcena testovaci cast kotvy.
+    pub fn held_out(self) -> bool {
+        matches!(
+            self,
+            Family::FleetBeacon
+                | Family::InsiderHoarding
+                | Family::SlowScan
+                | Family::WebExploit
+                | Family::ApChain
+                | Family::Ransomware
+                | Family::Cryptomining
+                | Family::IcsAttack
+        )
+    }
+
     /// Typy nalezu, ktere engine skutecne umi pro dany utok vyprodukovat; "typed"
     /// detekce = nalez jednoho z nich. (Ne vsechny rodiny maji specificky typ.)
     pub fn expected_types(self) -> &'static [&'static str] {
@@ -234,6 +254,39 @@ impl Family {
                 "egress_volume_anomaly",
                 "long_lived_tunnel",
             ],
+        }
+    }
+}
+
+/// Ktere rodiny utoku svet obsahuje (`--families tuning|held-out|all`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FamilySet {
+    #[default]
+    All,
+    Tuning,
+    HeldOut,
+}
+
+impl FamilySet {
+    pub fn includes(self, family: Family) -> bool {
+        match self {
+            FamilySet::All => true,
+            FamilySet::Tuning => !family.held_out(),
+            FamilySet::HeldOut => family.held_out(),
+        }
+    }
+}
+
+impl std::str::FromStr for FamilySet {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "all" => Ok(FamilySet::All),
+            "tuning" => Ok(FamilySet::Tuning),
+            "held-out" => Ok(FamilySet::HeldOut),
+            other => Err(format!(
+                "neznama sada rodin {other} (tuning | held-out | all)"
+            )),
         }
     }
 }
@@ -374,6 +427,9 @@ pub struct CycleOutput {
     pub sensor_down: bool,
     /// Id zarizeni, ktera jsou v `inventory` (v tomto poradi).
     pub inventory_devices: Vec<u32>,
+    /// Dvojice (zdroj, cil) neskodnych pravidelnych vzoru v cyklu (jen mereni FP).
+    pub regular_pairs: Vec<(String, String, crate::soak::benign_regular::RegularKind)>,
+    pub regular_flows: u64,
 }
 
 pub fn ts(secs: i64) -> DateTime<Utc> {
@@ -1017,6 +1073,8 @@ pub struct CycleContext<'a> {
     pub scan_now: bool,
     /// Udalosti (id truth), ktere se v tomto svete neemituji (kontrafaktual, krok 2A).
     pub masked: &'a HashSet<u32>,
+    /// Nestkodne pravidelne a dlouhe provozy (krok 3, `--noise`).
+    pub regular: &'a [crate::soak::benign_regular::RegularInstance],
 }
 
 /// Prazdna maska (bez kontrafaktualu).
@@ -1269,8 +1327,71 @@ pub fn generate_cycle(ctx: &CycleContext<'_>, truths: &mut [Truth], rng: &mut Rn
         out.inventory = Some(inventory);
     }
 
+    // --- neskodne pravidelne vzory (vlastni proud, nemeni ostatni provoz) ---
+    if !ctx.regular.is_empty() {
+        emit_regular(ctx, t0, &mut out, truths);
+    }
+
     degrade(&mut out, ctx, rng);
     out
+}
+
+fn emit_regular(ctx: &CycleContext<'_>, t0: i64, out: &mut CycleOutput, truths: &mut [Truth]) {
+    use crate::soak::benign_regular::{Peer, emit};
+    let model = ctx.model;
+    let stream = derive(model.seed ^ 0x5E6_1A2, ctx.cycle as u64);
+    let workday = weekday(t0, model.tz_hours) < 5;
+    let mut flows = Vec::new();
+    let mut pairs: HashSet<(String, String, crate::soak::benign_regular::RegularKind)> =
+        HashSet::new();
+    for inst in ctx.regular {
+        flows.clear();
+        emit(
+            inst,
+            model,
+            t0,
+            CYCLE_SECS,
+            |abs| local_hour(abs, model.tz_hours),
+            workday,
+            stream,
+            &mut flows,
+        );
+        let mut prng = Rng::new(derive(stream ^ 0x9077, inst.id as u64));
+        for f in &flows {
+            if !model.devices[f.src as usize].up {
+                continue;
+            }
+            let dst = match &f.dst {
+                Peer::Device(d) if model.devices[*d as usize].up => ctx.ips[*d as usize].clone(),
+                Peer::Device(_) => continue,
+                Peer::External(ip) => ip.clone(),
+            };
+            let src = &ctx.ips[f.src as usize];
+            pairs.insert((src.clone(), dst.clone(), inst.kind));
+            out.regular_flows += 1;
+            push(
+                out,
+                ctx,
+                obs(
+                    f.at,
+                    src,
+                    prng.range(32768, 60999) as u16,
+                    &dst,
+                    f.proto,
+                    f.port,
+                    f.duration_s,
+                    f.orig_bytes,
+                    f.resp_bytes,
+                    "SF",
+                ),
+                None,
+                truths,
+            );
+        }
+    }
+    let mut pairs: Vec<_> = pairs.into_iter().collect();
+    pairs.sort();
+    out.regular_pairs = pairs;
 }
 
 /// Pridani toku s kontrolou kernelu: zablokovany zdroj tok "nikdy nedorazi".
@@ -2667,6 +2788,7 @@ mod tests {
                 rogue: None,
                 scan_now: true,
                 masked: no_mask(),
+                regular: &[],
             };
             let out = generate_cycle(&ctx, &mut truths, &mut rng);
             (out.observations.len(), out.alerts.len(), truths.len())
@@ -2710,6 +2832,7 @@ mod tests {
                     rogue: None,
                     scan_now: cycle % 4 == 0,
                     masked,
+                    regular: &[],
                 };
                 let mut rng = Rng::new(seed_for_cycle(model.seed, cycle));
                 let out = generate_cycle(&ctx, &mut truths, &mut rng);
@@ -2789,6 +2912,7 @@ mod tests {
             rogue: None,
             scan_now: true,
             masked: no_mask(),
+            regular: &[],
         };
         let out = generate_cycle(&ctx, &mut truths, &mut rng);
         assert!(truths[0].flows_emitted > 0);
@@ -2803,6 +2927,95 @@ mod tests {
         );
         assert_eq!(out.benign_flows_blocked, 0);
         assert_eq!(truths[0].blocked_at_cycle, Some(1));
+    }
+
+    /// Krok 3: neskodne pravidelne vzory jsou jen pridane toky; zadny jiny tok
+    /// (pozadi, utoky) se zapnutim sumu nezmeni ani nezmizi.
+    #[test]
+    fn regular_benign_noise_only_adds_flows() {
+        let telemetry = Telemetry {
+            drop_p: 0.08,
+            dup_p: 0.05,
+            skew_s: 3,
+            outage_p: 0.0,
+            ids_coverage: 1.0,
+            blind_subnets: Vec::new(),
+        };
+        let mut added_total = 0usize;
+        for id in 0..12u64 {
+            let model = NetworkModel::generate(20261102, id);
+            let ip = ips(&model);
+            let mut plan_rng = Rng::new(id ^ 0xABC);
+            let truths = plan_episode(&model, &mut plan_rng, 48, &telemetry);
+            let regular = crate::soak::benign_regular::plan(&model, 10.0);
+            for cycle in [3u32, 20, 41] {
+                let run = |regular: &[crate::soak::benign_regular::RegularInstance]| {
+                    let mut truths = truths.clone();
+                    let ctx = CycleContext {
+                        model: &model,
+                        ips: &ip,
+                        cycle,
+                        start_offset_s: 0,
+                        telemetry: &telemetry,
+                        oracle: &NoBlocks,
+                        rogue: None,
+                        scan_now: false,
+                        masked: no_mask(),
+                        regular,
+                    };
+                    let mut rng = Rng::new(seed_for_cycle(model.seed, cycle));
+                    let out = generate_cycle(&ctx, &mut truths, &mut rng);
+                    let mut prints: Vec<u64> = out.observations.iter().map(flow_print).collect();
+                    prints.sort_unstable();
+                    (prints, out.regular_flows)
+                };
+                let (base, none) = run(&[]);
+                let (noisy, flows) = run(&regular);
+                assert_eq!(none, 0);
+                let mut rest = noisy.clone();
+                for print in &base {
+                    let at = rest
+                        .binary_search(print)
+                        .unwrap_or_else(|_| panic!("sit {id}: tok mimo vzory se zmenil"));
+                    rest.remove(at);
+                }
+                assert!(
+                    rest.len() as u64 <= flows * 2,
+                    "pridane jsou jen toky vzoru"
+                );
+                added_total += rest.len();
+            }
+        }
+        assert!(added_total > 0);
+    }
+
+    #[test]
+    fn family_sets_partition_existing_families() {
+        let tuning: Vec<Family> = Family::ALL
+            .iter()
+            .copied()
+            .filter(|f| FamilySet::Tuning.includes(*f))
+            .collect();
+        let held: Vec<Family> = Family::ALL
+            .iter()
+            .copied()
+            .filter(|f| FamilySet::HeldOut.includes(*f))
+            .collect();
+        assert!(!tuning.is_empty() && !held.is_empty());
+        assert_eq!(tuning.len() + held.len(), Family::ALL.len());
+        assert!(tuning.iter().all(|f| !held.contains(f)));
+        assert!(Family::ALL.iter().all(|f| FamilySet::All.includes(*f)));
+        // kazda drzena "dvojce" ma v ladici sade rodinu stejneho mechanismu
+        for (held_twin, tuned) in [
+            (Family::FleetBeacon, Family::C2Beacon),
+            (Family::InsiderHoarding, Family::Exfil),
+            (Family::SlowScan, Family::PortScanVertical),
+            (Family::WebExploit, Family::Exploit),
+        ] {
+            assert!(held.contains(&held_twin) && tuning.contains(&tuned));
+        }
+        assert_eq!("held-out".parse::<FamilySet>(), Ok(FamilySet::HeldOut));
+        assert!("x".parse::<FamilySet>().is_err());
     }
 
     #[test]
@@ -2888,6 +3101,7 @@ mod tests {
             rogue: None,
             scan_now: true,
             masked: no_mask(),
+            regular: &[],
         };
         let out = generate_cycle(&ctx, &mut truths, &mut rng);
         assert!(out.outage && out.observations.is_empty() && out.alerts.is_empty());

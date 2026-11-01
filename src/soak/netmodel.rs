@@ -144,16 +144,19 @@ pub fn size_class(devices: usize) -> &'static str {
         26..=100 => "M (26-100)",
         101..=400 => "L (101-400)",
         401..=1500 => "XL (401-1500)",
-        _ => "XXL (>1500)",
+        1501..=6000 => "XXL (1501-6000)",
+        _ => "XXXL (>6000)",
     }
 }
 
-pub const SIZE_CLASSES: [&str; 5] = [
+/// Třída XXXL (krok 3) vzniká jen vynucením (`--size xxxl`), ne v běžném mixu.
+pub const SIZE_CLASSES: [&str; 6] = [
     "S (<=25)",
     "M (26-100)",
     "L (101-400)",
     "XL (401-1500)",
-    "XXL (>1500)",
+    "XXL (1501-6000)",
+    "XXXL (>6000)",
 ];
 
 #[derive(Debug, Clone)]
@@ -689,28 +692,49 @@ fn pick_weighted(rng: &mut Rng, table: &[(Role, f64)]) -> Role {
 
 impl NetworkModel {
     pub fn generate(run_seed: u64, id: u64) -> Self {
+        Self::generate_with(run_seed, id, false)
+    }
+
+    /// `xxxl` = vynucená třída XXXL (krok 3): velká organizace s 8 000 až 10 000
+    /// zařízeními a 150 až 240 podsítěmi (/24). Jinak stejné jako `generate`.
+    pub fn generate_with(run_seed: u64, id: u64, xxxl: bool) -> Self {
         let seed = derive(run_seed, id);
         let mut rng = Rng::new(derive(seed, 0xA11CE));
         let weights: Vec<f64> = Archetype::ALL.iter().map(|a| profile(*a).weight).collect();
-        let archetype = Archetype::ALL[rng.weighted(&weights)];
+        let mut archetype = Archetype::ALL[rng.weighted(&weights)];
+        if xxxl {
+            archetype = if rng.chance(0.5) {
+                Archetype::Metro
+            } else {
+                Archetype::Enterprise
+            };
+        }
         let prof = profile(archetype);
-        let total = rng.range(prof.devices.0, prof.devices.1) as usize;
+        let total = if xxxl {
+            rng.range(8_000, 10_000) as usize
+        } else {
+            rng.range(prof.devices.0, prof.devices.1) as usize
+        };
         // kapacita jedne /24: ~98 statickych (2..=99) + ~150 DHCP adres (100..=250).
         // Hustě serverové archetypy (Cloud, Datacenter, Industrial) mají skoro jen
         // statické adresy, proto se počet podsítí odvozuje i ze statických adres
         // (horní odhad podílu + 15 % rezerva, ~90 na /24), ne jen z celku / 110.
         let needed = subnets_needed(total, prof.server_share, prof.dhcp_share);
-        let subnets = rng
-            .range(prof.subnets.0, prof.subnets.1)
-            .max(needed)
-            .min(200) as usize;
+        let subnets = if xxxl {
+            rng.range(150, 240).max(needed).min(240) as usize
+        } else {
+            rng.range(prof.subnets.0, prof.subnets.1)
+                .max(needed)
+                .min(200) as usize
+        };
         let base_a = if rng.chance(0.5) { 192 } else { 10 };
         let base_b = if base_a == 192 {
             168
         } else {
             rng.range(0, 250) as u8
         };
-        let base_c = rng.range(0, 40) as u8;
+        // XXXL: az 240 podsiti, aby se treti oktet nepretocil (base_c + index <= 255)
+        let base_c = rng.range(0, if xxxl { 15 } else { 40 }) as u8;
         let prefixes: Vec<[u8; 3]> = (0..subnets)
             .map(|index| [base_a, base_b, base_c.wrapping_add(index as u8)])
             .collect();
@@ -1267,7 +1291,22 @@ mod tests {
             }
         }
         assert_eq!(kinds.len(), Archetype::ALL.len());
-        assert_eq!(classes.len(), SIZE_CLASSES.len(), "{classes:?}");
+        // XXXL vznika jen vynucenim (krok 3)
+        assert_eq!(classes.len(), SIZE_CLASSES.len() - 1, "{classes:?}");
+        let big = NetworkModel::generate_with(5, 1, true);
+        assert_eq!(big.size_class(), "XXXL (>6000)");
+        assert!(big.prefixes.len() >= 150, "{}", big.prefixes.len());
+        let scope = big.scope();
+        for d in (0..big.devices.len() as u32).step_by(97) {
+            let ip: std::net::IpAddr = big.ip_of(d).parse().unwrap();
+            assert!(scope.iter().any(|n| n.contains(&ip)));
+        }
+        let unique: std::collections::HashSet<_> = big.prefixes.iter().collect();
+        assert_eq!(
+            unique.len(),
+            big.prefixes.len(),
+            "podsite se nesmi opakovat"
+        );
         assert_eq!(roles.len(), Role::ALL.len(), "{roles:?}");
         assert!(max_devices > 2500, "nejvetsi sit {max_devices}");
         assert!(max_subnets >= 30, "nejvic podsiti {max_subnets}");

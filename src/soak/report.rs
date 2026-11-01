@@ -686,7 +686,7 @@ mod tests {
     }
 }
 
-const SIZE_ORDER: [&str; 5] = crate::soak::netmodel::SIZE_CLASSES;
+const SIZE_ORDER: [&str; 6] = crate::soak::netmodel::SIZE_CLASSES;
 
 fn segment_table(out: &mut String, a: &Aggregate, prefix: &str, order: &[String]) {
     let _ = writeln!(

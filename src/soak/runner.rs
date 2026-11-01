@@ -70,6 +70,9 @@ pub struct SoakConfig {
     /// Kalibrace posteriory zebriku (JSON z `tools/soak_calib.py`), krok 2C.
     #[serde(default)]
     pub calibration: Option<PathBuf>,
+    /// Volby sveta (krok 3): `--noise`.
+    #[serde(default)]
+    pub world: crate::soak::episode::WorldOptions,
 }
 
 fn default_true() -> bool {
@@ -98,6 +101,7 @@ impl SoakConfig {
             counterfactual: false,
             cf_loo: 0,
             calibration: None,
+            world: Default::default(),
         }
     }
 }
@@ -186,6 +190,7 @@ pub fn run_block_with_summaries(
             mask: WorldMask::None,
             counterfactual: None,
             calibration: calibration.clone(),
+            world: cfg.world,
         };
         let run = || {
             if cfg.counterfactual {

@@ -62,6 +62,8 @@ enum Command {
     Soak(SoakCommand),
 }
 
+// argumenty CLI se parsuji jednou za beh; velikost varianty nevadi
+#[allow(clippy::large_enum_variant)]
 #[derive(Subcommand, Debug)]
 enum SoakCommand {
     Run(SoakRunArgs),
@@ -116,6 +118,15 @@ struct SoakRunArgs {
     /// Kalibrace posteriory zebriku overovani (JSON z tools/soak_calib.py).
     #[arg(long)]
     calibration: Option<PathBuf>,
+    /// Nasobek objemu neskodnych pravidelnych vzoru (1, 10, 50; 0 = vypnuto), krok 3.
+    #[arg(long, default_value_t = 1.0)]
+    noise: f64,
+    /// Velikost siti: `mix` (vychozi, beznou smes) nebo `xxxl` (8 000 az 10 000 zarizeni).
+    #[arg(long, default_value = "mix")]
+    size: String,
+    /// Rodiny utoku: `all` (vychozi), `tuning` (ladici) nebo `held-out` (drzene).
+    #[arg(long, default_value = "all")]
+    families: String,
 }
 
 #[derive(Args, Debug)]
@@ -937,6 +948,13 @@ fn main() -> anyhow::Result<()> {
             cfg.counterfactual = args.counterfactual;
             cfg.cf_loo = args.cf_loo;
             cfg.calibration = args.calibration.clone();
+            cfg.world.noise = args.noise.max(0.0);
+            cfg.world.xxxl = match args.size.as_str() {
+                "mix" => false,
+                "xxxl" => true,
+                other => anyhow::bail!("neznama velikost {other} (mix | xxxl)"),
+            };
+            cfg.world.families = args.families.parse().map_err(anyhow::Error::msg)?;
             bakula_program::soak::runner::run(cfg, args.resume)?;
         }
         Command::Soak(SoakCommand::Verify(args)) => {
