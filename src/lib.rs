@@ -13,6 +13,7 @@ pub mod decision;
 pub mod diff;
 pub mod enforcement;
 pub mod engine;
+pub mod engine_state;
 pub mod error;
 pub mod eval;
 pub mod evaluation;
