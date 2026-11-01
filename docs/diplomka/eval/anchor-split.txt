@@ -1,0 +1,32 @@
+# Kotva CTU-13 / IoT-23: predem rozdelena vyvojova a testovaci cast (krok 3, bod 4).
+# Testovaci cast je zamcena: pri ladeni se nespousti, otevre se jen pro zaverecne mereni.
+# Seznam musi souhlasit s src/eval/behavior_anchor.rs (test split_is_disjoint_locked...).
+# SHA-256 testovaci casti (radky spojene 
+): 15b0127a3745325427fb8131ae6e83703968bcf7288c4ab1fa9e47edea6d8fd7
+
+[dev]
+ctu13/Botnet-42
+ctu13/Botnet-44
+ctu13/Botnet-46
+ctu13/Botnet-47
+ctu13/Botnet-49
+ctu13/Botnet-52
+iot23/CTU-Honeypot-Capture-4-1
+iot23/CTU-IoT-Malware-Capture-3-1
+iot23/CTU-IoT-Malware-Capture-20-1
+iot23/CTU-IoT-Malware-Capture-34-1
+iot23/CTU-IoT-Malware-Capture-42-1
+
+[test]
+ctu13/Botnet-43
+ctu13/Botnet-45
+ctu13/Botnet-48
+ctu13/Botnet-50
+ctu13/Botnet-51
+ctu13/Botnet-53
+ctu13/Botnet-54
+iot23/CTU-Honeypot-Capture-5-1
+iot23/CTU-Honeypot-Capture-7-1-Somfy-01
+iot23/CTU-IoT-Malware-Capture-8-1
+iot23/CTU-IoT-Malware-Capture-21-1
+iot23/CTU-IoT-Malware-Capture-44-1

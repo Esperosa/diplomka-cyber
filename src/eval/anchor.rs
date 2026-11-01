@@ -70,8 +70,9 @@ fn row(label: String, dataset: &LabeledDataset) -> AnchorRow {
     }
 }
 
-/// Projde vsechny dostupne scenare pod `repo_root/labs/datasets`. Chybejici adresar =
-/// prazdny vysledek (data nejsou na kazdem stroji; soak to zapise, ne zamlci).
+/// Projde dostupne scenare VYVOJOVE casti kotvy pod `repo_root/labs/datasets`
+/// (krok 3: testovaci cast je zamcena, `behavior_anchor::ANCHOR_TEST`). Chybejici
+/// adresar = prazdny vysledek (data nejsou na kazdem stroji; soak to zapise, ne zamlci).
 pub fn anchor_pass(repo_root: &Path) -> Result<Vec<AnchorRow>> {
     anchor_pass_with(repo_root, true)
 }
@@ -87,7 +88,7 @@ pub fn anchor_pass_with(repo_root: &Path, include_ctu13: bool) -> Result<Vec<Anc
             .filter(|p| p.is_dir())
             .collect();
         dirs.sort();
-        for dir in dirs {
+        for dir in dirs.into_iter().filter(|d| is_dev(d, "ctu13")) {
             let mut files: Vec<_> = std::fs::read_dir(&dir)?
                 .filter_map(|e| e.ok())
                 .map(|e| e.path())
@@ -114,7 +115,7 @@ pub fn anchor_pass_with(repo_root: &Path, include_ctu13: bool) -> Result<Vec<Anc
             .filter(|p| p.is_dir())
             .collect();
         dirs.sort();
-        for dir in dirs {
+        for dir in dirs.into_iter().filter(|d| is_dev(d, "iot23")) {
             let file = dir.join("conn.log.labeled");
             if file.is_file() {
                 let dataset = Iot23Source.load(&file)?;
@@ -129,6 +130,14 @@ pub fn anchor_pass_with(repo_root: &Path, include_ctu13: bool) -> Result<Vec<Anc
         }
     }
     Ok(rows)
+}
+
+fn is_dev(dir: &Path, kind: &str) -> bool {
+    let name = format!(
+        "{kind}/{}",
+        dir.file_name().unwrap_or_default().to_string_lossy()
+    );
+    crate::eval::behavior_anchor::ANCHOR_DEV.contains(&name.as_str())
 }
 
 /// Otisk cisel (zaokrouhlenych), pro porovnani mezi pruchody.

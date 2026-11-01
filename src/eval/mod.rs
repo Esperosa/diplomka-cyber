@@ -14,6 +14,7 @@
 #![allow(dead_code)]
 
 pub mod anchor;
+pub mod behavior_anchor;
 pub mod calibration;
 pub mod dataset_replay;
 pub mod ground_truth;
