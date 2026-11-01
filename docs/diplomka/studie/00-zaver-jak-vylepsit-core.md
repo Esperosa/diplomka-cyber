@@ -923,3 +923,36 @@ Priorita: **1** = primární (rozhoduje se s Holmem), **2** = průzkumná po 14d
 | – (zahrnuto v P6 / R3) | RQ1 H1-6 (politika dvou senzorů) | 3 | AND/OR testovat až s benigními alerty (S2) | – |
 
 Pokrytí: všech 50 původních hypotéz je zařazeno (RQ1: 11, RQ2: 8, RQ3: 9, RQ4: 8, RQ5: 8, RQ6: 6).
+
+---
+
+## Dodatek A (2026-11-01): požadavek zadavatele a jeho dopad na plán
+
+**Požadavek (závazný):** Skákavka je produkční nástroj, ne důkaz konceptu. Podezření má **co nejvíce automaticky ověřit a buď vyloučit, nebo potvrdit**. Člověku se zobrazuje jen to, co po automatickém ověření přežilo, nebo co má vysoký dopad.
+
+### A.1 Tři skupiny výstupu (definice metriky)
+1. **Zachyceno**: všechno, co engine detekuje; zůstává v logu s důvodem a důkazy.
+2. **Automaticky vyřešeno**: potvrzeno nebo vyloučeno ověřením; u každého záznam důvodu (která kontrola, jaká data, jaká jistota), vratné.
+3. **Čeká na člověka**: neověřitelné nebo vysoký dopad (zásah do sítě). Provozní cíl „nových položek za den na 100 zařízení“ platí **jen pro tuto skupinu**; pracovní hodnota ≤ 10 (rozhodnutí zadavatele, ne měřený údaj).
+
+### A.2 Bezpečné automatické zavírání (mantinely z evidence)
+- Důkazy ukazují, že zavírání má cenu: AACT v provozu uzavřel 61 % alertů při 1,36 % zmeškaných (RQ1-048/049, jistota nízká); Carbon Filter ztratil 0 až 5,7 % škodlivých alertů, na 32 a 88 případech (RQ3, revize). Nezávislá přeměření vycházejí hůř než původní tvrzení (RQ3, RQ6).
+- Proto povinně: (a) důvod do auditu a vratnost; (b) **náhodný vzorek automaticky zavřených nálezů** na kontrolu a měřenou míru omylu (vlastní metrika „zavřeno omylem“); (c) žádné automatické zavření nejzávažnějších typů bez doloženého neškodného vysvětlení; (d) rozlišit „vyvráceno“ od „nic nenalezeno“: prázdný výsledek dotazu **není** důkaz neškodnosti (RQ6: při prázdném dotazu agent zamítá útok v 98,6 % případů).
+- Metriky: zobrazené položky za síť-den, **míra zavřeno omylem** (recall automatického zavírání) a latence rozhodnutí.
+
+### A.3 Ověřování okamžitě, ne v čase
+Důvod, proč dnes čekáme na další cykly, je chybějící historie. Okamžitá rozhodnutí umožní (seřazeno od nejlevnějšího a nejbezpečnějšího): (1) **uložená historie toků** (retrospektivní baseline hosta a skupiny podobných zařízení); (2) kontext (inventář, DHCP/ARP, kalendář záloh a údržby, tikety); (3) reputace a znalosti (CISA KEV, EPSS, pasivní DNS, otisky TLS); (4) cílená kontrola na vyžádání se schválením (krátký záznam, nmap/httpx na port); (5) EDR a logy přihlášení (nejsilnější, nejdražší integrace). Pro (1) a (2) nebyl nalezen v literatuře přímý důkaz efektu v našem nastavení; předpokládaný efekt je hypotéza k měření (H-A1, H-A2).
+
+### A.4 Přeřazení plánu na 14 dní (nahrazuje pořadí v §5A tam, kde se liší)
+1. G0-min: minimální oprava měření a přepínač staré/nové emise.
+2. **Paměť nálezů a deduplikace** (stav, TTL a strop proti vyčerpání paměti).
+3. **Kontextové vyloučení a okamžité ověření z historie** (jádro automatizace).
+4. Robustní packet rate a odlehčený `inductive_volume_anomaly` (největší zdroje šumu).
+5. `unexpected_traffic` (diagnostika, rozdělení úspěšných spojení a pokusů).
+6. Až poté aktivní kontroly se schválením a pivoting po souvisejících zařízeních; pivoting se zde nevypouští (je jádro produktu), jen se řadí za bezpečnější kroky.
+Každý krok: párové A/B na stejných seedech, sledovat zobrazené položky, falešné poplachy, **zavřeno omylem** a recall rodin.
+
+### A.5 Nové hypotézy
+- **H-A1** (historie toků): retrospektivní baseline z uložené historie sníží zobrazené položky o víc než ... (rozsah se určí z E0 měření; bez podkladu v literatuře, odhad autora neuvádím).
+- **H-A2** (kontextové vyloučení): známé záloha/patch/restart/výpadek senzoru se vyloučí s mírou omylu ≤ 2 % (kritérium zamítnutí: horní mez 95% intervalu > 5 %).
+- **H-A3** (měřená chyba automatiky): náhodný audit zavřených nálezů udrží míru omylu pod předem stanovenou mezí; jinak se příslušná kontrola vypne.
