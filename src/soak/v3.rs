@@ -14,7 +14,7 @@ use crate::{
     engine::EngineConfig,
     engine_state::{EngineStateStore, PersistentInventory},
     error::Result,
-    finding_memory::{FindingMemory, MemoryConfig},
+    finding_memory::FindingMemory,
     identity::IdentityResolverV3,
     model::{HostReport, NormalizedEvent},
     passive::{
@@ -38,6 +38,8 @@ pub struct V3Runtime {
     pub gate: ContextGate,
     pub identity: IdentityResolverV3,
     sources: SourceMap,
+    /// IP -> peer skupina (typ zarizeni + podsit), obnovuje se po kazdem skenu (krok 2D).
+    pub peer_groups: std::collections::HashMap<String, String>,
 }
 
 impl V3Runtime {
@@ -47,13 +49,14 @@ impl V3Runtime {
             store: EngineStateStore::open_in_memory()?,
             memory: engine
                 .memory()
-                .then(|| FindingMemory::new(MemoryConfig::default())),
+                .then(|| FindingMemory::new(engine.memory_config())),
             detector: DetectorState::default(),
             thresholds: V3Thresholds::default(),
             inventory: PersistentInventory::default(),
             gate: ContextGate::new(GatePolicy::default()),
             identity: IdentityResolverV3::new(),
             sources: SourceMap::new(),
+            peer_groups: Default::default(),
         })
     }
 
@@ -71,7 +74,7 @@ impl V3Runtime {
                 .as_ref()
                 .map(|m| m.stats.clone())
                 .unwrap_or_default();
-            let mut reloaded = FindingMemory::load(self.store.conn(), MemoryConfig::default())?;
+            let mut reloaded = FindingMemory::load(self.store.conn(), self.engine.memory_config())?;
             reloaded.stats = stats;
             self.memory = Some(reloaded);
         }
@@ -93,6 +96,7 @@ impl V3Runtime {
             rate: self.engine.robust_rate(),
             volume: self.engine.volume_baseline(),
             unexpected: self.engine.unexpected_v3(),
+            recall: self.engine.recall(),
         };
         let out = detect_v3(
             observations,
@@ -102,6 +106,7 @@ impl V3Runtime {
             switches,
             &self.thresholds,
             now,
+            &self.peer_groups,
         );
         self.sources = out.sources;
         out.events

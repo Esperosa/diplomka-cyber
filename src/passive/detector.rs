@@ -130,6 +130,8 @@ pub(crate) struct V3StatefulDetector {
     extra_known: HashSet<ServiceKey>,
     known_hosts: HashSet<String>,
     now: chrono::DateTime<chrono::Utc>,
+    /// IP -> peer skupina (typ zarizeni a podsit, krok 2D); prazdne = bez skupin.
+    peer_groups: std::collections::HashMap<String, String>,
 }
 
 impl V3StatefulDetector {
@@ -139,6 +141,7 @@ impl V3StatefulDetector {
         extra_known: HashSet<ServiceKey>,
         known_hosts: HashSet<String>,
         now: chrono::DateTime<chrono::Utc>,
+        peer_groups: std::collections::HashMap<String, String>,
     ) -> Self {
         Self {
             state: std::sync::Mutex::new(state),
@@ -148,6 +151,7 @@ impl V3StatefulDetector {
             extra_known,
             known_hosts,
             now,
+            peer_groups,
         }
     }
 
@@ -188,6 +192,7 @@ impl ConnectionDetector for V3StatefulDetector {
             self.switches,
             &self.thresholds,
             self.now,
+            &self.peer_groups,
         );
         *self.sources.lock().unwrap_or_else(|p| p.into_inner()) = out.sources;
         out.events

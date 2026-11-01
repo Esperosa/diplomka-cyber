@@ -76,9 +76,11 @@ impl ContextKind {
     pub fn default_covers(self) -> &'static [&'static str] {
         match self {
             // restarty a vypadky: timeouty klientu, ne narust objemu
-            ContextKind::Maintenance | ContextKind::PatchWindow => {
-                &["connection_timeout_burst", "service_overload_risk"]
-            }
+            ContextKind::Maintenance | ContextKind::PatchWindow => &[
+                "connection_timeout_burst",
+                "service_overload_risk",
+                "service_unreachable",
+            ],
             ContextKind::Backup | ContextKind::BatchJob => &[
                 "inductive_volume_anomaly",
                 "packet_rate_spike",
@@ -90,9 +92,11 @@ impl ContextKind {
                 "connection_timeout_burst",
                 "unmapped_passive_event",
             ],
-            ContextKind::ServiceOutage | ContextKind::DeviceDecommission => {
-                &["connection_timeout_burst", "service_overload_risk"]
-            }
+            ContextKind::ServiceOutage | ContextKind::DeviceDecommission => &[
+                "connection_timeout_burst",
+                "service_overload_risk",
+                "service_unreachable",
+            ],
             ContextKind::SensorOutage => &["inductive_volume_anomaly", "packet_rate_spike"],
             ContextKind::DeviceOnboarding => &[
                 "unexpected_traffic",
@@ -410,6 +414,45 @@ impl ContextGate {
             self.stats.refused_source += 1;
         }
         None
+    }
+
+    /// Podpůrný (ne zavírající) kontext pro žebřík ověřování L1 (krok 2B): shoda okna,
+    /// typu, hostu a zdrojové konzistence, BEZ výjimky pro závažné typy (ty brána
+    /// sama nezavře, ale kontext smí snížit pravděpodobnost). Vypnuté druhy se
+    /// nepoužijí. Vrací druh a důvod.
+    pub fn supporting_context(
+        &self,
+        provider: &dyn ContextProvider,
+        input: &GateInput<'_>,
+    ) -> Option<(ContextKind, String)> {
+        if self.policy.never.contains(input.finding_type) {
+            return None;
+        }
+        provider.entries().iter().find_map(|entry| {
+            let host_match = if entry.hosts.is_empty() {
+                entry.kind == ContextKind::SensorOutage || !entry.sources.is_empty()
+            } else {
+                entry.hosts.iter().any(|h| input.host_ids.contains(h))
+            };
+            let source_ok = (entry.sources.is_empty()
+                || input.sources.iter().any(|s| entry.sources.contains(s)))
+                && !(entry.kind.source_sensitive()
+                    && input
+                        .sources
+                        .iter()
+                        .any(|s| !entry.hosts.contains(s) && !entry.sources.contains(s)));
+            (entry.active(input.at)
+                && entry.covers(input.finding_type)
+                && host_match
+                && source_ok
+                && !self.disabled.contains(&entry.kind))
+            .then(|| {
+                (
+                    entry.kind,
+                    format!("{} (schvalil {})", entry.kind.label(), entry.approved_by),
+                )
+            })
+        })
     }
 
     /// Výsledek auditu jednoho vzorku zavřeného nálezu (člověk: byl to omyl?).

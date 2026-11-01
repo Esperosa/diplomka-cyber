@@ -35,8 +35,54 @@ use crate::model::{NormalizedEvent, Severity};
 use super::ConnectionObservation;
 use super::anomaly::{
     ConnectionAggregate, aggregate_pattern_events, combine_optional, inductive_outlier_events,
-    median_and_mad,
+    is_timeout_like, median_and_mad,
 };
+
+/// Správcovské porty pro rozptyl zdroje po hostech (SSH, Telnet, RPC, SMB, RDP, VNC, WinRM).
+const ADMIN_PORTS: &[u16] = &[22, 23, 135, 139, 445, 3389, 5900, 5985, 5986];
+
+/// Horní chvost binomického rozdělení P(X >= k | n, p) (přesně pro n <= 2000, jinak
+/// normální aproximace se spojitostní korekcí).
+pub(crate) fn binomial_tail(n: u32, k: u32, p: f64) -> f64 {
+    if k == 0 {
+        return 1.0;
+    }
+    if k > n {
+        return 0.0;
+    }
+    let p = p.clamp(1e-12, 1.0 - 1e-12);
+    if n > 2000 {
+        let mean = n as f64 * p;
+        let sd = (n as f64 * p * (1.0 - p)).sqrt();
+        let z = (k as f64 - 0.5 - mean) / sd;
+        return 0.5 * libm_erfc(z / std::f64::consts::SQRT_2);
+    }
+    // log P(X = i) postupně, součet od k (stabilní v log prostoru)
+    let ln_p = p.ln();
+    let ln_q = (1.0 - p).ln();
+    let mut ln_choose = 0.0f64; // ln C(n, 0)
+    let mut total = 0.0f64;
+    for i in 0..=n {
+        if i > 0 {
+            ln_choose += ((n - i + 1) as f64).ln() - (i as f64).ln();
+        }
+        if i >= k {
+            total += (ln_choose + i as f64 * ln_p + (n - i) as f64 * ln_q).exp();
+        }
+    }
+    total.min(1.0)
+}
+
+/// Doplňková chybová funkce (Abramowitz-Stegun 7.1.26, chyba < 1,5e-7).
+fn libm_erfc(x: f64) -> f64 {
+    let t = 1.0 / (1.0 + 0.327_591_1 * x.abs());
+    let poly = t
+        * (0.254_829_592
+            + t * (-0.284_496_736
+                + t * (1.421_413_741 + t * (-1.453_152_027 + t * 1.061_405_429))));
+    let erfc = poly * (-x * x).exp();
+    if x >= 0.0 { erfc } else { 2.0 - erfc }
+}
 
 type ServiceKey = (String, String, u16);
 /// (pocet, prvni cas, zdroje) uspesnych spojeni na neznamy port znameho hostu.
@@ -50,6 +96,9 @@ pub struct V3Switches {
     pub rate: bool,
     pub volume: bool,
     pub unexpected: bool,
+    /// Krok 2A: obnova recallu (pokusy i na známé služby, timeouty podle rozložení
+    /// zdrojů a binomického testu, rozptyl zdroje po hostech, odlehlý zdroj služby).
+    pub recall: bool,
 }
 
 /// Prahy v3 (volba autora; verze kvůli dohledatelnosti, A05).
@@ -92,6 +141,19 @@ pub struct V3Thresholds {
     pub max_scanners: usize,
     pub max_targets_per_scanner: usize,
     pub service_ttl_cycles: u64,
+    /// Timeouty (krok 2A, A07): běžná míra selhání spojení a hladina binomického testu.
+    pub timeout_p0: f64,
+    pub timeout_alpha: f64,
+    /// Rozptyl zdroje po hostech (laterální pohyb): minimum distinktních cílů, násobek
+    /// historie zdroje a minimum bez historie.
+    pub fanout_min: usize,
+    pub fanout_ratio: f64,
+    pub fanout_cold_min: usize,
+    /// Odlehlý zdroj služby (DNS tunel, hádání hesel): minimum zdrojů služby, násobek
+    /// mediánu ostatních zdrojů a minimální přírůstek toků.
+    pub outlier_min_sources: usize,
+    pub outlier_ratio: f64,
+    pub outlier_min_excess: f64,
 }
 
 impl V3Thresholds {
@@ -128,6 +190,14 @@ impl Default for V3Thresholds {
             max_scanners: 4_096,
             max_targets_per_scanner: 256,
             service_ttl_cycles: 7 * 48,
+            timeout_p0: 0.06,
+            timeout_alpha: 1e-3,
+            fanout_min: 8,
+            fanout_ratio: 4.0,
+            fanout_cold_min: 12,
+            outlier_min_sources: 6,
+            outlier_ratio: 8.0,
+            outlier_min_excess: 60.0,
         }
     }
 }
@@ -188,6 +258,9 @@ pub struct DetectorState {
     services: HashMap<String, KeyHistory>,
     scanners: HashMap<String, SourceAttempts>,
     cycle: u64,
+    /// Historie počtu distinktních cílů zdroje na správcovských portech (krok 2A).
+    #[serde(default)]
+    fanout: HashMap<String, (Vec<f32>, u64)>,
 }
 
 impl DetectorState {
@@ -304,6 +377,7 @@ fn event(
 
 /// Detekce v3 nad toky jednoho okna. `known_services`/`known_hosts` = (perzistentní)
 /// inventář. Mění `state` (učení historie, pokusy zdrojů).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn detect_v3(
     connections: &[ConnectionObservation],
     known_services: &HashSet<ServiceKey>,
@@ -312,6 +386,7 @@ pub(crate) fn detect_v3(
     switches: V3Switches,
     th: &V3Thresholds,
     now: DateTime<Utc>,
+    peer_groups: &HashMap<String, String>,
 ) -> V3Output {
     state.cycle += 1;
     let cycle = state.cycle;
@@ -323,6 +398,9 @@ pub(crate) fn detect_v3(
     let mut success_unknown_port: HashMap<ServiceKey, SuccessTally> = HashMap::new();
     let mut unknown_host: HashMap<String, UnknownHostTally> = HashMap::new();
     let mut attempts_by_source: HashMap<String, (Vec<ServiceKey>, DateTime<Utc>)> = HashMap::new();
+    // krok 2A: zdroje selhání po klíči a distinktní cíle zdroje na správcovských portech
+    let mut fail_sources: HashMap<ServiceKey, HashMap<String, u32>> = HashMap::new();
+    let mut fanout: HashMap<String, (HashSet<String>, DateTime<Utc>)> = HashMap::new();
 
     for connection in connections {
         let Some(port) = connection.dst_port else {
@@ -358,7 +436,41 @@ pub(crate) fn detect_v3(
             }
         }
 
-        if known_services.contains(&key) {
+        let known = known_services.contains(&key);
+        if switches.recall {
+            if let Some(src) = &connection.src_ip {
+                if is_timeout_like(connection) {
+                    let entry = fail_sources.entry(key.clone()).or_default();
+                    if entry.len() < 256 || entry.contains_key(src) {
+                        *entry.entry(src.clone()).or_default() += 1;
+                    }
+                }
+                if ADMIN_PORTS.contains(&port)
+                    && known_hosts.contains(src)
+                    && src != &connection.dst_ip
+                    && (is_attempt(connection) || is_success(connection))
+                {
+                    let entry = fanout
+                        .entry(src.clone())
+                        .or_insert_with(|| (HashSet::new(), connection.timestamp));
+                    entry.1 = entry.1.min(connection.timestamp);
+                    if entry.0.len() < 4096 {
+                        entry.0.insert(connection.dst_ip.clone());
+                    }
+                }
+                // pokusy i na ZNÁMOU službu: horizontální sken otevřeného portu
+                if switches.unexpected && known && is_attempt(connection) {
+                    let entry = attempts_by_source
+                        .entry(src.clone())
+                        .or_insert_with(|| (Vec::new(), connection.timestamp));
+                    entry.1 = entry.1.min(connection.timestamp);
+                    if entry.0.len() < 4096 {
+                        entry.0.push(key.clone());
+                    }
+                }
+            }
+        }
+        if known {
             continue;
         }
         if !switches.unexpected {
@@ -471,13 +583,22 @@ pub(crate) fn detect_v3(
             ],
         );
     }
-    // skupina podobnych sluzeb (proto/port) pro studeny start
-    let mut peers: HashMap<(&str, u16), Vec<[f32; FEATURES]>> = HashMap::new();
+    // skupina podobnych sluzeb pro studeny start: proto/port, s typem zarizeni (krok 2D)
+    // proto/port v ramci peer skupiny cile (stejny typ a podsit), jinak jen proto/port
+    let group_of = |ip: &str| -> &str { peer_groups.get(ip).map(String::as_str).unwrap_or("") };
+    let mut peers: HashMap<(&str, &str, u16), Vec<[f32; FEATURES]>> = HashMap::new();
     for (key, sample) in &samples {
         peers
-            .entry((key.1.as_str(), key.2))
+            .entry(("", key.1.as_str(), key.2))
             .or_default()
             .push(*sample);
+        let group = group_of(&key.0);
+        if !group.is_empty() {
+            peers
+                .entry((group, key.1.as_str(), key.2))
+                .or_default()
+                .push(*sample);
+        }
     }
 
     let evaluate = |state: &DetectorState,
@@ -513,13 +634,31 @@ pub(crate) fn detect_v3(
                 });
             }
         }
-        let group = peers.get(&(key.1.as_str(), key.2))?;
-        let mut values: Vec<f64> = group
-            .iter()
-            .filter(|other| *other != sample)
-            .map(|other| f64::from(other[feature]))
-            .filter(|v| *v >= 0.0)
-            .collect();
+        let collect = |group: &str| -> Vec<f64> {
+            peers
+                .get(&(group, key.1.as_str(), key.2))
+                .map(|members| {
+                    members
+                        .iter()
+                        .filter(|other| *other != sample)
+                        .map(|other| f64::from(other[feature]))
+                        .filter(|v| *v >= 0.0)
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        // nejdriv zarizeni stejneho typu a podsite, pri male skupine vsechny sluzby portu
+        let own_group = group_of(&key.0);
+        let mut values = if own_group.is_empty() {
+            Vec::new()
+        } else {
+            collect(own_group)
+        };
+        let mut basis = "skupina_typu_zarizeni";
+        if values.len() < th.peer_min {
+            values = collect("");
+            basis = "skupina_sluzeb";
+        }
         if values.len() < th.peer_min {
             return None; // bez historie a bez skupiny: jen sbirat
         }
@@ -529,7 +668,7 @@ pub(crate) fn detect_v3(
             z,
             ratio,
             median,
-            basis: "skupina_sluzeb",
+            basis,
         })
     };
 
@@ -807,6 +946,24 @@ pub(crate) fn detect_v3(
         }
     }
 
+    if switches.recall {
+        recall_events(
+            &mut events,
+            &mut sources,
+            RecallInputs {
+                aggregates: &aggregates,
+                features: &features,
+                fail_sources: &fail_sources,
+                fanout: &fanout,
+                flagged: &flagged,
+                known_hosts,
+            },
+            state,
+            th,
+            cycle,
+        );
+    }
+
     // --- ohraniceni stavu ---
     if cycle.is_multiple_of(48) {
         state
@@ -815,6 +972,9 @@ pub(crate) fn detect_v3(
         state
             .scanners
             .retain(|_, s| cycle.saturating_sub(s.last_cycle) <= th.scan_window_cycles);
+        state
+            .fanout
+            .retain(|_, (_, last)| cycle.saturating_sub(*last) <= th.service_ttl_cycles);
     }
     if state.services.len() > th.max_services {
         let mut by_age: Vec<(u64, String)> = state
@@ -846,6 +1006,230 @@ pub(crate) fn detect_v3(
             .then(l.event_id.cmp(&r.event_id))
     });
     V3Output { events, sources }
+}
+
+struct RecallInputs<'a> {
+    aggregates: &'a HashMap<ServiceKey, ConnectionAggregate>,
+    features: &'a HashMap<ServiceKey, CycleFeatures>,
+    fail_sources: &'a HashMap<ServiceKey, HashMap<String, u32>>,
+    fanout: &'a HashMap<String, (HashSet<String>, DateTime<Utc>)>,
+    flagged: &'a HashSet<ServiceKey>,
+    known_hosts: &'a HashSet<String>,
+}
+
+/// Krok 2A (obnova recallu a A07). Upraví legacy timeouty a přidá zdrojové události:
+///
+/// - `connection_timeout_burst` jen tehdy, když podíl selhání významně převyšuje běžnou
+///   míru (binomický test, `timeout_p0`, `timeout_alpha`): 2 selhání z 8 toků je
+///   náhoda, ne tlak. Podle rozložení zdrojů: jeden dominantní zdroj (≥ 50 % selhání)
+///   = tlak zdroje (sken, hádání hesel), zůstává; mnoho převážně vnitřních klientů
+///   bez skoku objemu = `service_unreachable` (služba nedostupná, provozní stav; RQ3
+///   Z2: selhání na přechodně nedostupnou službu není důkaz skenu); mnoho vnějších
+///   zdrojů = zůstává timeout (DoS).
+/// - `multi_target_pattern`: zdroj mluví na správcovských portech s mnoha hosty proti
+///   své historii (laterální pohyb jako rozptyl first-seen hran, RQ4 Z12a, nízká jistota).
+/// - `source_volume_outlier`: jeden zdroj služby má mnohonásobek toků ostatních zdrojů
+///   (DNS tunel, hádání hesel); peer srovnání zdrojů téhož cíle, RQ2 Z4 (nízká jistota).
+fn recall_events(
+    events: &mut Vec<NormalizedEvent>,
+    sources: &mut SourceMap,
+    input: RecallInputs<'_>,
+    state: &mut DetectorState,
+    th: &V3Thresholds,
+    cycle: u64,
+) {
+    // 1. timeouty
+    let mut kept = Vec::with_capacity(events.len());
+    for mut item in events.drain(..) {
+        if item.event_type != "connection_timeout_burst" {
+            kept.push(item);
+            continue;
+        }
+        let Some(port) = item.dst_port else {
+            kept.push(item);
+            continue;
+        };
+        let key = (item.dst_ip.clone(), item.proto.clone(), port);
+        let Some(aggregate) = input.aggregates.get(&key) else {
+            kept.push(item);
+            continue;
+        };
+        let p = binomial_tail(aggregate.count, aggregate.timeout_like, th.timeout_p0);
+        if p > th.timeout_alpha {
+            continue; // selhani v mezich bezne miry
+        }
+        let failures = input.fail_sources.get(&key);
+        let total: u32 = failures.map(|m| m.values().sum()).unwrap_or(0);
+        let mut ranked: Vec<(&String, &u32)> =
+            failures.map(|m| m.iter().collect()).unwrap_or_default();
+        ranked.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+        let top_share = ranked
+            .first()
+            .map(|(_, n)| **n as f64 / total.max(1) as f64)
+            .unwrap_or(0.0);
+        let distinct = ranked.len();
+        if let Some((top, n)) = ranked.first()
+            && top_share >= 0.5
+            && **n >= th.dominant_min
+        {
+            item.message = format!(
+                "{} Tlak jednoho zdroje: {top} ({:.0} % selhani, p = {p:.1e}).",
+                item.message,
+                top_share * 100.0
+            );
+            item.src_ip = Some((*top).clone());
+            sources.insert(
+                (key.0.clone(), key.1.clone(), key.2, item.event_type.clone()),
+                vec![(*top).clone()],
+            );
+        } else if distinct >= 3
+            && !input.flagged.contains(&key)
+            && ranked
+                .iter()
+                .filter(|(src, _)| input.known_hosts.contains(*src))
+                .count()
+                * 2
+                >= distinct
+        {
+            // rozptylena selhani VNITRNICH klientu bez skoku objemu = vypadek sluzby;
+            // rozptylena selhani mnoha vnejsich zdroju zustavaji timeouty (DoS)
+            item.event_type = "service_unreachable".to_string();
+            item.event_id = item
+                .event_id
+                .replacen("anomaly:timeout", "anomaly-v3:unreachable", 1);
+            item.severity = Severity::Low;
+            item.rule_id = Some(format!(
+                "heuristika-v3:service-unreachable@v{}",
+                V3Thresholds::VERSION
+            ));
+            item.message = format!(
+                "Sluzba neodpovida {distinct} zdrojum ({} z {} spojeni selhalo, p = {p:.1e}), bez skoku objemu: nejspis vypadek, ne utok.",
+                aggregate.timeout_like, aggregate.count
+            );
+        }
+        kept.push(item);
+    }
+    *events = kept;
+
+    // 2. rozptyl zdroje po hostech na spravcovskych portech
+    let mut fan: Vec<(&String, &(HashSet<String>, DateTime<Utc>))> = input.fanout.iter().collect();
+    fan.sort_by(|a, b| a.0.cmp(b.0));
+    for (src, (targets, first)) in fan {
+        let distinct = targets.len();
+        let record = state.fanout.entry(src.clone()).or_default();
+        let mut history: Vec<f64> = record.0.iter().map(|v| f64::from(*v)).collect();
+        let flagged = if history.len() >= 4 {
+            let (median, _) = median_and_mad(&mut history);
+            distinct >= th.fanout_min
+                && distinct as f64 >= th.fanout_ratio * median.max(1.0)
+                && distinct as f64 - median >= th.fanout_min as f64
+        } else {
+            distinct >= th.fanout_cold_min
+        };
+        // alarmovy vzorek se do historie neuci (zmrazeni baseline pri alarmu, RQ2 Z3)
+        if !flagged {
+            if record.0.len() >= 16 {
+                record.0.remove(0);
+            }
+            record.0.push(distinct as f32);
+        }
+        record.1 = cycle;
+        if !flagged {
+            continue;
+        }
+        events.push(NormalizedEvent {
+            event_id: format!("anomaly-v3:multi_target_pattern:{src}"),
+            timestamp: *first,
+            src_ip: Some(src.clone()),
+            src_port: None,
+            dst_ip: src.clone(),
+            proto: "tcp".to_string(),
+            dst_port: None,
+            event_type: "multi_target_pattern".to_string(),
+            severity: if distinct >= 25 {
+                Severity::High
+            } else {
+                Severity::Medium
+            },
+            source: "zeek".to_string(),
+            rule_id: Some(format!(
+                "heuristika-v3:admin-fanout@v{}",
+                V3Thresholds::VERSION
+            )),
+            message: format!(
+                "Zdroj {src} se v tomto okne pripojil na spravcovske porty {distinct} ruznych hostu (historie zdroje to nezna): mozny lateralni pohyb."
+            ),
+            raw_ref: Some("conn.log".to_string()),
+            count: distinct as u32,
+        });
+    }
+    if state.fanout.len() > th.max_scanners {
+        let mut by_age: Vec<(u64, String)> = state
+            .fanout
+            .iter()
+            .map(|(k, (_, last))| (*last, k.clone()))
+            .collect();
+        by_age.sort();
+        let excess = state.fanout.len() - th.max_scanners + th.max_scanners / 10;
+        for (_, key) in by_age.into_iter().take(excess) {
+            state.fanout.remove(&key);
+        }
+    }
+
+    // 3. odlehly zdroj sluzby (peer srovnani zdroju tehoz cile)
+    let mut keys: Vec<&ServiceKey> = input.features.keys().collect();
+    keys.sort();
+    for key in keys {
+        let item = &input.features[key];
+        if item.sources.len() < th.outlier_min_sources {
+            continue;
+        }
+        let mut counts: Vec<(&String, u32)> = item.sources.iter().map(|(s, n)| (s, *n)).collect();
+        counts.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+        let (top, top_n) = counts[0];
+        let mut others: Vec<f64> = counts[1..].iter().map(|(_, n)| f64::from(*n)).collect();
+        let (median, _) = median_and_mad(&mut others);
+        let ratio = f64::from(top_n) / median.max(1.0);
+        if ratio < th.outlier_ratio || f64::from(top_n) - median < th.outlier_min_excess {
+            continue;
+        }
+        events.push(NormalizedEvent {
+            event_id: format!("anomaly-v3:source_volume_outlier:{}:{top}", key_text(key)),
+            timestamp: input.aggregates[key].first_seen,
+            src_ip: Some(top.clone()),
+            src_port: None,
+            dst_ip: key.0.clone(),
+            proto: key.1.clone(),
+            dst_port: Some(key.2),
+            event_type: "source_volume_outlier".to_string(),
+            severity: if ratio >= 30.0 {
+                Severity::High
+            } else {
+                Severity::Medium
+            },
+            source: "zeek".to_string(),
+            rule_id: Some(format!(
+                "heuristika-v3:source-outlier@v{}",
+                V3Thresholds::VERSION
+            )),
+            message: format!(
+                "Zdroj {top} poslal na {} {top_n} toku, {ratio:.0}x vic nez median ostatnich {} zdroju ({median:.0}).",
+                key_text(key),
+                counts.len() - 1
+            ),
+            raw_ref: Some("conn.log".to_string()),
+            count: top_n,
+        });
+        sources.insert(
+            (
+                key.0.clone(),
+                key.1.clone(),
+                key.2,
+                "source_volume_outlier".into(),
+            ),
+            vec![top.clone()],
+        );
+    }
 }
 
 fn evict_oldest_scanners(state: &mut DetectorState, count: usize) {
@@ -902,6 +1286,11 @@ mod tests {
         rate: true,
         volume: true,
         unexpected: true,
+        recall: false,
+    };
+    const RECALL: V3Switches = V3Switches {
+        recall: true,
+        ..ALL
     };
 
     fn busy_service(n: usize, cycle: i64) -> Vec<ConnectionObservation> {
@@ -940,7 +1329,16 @@ mod tests {
         let th = V3Thresholds::default();
         for cycle in 0..48 {
             let flows = busy_service(300 + (cycle as usize % 5) * 7, cycle);
-            let out = detect_v3(&flows, &services, &hosts, &mut state, ALL, &th, at(cycle));
+            let out = detect_v3(
+                &flows,
+                &services,
+                &hosts,
+                &mut state,
+                ALL,
+                &th,
+                at(cycle),
+                &HashMap::new(),
+            );
             assert!(
                 !out.events.iter().any(|e| matches!(
                     e.event_type.as_str(),
@@ -980,6 +1378,7 @@ mod tests {
                 ALL,
                 &th,
                 at(cycle),
+                &HashMap::new(),
             );
         }
         let mut flows = busy_service(100, 16);
@@ -988,7 +1387,16 @@ mod tests {
             f.timestamp = at(16);
             flows.push(f);
         }
-        let out = detect_v3(&flows, &services, &hosts, &mut state, ALL, &th, at(16));
+        let out = detect_v3(
+            &flows,
+            &services,
+            &hosts,
+            &mut state,
+            ALL,
+            &th,
+            at(16),
+            &HashMap::new(),
+        );
         let hit = out
             .events
             .iter()
@@ -1018,6 +1426,7 @@ mod tests {
             ALL,
             &V3Thresholds::default(),
             at(0),
+            &HashMap::new(),
         );
         assert!(
             out.events
@@ -1038,7 +1447,16 @@ mod tests {
                 .map(|_| flow("10.0.0.5", "10.0.0.2", 53, 20, 2.0, "SF", 900))
                 .collect();
             flows.push(flow("10.0.0.6", "10.0.0.2", 53, 3, 0.0011, "SF", 100));
-            let out = detect_v3(&flows, &services, &hosts, &mut state, ALL, &th, at(cycle));
+            let out = detect_v3(
+                &flows,
+                &services,
+                &hosts,
+                &mut state,
+                ALL,
+                &th,
+                at(cycle),
+                &HashMap::new(),
+            );
             assert!(
                 out.events
                     .iter()
@@ -1049,7 +1467,16 @@ mod tests {
         let flows: Vec<_> = (0..20)
             .map(|_| flow("10.0.0.5", "10.0.0.2", 53, 4000, 2.0, "SF", 900))
             .collect();
-        let out = detect_v3(&flows, &services, &hosts, &mut state, ALL, &th, at(10));
+        let out = detect_v3(
+            &flows,
+            &services,
+            &hosts,
+            &mut state,
+            ALL,
+            &th,
+            at(10),
+            &HashMap::new(),
+        );
         assert!(
             out.events
                 .iter()
@@ -1070,7 +1497,16 @@ mod tests {
         }
         // pokusy na neznamou adresu nejsou unexpected_traffic po tocich
         flows.push(flow("10.0.0.8", "10.0.0.77", 22, 1, 0.0, "S0", 0));
-        let out = detect_v3(&flows, &services, &hosts, &mut state, ALL, &th, at(0));
+        let out = detect_v3(
+            &flows,
+            &services,
+            &hosts,
+            &mut state,
+            ALL,
+            &th,
+            at(0),
+            &HashMap::new(),
+        );
         let unexpected: Vec<_> = out
             .events
             .iter()
@@ -1103,7 +1539,16 @@ mod tests {
                 "S0",
                 0,
             )];
-            let out = detect_v3(&flows, &services, &hosts, &mut state, ALL, &th, at(cycle));
+            let out = detect_v3(
+                &flows,
+                &services,
+                &hosts,
+                &mut state,
+                ALL,
+                &th,
+                at(cycle),
+                &HashMap::new(),
+            );
             seen |= out.events.iter().any(|e| e.event_type == "scan_attempts");
         }
         assert!(seen, "pomaly sken se musi nascitat");
@@ -1132,12 +1577,351 @@ mod tests {
                     )
                 })
                 .collect();
-            detect_v3(&flows, &services, &hosts, &mut state, ALL, &th, at(cycle));
+            detect_v3(
+                &flows,
+                &services,
+                &hosts,
+                &mut state,
+                ALL,
+                &th,
+                at(cycle),
+                &HashMap::new(),
+            );
             assert!(state.tracked_services() <= 500);
             assert!(state.tracked_scanners() <= 100);
         }
         let json = serde_json::to_string(&state).unwrap();
         let back: DetectorState = serde_json::from_str(&json).unwrap();
         assert_eq!(back.tracked_services(), state.tracked_services());
+    }
+
+    #[test]
+    fn binomial_tail_matches_reference_values() {
+        // P(X >= 2 | 8, 0.06) = 1 - 0.94^8 - 8*0.06*0.94^7 ≈ 0.0791
+        assert!((binomial_tail(8, 2, 0.06) - 0.0791).abs() < 1e-3);
+        assert!(binomial_tail(40, 40, 0.06) < 1e-40);
+        assert_eq!(binomial_tail(10, 0, 0.3), 1.0);
+        assert_eq!(binomial_tail(10, 11, 0.3), 0.0);
+        // velke n: normalni aproximace v rozumne mezi
+        let big = binomial_tail(10_000, 700, 0.06);
+        assert!(big > 0.0 && big < 1e-3, "{big}");
+    }
+
+    fn many_clients(
+        dst: &str,
+        port: u16,
+        clients: usize,
+        per: usize,
+        state: &str,
+    ) -> Vec<ConnectionObservation> {
+        let mut out = Vec::new();
+        for c in 0..clients {
+            for _ in 0..per {
+                let resp = if state == "SF" { 400 } else { 0 };
+                out.push(flow(
+                    &format!("10.0.1.{}", 10 + c),
+                    dst,
+                    port,
+                    4,
+                    0.2,
+                    state,
+                    resp,
+                ));
+            }
+        }
+        out
+    }
+
+    fn known_with(
+        services: &[(&str, u16)],
+        hosts: &[&str],
+    ) -> (HashSet<ServiceKey>, HashSet<String>) {
+        (
+            services
+                .iter()
+                .map(|(ip, port)| (ip.to_string(), "tcp".to_string(), *port))
+                .collect(),
+            hosts.iter().map(|h| h.to_string()).collect(),
+        )
+    }
+
+    fn run(
+        flows: &[ConnectionObservation],
+        known: &(HashSet<ServiceKey>, HashSet<String>),
+        state: &mut DetectorState,
+        switches: V3Switches,
+        cycle: i64,
+        groups: &HashMap<String, String>,
+    ) -> V3Output {
+        detect_v3(
+            flows,
+            &known.0,
+            &known.1,
+            state,
+            switches,
+            &V3Thresholds::default(),
+            at(cycle),
+            groups,
+        )
+    }
+
+    /// A07: timeouty od mnoha klientu bez skoku objemu = sluzba nedostupna (vypadek);
+    /// timeouty jednoho zdroje = tlak zdroje; nahodna 2 selhani z 8 = nic.
+    #[test]
+    fn timeouts_are_split_by_source_distribution_and_tested_against_base_rate() {
+        let mut known = known_with(&[("10.0.0.5", 80)], &["10.0.0.5"]);
+        known.1.extend((10..40).map(|i| format!("10.0.1.{i}")));
+        let none = HashMap::new();
+        let down = many_clients("10.0.0.5", 80, 12, 3, "S0");
+        let out = run(
+            &down,
+            &known,
+            &mut DetectorState::default(),
+            RECALL,
+            0,
+            &none,
+        );
+        assert!(
+            out.events
+                .iter()
+                .any(|e| e.event_type == "service_unreachable")
+        );
+        // mnoho VNEJSICH zdroju bez odpovedi (DoS) zustava timeout, ne vypadek
+        let dos: Vec<_> = (0..40)
+            .map(|i| flow(&format!("198.51.100.{i}"), "10.0.0.5", 80, 1, 0.0, "S0", 0))
+            .collect();
+        let dos_out = run(
+            &dos,
+            &known,
+            &mut DetectorState::default(),
+            RECALL,
+            0,
+            &none,
+        );
+        assert!(
+            dos_out
+                .events
+                .iter()
+                .any(|e| e.event_type == "connection_timeout_burst")
+        );
+        assert!(
+            !dos_out
+                .events
+                .iter()
+                .any(|e| e.event_type == "service_unreachable")
+        );
+        assert!(
+            !out.events
+                .iter()
+                .any(|e| e.event_type == "connection_timeout_burst")
+        );
+
+        let mut pressure = many_clients("10.0.0.5", 80, 6, 4, "SF");
+        for _ in 0..30 {
+            pressure.push(flow("203.0.113.7", "10.0.0.5", 80, 2, 0.0, "S0", 0));
+        }
+        let out = run(
+            &pressure,
+            &known,
+            &mut DetectorState::default(),
+            RECALL,
+            0,
+            &none,
+        );
+        let burst = out
+            .events
+            .iter()
+            .find(|e| e.event_type == "connection_timeout_burst")
+            .expect("tlak zdroje");
+        assert_eq!(burst.src_ip.as_deref(), Some("203.0.113.7"));
+
+        let mut chance = many_clients("10.0.0.5", 80, 3, 2, "SF");
+        chance.push(flow("10.0.1.40", "10.0.0.5", 80, 2, 0.0, "S0", 0));
+        chance.push(flow("10.0.1.41", "10.0.0.5", 80, 2, 0.0, "S0", 0));
+        let legacy = run(
+            &chance,
+            &known,
+            &mut DetectorState::default(),
+            ALL,
+            0,
+            &none,
+        );
+        assert!(
+            legacy
+                .events
+                .iter()
+                .any(|e| e.event_type == "connection_timeout_burst")
+        );
+        let out = run(
+            &chance,
+            &known,
+            &mut DetectorState::default(),
+            RECALL,
+            0,
+            &none,
+        );
+        assert!(
+            !out.events.iter().any(|e| matches!(
+                e.event_type.as_str(),
+                "connection_timeout_burst" | "service_unreachable"
+            )),
+            "2 selhani z 8 jsou v mezich bezne miry"
+        );
+    }
+
+    /// Lateralni pohyb: zdroj s historii jednoho cile osloví na SMB 15 hostu.
+    #[test]
+    fn admin_fanout_against_source_history_is_flagged() {
+        let mut hosts: HashSet<String> = (2..40).map(|i| format!("10.0.0.{i}")).collect();
+        hosts.insert("10.0.1.9".to_string());
+        let known = (HashSet::new(), hosts);
+        let none = HashMap::new();
+        let mut state = DetectorState::default();
+        for cycle in 0..6 {
+            let flows = vec![flow("10.0.1.9", "10.0.0.2", 445, 6, 1.0, "SF", 900)];
+            let out = run(&flows, &known, &mut state, RECALL, cycle, &none);
+            assert!(
+                !out.events
+                    .iter()
+                    .any(|e| e.event_type == "multi_target_pattern")
+            );
+        }
+        let flows: Vec<_> = (2..17)
+            .map(|i| flow("10.0.1.9", &format!("10.0.0.{i}"), 445, 6, 1.0, "SF", 900))
+            .collect();
+        let out = run(&flows, &known, &mut state, RECALL, 7, &none);
+        let event = out
+            .events
+            .iter()
+            .find(|e| e.event_type == "multi_target_pattern")
+            .expect("rozptyl po hostech");
+        assert_eq!(event.dst_ip, "10.0.1.9");
+        assert_eq!(event.count, 15);
+        // vypnuty recall = beze zmeny kroku 1
+        let off = run(&flows, &known, &mut DetectorState::default(), ALL, 7, &none);
+        assert!(
+            !off.events
+                .iter()
+                .any(|e| e.event_type == "multi_target_pattern")
+        );
+    }
+
+    /// DNS tunel: jeden klient ma mnohonasobek toku ostatnich klientu tehoz serveru.
+    #[test]
+    fn source_volume_outlier_flags_single_heavy_client() {
+        let known = known_with(&[("10.0.0.2", 53)], &["10.0.0.2"]);
+        let none = HashMap::new();
+        let mut state = DetectorState::default();
+        let mut flows = many_clients("10.0.0.2", 53, 10, 6, "SF");
+        let normal = run(&flows, &known, &mut state, RECALL, 0, &none);
+        assert!(
+            !normal
+                .events
+                .iter()
+                .any(|e| e.event_type == "source_volume_outlier")
+        );
+        for _ in 0..200 {
+            flows.push(flow("10.0.1.99", "10.0.0.2", 53, 2, 0.1, "SF", 500));
+        }
+        let out = run(&flows, &known, &mut state, RECALL, 1, &none);
+        let event = out
+            .events
+            .iter()
+            .find(|e| e.event_type == "source_volume_outlier")
+            .expect("odlehly zdroj");
+        assert_eq!(event.src_ip.as_deref(), Some("10.0.1.99"));
+        let key = (
+            "10.0.0.2".to_string(),
+            "tcp".to_string(),
+            53,
+            "source_volume_outlier".to_string(),
+        );
+        assert_eq!(out.sources[&key], vec!["10.0.1.99".to_string()]);
+    }
+
+    /// Horizontalni sken OTEVRENEHO portu: pokusy na znamou sluzbu se pricitaji zdroji.
+    #[test]
+    fn attempts_on_known_services_count_for_scan_attempts() {
+        let open: Vec<(String, u16)> = (2..14).map(|i| (format!("10.0.0.{i}"), 22)).collect();
+        let services: HashSet<ServiceKey> = open
+            .iter()
+            .map(|(ip, port)| (ip.clone(), "tcp".to_string(), *port))
+            .collect();
+        let hosts: HashSet<String> = open.iter().map(|(ip, _)| ip.clone()).collect();
+        let known = (services, hosts);
+        let none = HashMap::new();
+        let flows: Vec<_> = open
+            .iter()
+            .map(|(ip, port)| flow("198.51.100.4", ip, *port, 1, 0.0, "S0", 0))
+            .collect();
+        let step1 = run(&flows, &known, &mut DetectorState::default(), ALL, 0, &none);
+        assert!(!step1.events.iter().any(|e| e.event_type == "scan_attempts"));
+        let out = run(
+            &flows,
+            &known,
+            &mut DetectorState::default(),
+            RECALL,
+            0,
+            &none,
+        );
+        assert!(out.events.iter().any(|e| e.event_type == "scan_attempts"));
+    }
+
+    /// Krok 2D: studeny start srovnava sluzbu se stejnym typem zarizeni a podsiti.
+    #[test]
+    fn peer_group_of_device_type_is_preferred_over_port_group() {
+        let mut flows = Vec::new();
+        let mut groups = HashMap::new();
+        let mut services = HashSet::new();
+        let mut hosts = HashSet::new();
+        // 6 tiskaren (malo provozu) a 6 web serveru (hodne provozu), vse port 80
+        for i in 0..6u32 {
+            let printer = format!("10.0.2.{}", 10 + i);
+            let web = format!("10.0.3.{}", 10 + i);
+            groups.insert(printer.clone(), "printer@10.0.2".to_string());
+            groups.insert(web.clone(), "web@10.0.3".to_string());
+            for ip in [&printer, &web] {
+                services.insert((ip.clone(), "tcp".to_string(), 80u16));
+                hosts.insert(ip.clone());
+            }
+            for _ in 0..3 {
+                flows.push(flow("10.0.1.5", &printer, 80, 4, 0.2, "SF", 300));
+            }
+            for _ in 0..400 {
+                flows.push(flow("10.0.1.6", &web, 80, 4, 0.2, "SF", 300));
+            }
+        }
+        // sedma tiskarna s vetsim objemem: proti tiskarnam anomalie, proti portu 80 ne
+        let odd = "10.0.2.99".to_string();
+        groups.insert(odd.clone(), "printer@10.0.2".to_string());
+        services.insert((odd.clone(), "tcp".to_string(), 80));
+        hosts.insert(odd.clone());
+        for _ in 0..120 {
+            flows.push(flow("10.0.1.7", &odd, 80, 4, 0.2, "SF", 300));
+        }
+        let known = (services, hosts);
+        let flagged = |out: &V3Output| {
+            out.events
+                .iter()
+                .any(|e| e.event_type == "inductive_volume_anomaly" && e.dst_ip == odd)
+        };
+        let with_groups = run(
+            &flows,
+            &known,
+            &mut DetectorState::default(),
+            RECALL,
+            0,
+            &groups,
+        );
+        assert!(flagged(&with_groups), "proti tiskarnam je to anomalie");
+        let without = run(
+            &flows,
+            &known,
+            &mut DetectorState::default(),
+            RECALL,
+            0,
+            &HashMap::new(),
+        );
+        assert!(!flagged(&without), "proti vsem sluzbam portu 80 ne");
     }
 }

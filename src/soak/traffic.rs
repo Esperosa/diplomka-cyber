@@ -111,12 +111,16 @@ impl Family {
                 "packet_rate_spike",
                 // v3: pokusy bez odpovedi prictene zdroji (A30: typ, ktery engine umi)
                 "scan_attempts",
+                // krok 2A: IDS nalez podle signatury (ET SCAN)
+                "suricata_alert",
             ],
             Family::SshBrute => &[
                 "connection_timeout_burst",
                 "packet_rate_spike",
                 "unexpected_traffic",
                 "suricata_alert",
+                // krok 2A: jeden zdroj s mnohonasobkem toku ostatnich klientu sluzby
+                "source_volume_outlier",
             ],
             Family::C2Beacon => &[
                 "external_flow_observed",
@@ -128,6 +132,7 @@ impl Family {
                 "service_overload_risk",
                 "connection_timeout_burst",
                 "inductive_volume_anomaly",
+                "suricata_alert",
             ],
             Family::Exfil => &[
                 "external_flow_observed",
@@ -157,18 +162,23 @@ impl Family {
                 "packet_rate_spike",
                 "unexpected_traffic",
                 "inductive_volume_anomaly",
+                "source_volume_outlier",
             ],
+            // krok 2A: hadani hesel z botnetu = nárůst objemu na sluzbu (mechanismus utoku),
+            // v3 ho tak zachyti (A30: typ, ktery engine umi)
             Family::CredentialStuffing => &[
                 "connection_timeout_burst",
                 "packet_rate_spike",
                 "unexpected_traffic",
                 "suricata_alert",
+                "inductive_volume_anomaly",
             ],
             Family::Ransomware => &[
                 "multi_target_pattern",
                 "unexpected_traffic",
                 "inductive_volume_anomaly",
                 "external_flow_observed",
+                "source_volume_outlier",
             ],
             Family::Cryptomining => &[
                 "external_flow_observed",
@@ -179,12 +189,14 @@ impl Family {
                 "inductive_volume_anomaly",
                 "unexpected_traffic",
                 "external_flow_observed",
+                "source_volume_outlier",
             ],
             Family::WebExploit => &[
                 "suricata_alert",
                 "packet_rate_spike",
                 "unexpected_traffic",
                 "service_overload_risk",
+                "source_volume_outlier",
             ],
             Family::IcsAttack => &["unexpected_traffic", "suricata_alert", "packet_rate_spike"],
             Family::FleetBeacon => &[

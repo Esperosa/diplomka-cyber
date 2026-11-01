@@ -101,8 +101,11 @@ pub fn generate_findings(report: &RunReport) -> Vec<Finding> {
 /// Engine v3 (krok 1C, R13): nálezy, které legacy pravidla neznají. `scan_attempts`
 /// = pokusy bez odpovědi přičtené ZDROJI (sken, průzkum), připojené k nejčastějšímu
 /// cíli. Legacy detektor tyto události nevydává, takže legacy výstup se nemění.
-pub fn v3_extra_findings(report: &RunReport) -> Vec<Finding> {
+pub fn v3_extra_findings(report: &RunReport, recall: bool) -> Vec<Finding> {
     let mut findings = Vec::new();
+    if recall {
+        findings.extend(recall_findings(report));
+    }
     for host in &report.hosts {
         for service in &host.services {
             let events: Vec<_> = service
@@ -139,6 +142,185 @@ pub fn v3_extra_findings(report: &RunReport) -> Vec<Finding> {
         }
     }
     findings
+}
+
+/// Typy nálezů kroku 2A (obnova recallu): (typ, název, zdůvodnění, doporučení, jistota).
+const RECALL_TYPES: &[(&str, &str, &str, &str, Confidence)] = &[
+    (
+        "multi_target_pattern",
+        "Host se připojuje na správcovské porty mnoha zařízení",
+        "Zdroj v jednom okně oslovil SSH/SMB/RDP/RPC mnoha hostů, což jeho historie nezná; typické pro laterální pohyb nebo průzkum zevnitř.",
+        "Ověřit, zda jde o správcovskou úlohu (inventura, nasazení); jinak izolovat zdroj a prověřit přihlášení na oslovených hostech.",
+        Confidence::Medium,
+    ),
+    (
+        "source_volume_outlier",
+        "Jeden zdroj posílá na službu mnohonásobek provozu ostatních klientů",
+        "Ostatní klienti téže služby mají řádově méně toků; jeden zdroj vybočuje (tunelování, hádání hesel, zneužití).",
+        "Prověřit zdroj (proces, uživatel) a obsah provozu na službu.",
+        Confidence::Medium,
+    ),
+    (
+        "service_unreachable",
+        "Služba neodpovídá mnoha klientům",
+        "Selhává velký podíl spojení od mnoha různých zdrojů bez skoku objemu; to odpovídá výpadku služby, ne útoku jednoho zdroje.",
+        "Zkontrolovat stav služby a hostu (monitoring, restart).",
+        Confidence::Medium,
+    ),
+];
+
+/// Krok 2A: nálezy z nových zdrojových detektorů a IDS nálezy podle signatury.
+/// IDS: jeden nález na (služba, signatura), takže nová signatura na hostu s otevřeným
+/// starším alertem je nový stav (dřív suricata_alert nález vůbec nevznikal, R3).
+fn recall_findings(report: &RunReport) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    for host in &report.hosts {
+        for service in &host.services {
+            for (kind, title, rationale, recommendation, confidence) in RECALL_TYPES {
+                let Some(strongest) = service
+                    .events
+                    .iter()
+                    .filter(|item| item.event.event_type == *kind)
+                    .max_by_key(|item| (item.event.severity, item.event.count))
+                else {
+                    continue;
+                };
+                findings.push(Finding {
+                    finding_id: build_finding_id(
+                        kind,
+                        Some(&host.host_key),
+                        Some(&service.service_key),
+                    ),
+                    finding_type: kind.to_string(),
+                    title: format!("{title} ({})", service.service_key),
+                    severity: strongest.event.severity,
+                    confidence: *confidence,
+                    host_key: Some(host.host_key.clone()),
+                    service_key: Some(service.service_key.clone()),
+                    rationale: format!("{rationale} {}", strongest.event.message),
+                    evidence: build_protocol_evidence(service, kind),
+                    recommendation: recommendation.to_string(),
+                });
+            }
+            let mut by_signature: std::collections::BTreeMap<
+                &str,
+                Vec<&crate::model::CorrelatedEvent>,
+            > = std::collections::BTreeMap::new();
+            for item in service
+                .events
+                .iter()
+                .filter(|e| e.event.source == "suricata")
+            {
+                by_signature
+                    .entry(item.event.rule_id.as_deref().unwrap_or("0"))
+                    .or_default()
+                    .push(item);
+            }
+            for (sid, items) in by_signature {
+                let strongest = items
+                    .iter()
+                    .max_by_key(|item| item.event.severity)
+                    .expect("neprazdna skupina");
+                let mut sources: Vec<&str> = items
+                    .iter()
+                    .filter_map(|i| i.event.src_ip.as_deref())
+                    .collect();
+                sources.sort_unstable();
+                sources.dedup();
+                findings.push(Finding {
+                    finding_id: format!(
+                        "{}#{sid}",
+                        build_finding_id("suricata_alert", Some(&host.host_key), Some(&service.service_key))
+                    ),
+                    finding_type: "suricata_alert".to_string(),
+                    title: format!("IDS: {} ({})", strongest.event.message, service.service_key),
+                    severity: strongest.event.severity,
+                    confidence: Confidence::High,
+                    host_key: Some(host.host_key.clone()),
+                    service_key: Some(service.service_key.clone()),
+                    rationale: format!(
+                        "Suricata signatura {sid} ({} výskytů) ze zdrojů: {}.",
+                        items.len(),
+                        sources.join(", ")
+                    ),
+                    evidence: items
+                        .iter()
+                        .take(5)
+                        .map(|i| {
+                            format!(
+                                "{} {} -> {}:{} sid={sid}",
+                                i.event.timestamp.to_rfc3339(),
+                                i.event.src_ip.as_deref().unwrap_or("-"),
+                                i.event.dst_ip,
+                                i.event.dst_port.map(|p| p.to_string()).unwrap_or_default()
+                            )
+                        })
+                        .collect(),
+                    recommendation:
+                        "Ověřit, zda je cílová služba zranitelná vůči signatuře a zda útok uspěl (logy služby, odpovědi)."
+                            .to_string(),
+                });
+            }
+        }
+    }
+    findings
+}
+
+/// Vstup paměti nálezů z jednoho nálezu: objem a dominantní zdroje (krok 2A).
+/// `sources_of` = mapa dominantních zdrojů detektoru (dst, proto, port, typ události).
+/// Typy kroku 2A a IDS nesou zdroj přímo v události (`src_ip`).
+pub fn finding_signal<'a>(
+    finding: &Finding,
+    service: Option<&ServiceReport>,
+    sources_of: impl Fn(&str, &str, u16, &str) -> &'a [String],
+) -> (u32, Vec<String>) {
+    let mut sources: Vec<String> = Vec::new();
+    let mut count = 1u32;
+    let Some(service) = service else {
+        return (count, sources);
+    };
+    let ids = finding.finding_type == "suricata_alert";
+    let sid = finding.finding_id.rsplit_once('#').map(|(_, sid)| sid);
+    let direct = ids
+        || RECALL_TYPES
+            .iter()
+            .any(|(kind, ..)| *kind == finding.finding_type);
+    for item in service.events.iter().filter(|e| {
+        if ids {
+            e.event.source == "suricata" && e.event.rule_id.as_deref() == sid
+        } else {
+            e.event.event_type == finding.finding_type
+        }
+    }) {
+        count = if ids {
+            count.saturating_add(item.event.count)
+        } else {
+            count.max(item.event.count)
+        };
+        if direct {
+            if let Some(src) = &item.event.src_ip
+                && !sources.contains(src)
+            {
+                sources.push(src.clone());
+            }
+        } else if let Some(port) = item.event.dst_port {
+            for source in sources_of(
+                &item.event.dst_ip,
+                &item.event.proto,
+                port,
+                &item.event.event_type,
+            ) {
+                if !sources.contains(source) {
+                    sources.push(source.clone());
+                }
+            }
+        }
+    }
+    if ids {
+        count = count.saturating_sub(1).max(1);
+    }
+    sources.truncate(16);
+    (count, sources)
 }
 
 /// Engine v3 (krok 1C, audit A13): `unmapped_passive_event` se neskládá po
@@ -1944,5 +2126,50 @@ mod rule_tests {
         sorted.sort_by(|a, b| b.cmp(a));
         assert_eq!(severities, sorted);
         assert!(findings.len() >= 2);
+    }
+
+    /// Krok 2A: IDS nález vzniká po (služba, signatura) se zdroji alertu; nové typy
+    /// zdrojových detektorů dávají nálezy; bez `recall` se nic nemění.
+    #[test]
+    fn recall_findings_group_ids_by_signature_and_carry_sources() {
+        let mut svc = service(80, "http");
+        let ids = |sid: &str, src: &str| {
+            let mut e = event("insecure_auth_possible", "ip+port", 1);
+            e.event.source = "suricata".to_string();
+            e.event.rule_id = Some(sid.to_string());
+            e.event.src_ip = Some(src.to_string());
+            e.event.message = format!("ET EXPLOIT test {sid}");
+            e
+        };
+        svc.events = vec![
+            ids("2024897", "203.0.113.5"),
+            ids("2024897", "203.0.113.6"),
+            ids("2010935", "203.0.113.5"),
+            event("source_volume_outlier", "ip+port", 120),
+        ];
+        let report = report_with(svc);
+        assert!(v3_extra_findings(&report, false).is_empty());
+        let found = v3_extra_findings(&report, true);
+        let alerts: Vec<&Finding> = found
+            .iter()
+            .filter(|f| f.finding_type == "suricata_alert")
+            .collect();
+        assert_eq!(alerts.len(), 2, "dve signatury = dva nalezy");
+        assert!(alerts.iter().any(|f| f.finding_id.ends_with("#2024897")));
+        let outlier = found
+            .iter()
+            .find(|f| f.finding_type == "source_volume_outlier")
+            .expect("odlehly zdroj");
+        let service = &report.hosts[0].services[0];
+        let none = |_: &str, _: &str, _: u16, _: &str| -> &[String] { &[] };
+        let (count, sources) = finding_signal(outlier, Some(service), none);
+        assert_eq!((count, sources), (120, vec!["10.0.0.99".to_string()]));
+        let exploit = alerts
+            .iter()
+            .find(|f| f.finding_id.ends_with("#2024897"))
+            .unwrap();
+        let (count, sources) = finding_signal(exploit, Some(service), none);
+        assert_eq!(count, 2);
+        assert_eq!(sources, vec!["203.0.113.5", "203.0.113.6"]);
     }
 }

@@ -59,6 +59,16 @@ pub struct V3Features {
     pub context: bool,
     /// Vícesignálová identita (krok E).
     pub identity: bool,
+    /// Obnova recallu (krok 2A): eskalace při prvním dominantním zdroji, pokusy i na
+    /// známé služby, IDS nálezy podle signatury, zdrojová odlehlost, timeouty podle
+    /// rozložení zdrojů.
+    pub recall: bool,
+    /// Žebřík okamžitého ověřování (krok 2B).
+    pub ladder: bool,
+    /// Učení z výsledků ověření a kalibrace (krok 2C).
+    pub learning: bool,
+    /// Typ zařízení v jádru: peer skupiny a kontext ověřování (krok 2D).
+    pub devices: bool,
 }
 
 impl Default for V3Features {
@@ -68,13 +78,17 @@ impl Default for V3Features {
 }
 
 impl V3Features {
-    pub const NAMES: [&'static str; 6] = [
+    pub const NAMES: [&'static str; 10] = [
         "memory",
         "rate",
         "volume",
         "unexpected",
         "context",
         "identity",
+        "recall",
+        "ladder",
+        "learning",
+        "devices",
     ];
 
     pub fn all() -> Self {
@@ -85,6 +99,10 @@ impl V3Features {
             unexpected: true,
             context: true,
             identity: true,
+            recall: true,
+            ladder: true,
+            learning: true,
+            devices: true,
         }
     }
 
@@ -96,6 +114,21 @@ impl V3Features {
             unexpected: false,
             context: false,
             identity: false,
+            recall: false,
+            ladder: false,
+            learning: false,
+            devices: false,
+        }
+    }
+
+    /// Stav po kroku 1 (bez změn kroku 2), pro párové srovnání kroku 2.
+    pub fn step1() -> Self {
+        Self {
+            recall: false,
+            ladder: false,
+            learning: false,
+            devices: false,
+            ..Self::all()
         }
     }
 
@@ -107,6 +140,10 @@ impl V3Features {
             "unexpected" => &mut self.unexpected,
             "context" => &mut self.context,
             "identity" => &mut self.identity,
+            "recall" => &mut self.recall,
+            "ladder" => &mut self.ladder,
+            "learning" => &mut self.learning,
+            "devices" => &mut self.devices,
             _ => return None,
         })
     }
@@ -181,9 +218,30 @@ impl EngineConfig {
     pub fn identity_v3(&self) -> bool {
         self.on(|f| f.identity)
     }
+    pub fn recall(&self) -> bool {
+        self.on(|f| f.recall)
+    }
+    /// Žebřík potřebuje paměť nálezů (ověřuje se jen otevřený stav).
+    pub fn ladder(&self) -> bool {
+        self.on(|f| f.ladder && f.memory)
+    }
+    pub fn learning(&self) -> bool {
+        self.on(|f| f.learning)
+    }
+    pub fn devices(&self) -> bool {
+        self.on(|f| f.devices)
+    }
     /// Běží v3 detektor (aspoň jedna detekční změna)?
     pub fn v3_detector(&self) -> bool {
         self.robust_rate() || self.volume_baseline() || self.unexpected_v3()
+    }
+
+    /// Konfigurace paměti nálezů podle zapnutých změn.
+    pub fn memory_config(&self) -> crate::finding_memory::MemoryConfig {
+        crate::finding_memory::MemoryConfig {
+            escalate_first_source: self.recall(),
+            ..Default::default()
+        }
     }
 
     pub fn label(&self) -> String {
@@ -217,7 +275,19 @@ mod tests {
             mode: EngineMode::V3,
             v3: features,
         };
-        assert_eq!(cfg.label(), "v3[memory+unexpected+context+identity]");
+        assert_eq!(
+            cfg.label(),
+            "v3[memory+unexpected+context+identity+recall+ladder+learning+devices]"
+        );
+        let step1 = EngineConfig {
+            mode: EngineMode::V3,
+            v3: V3Features::step1(),
+        };
+        assert_eq!(
+            step1.label(),
+            "v3[memory+rate+volume+unexpected+context+identity]"
+        );
+        assert!(!step1.ladder() && !step1.recall());
     }
 
     #[test]

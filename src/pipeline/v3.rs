@@ -16,8 +16,7 @@ use crate::{
     engine_state::{EngineStateStore, PersistentInventory},
     error::Result,
     finding_memory::{
-        FindingMemory, LifecycleRecord, MemoryConfig, Observation, key_for_finding,
-        split_service_key,
+        FindingMemory, LifecycleRecord, Observation, key_for_finding, split_service_key,
     },
     findings,
     identity::IdentityMatch,
@@ -52,6 +51,20 @@ impl V3Session {
         if !hosts.is_empty() {
             inventory.merge_scan(hosts);
         }
+        let tables = crate::device_class::ClassifierTables::default();
+        let peer_groups: std::collections::HashMap<String, String> = if engine.devices() {
+            inventory
+                .hosts()
+                .iter()
+                .filter_map(|host| {
+                    let class = crate::device_class::classify(host, None, &tables);
+                    crate::device_class::peer_group_key(&host.ip, &class)
+                        .map(|group| (host.ip.clone(), group))
+                })
+                .collect()
+        } else {
+            Default::default()
+        };
         let detector = engine.v3_detector().then(|| {
             let state: DetectorState = store.load("detector").ok().flatten().unwrap_or_default();
             let mut known = HashSet::new();
@@ -70,10 +83,12 @@ impl V3Session {
                     rate: engine.robust_rate(),
                     volume: engine.volume_baseline(),
                     unexpected: engine.unexpected_v3(),
+                    recall: engine.recall(),
                 },
                 known,
                 known_hosts,
                 now,
+                peer_groups,
             )
         });
         Ok(Some(Self {
@@ -109,7 +124,7 @@ impl V3Session {
     ) -> Result<()> {
         if self.engine.unexpected_v3() {
             let mut list = std::mem::take(&mut report.findings);
-            list.extend(findings::v3_extra_findings(report));
+            list.extend(findings::v3_extra_findings(report, self.engine.recall()));
             findings::aggregate_unmapped_findings(&mut list, report);
             list.sort_by(|l, r| l.finding_id.cmp(&r.finding_id));
             list.dedup_by(|l, r| l.finding_id == r.finding_id);
@@ -127,7 +142,7 @@ impl V3Session {
             tracing::warn!(%reason, "kontextovy zaznam odmitnut");
         }
         let mut gate = ContextGate::new(GatePolicy::default());
-        let mut memory = FindingMemory::load(self.store.conn(), MemoryConfig::default())?;
+        let mut memory = FindingMemory::load(self.store.conn(), self.engine.memory_config())?;
         let services: std::collections::HashMap<&str, &crate::model::ServiceReport> = report
             .hosts
             .iter()
@@ -148,30 +163,16 @@ impl V3Session {
                 .and_then(|k| identity.get(k))
                 .map(|m| m.asset_id().to_string())
                 .unwrap_or_else(|| host_ip.clone());
-            let mut sources: Vec<String> = Vec::new();
-            let mut count = 1u32;
-            if let Some(service) = services.get(service_key) {
-                for item in service
-                    .events
-                    .iter()
-                    .filter(|e| e.event.event_type == finding.finding_type)
-                {
-                    count = count.max(item.event.count);
-                    if let Some(port) = item.event.dst_port {
-                        let key = (
-                            item.event.dst_ip.clone(),
-                            item.event.proto.clone(),
-                            port,
-                            item.event.event_type.clone(),
-                        );
-                        for source in self.sources.get(&key).into_iter().flatten() {
-                            if !sources.contains(source) {
-                                sources.push(source.clone());
-                            }
-                        }
-                    }
-                }
-            }
+            let (count, sources) = findings::finding_signal(
+                finding,
+                services.get(service_key).copied(),
+                |dst, proto, port, kind| {
+                    self.sources
+                        .get(&(dst.to_string(), proto.to_string(), port, kind.to_string()))
+                        .map(Vec::as_slice)
+                        .unwrap_or(&[])
+                },
+            );
             let key = key_for_finding(finding, &entity_host, &sources);
             let ids = [host_ip, entity_host];
             let explanation = gate.explain(

@@ -764,6 +764,20 @@ fn run_episode_inner(
             {
                 runtime.inventory.merge_scan(&hosts);
             }
+            if let Some(runtime) = v3.as_mut()
+                && cfg.engine.devices()
+            {
+                // peer skupiny podle typu zarizeni a podsite (krok 2D)
+                let tables = crate::device_class::ClassifierTables::default();
+                runtime.peer_groups = hosts
+                    .iter()
+                    .filter_map(|host| {
+                        let class = crate::device_class::classify(host, None, &tables);
+                        crate::device_class::peer_group_key(&host.ip, &class)
+                            .map(|group| (host.ip.clone(), group))
+                    })
+                    .collect();
+            }
             restart_cold = false;
             hosts_cache = hosts;
         }
@@ -863,7 +877,10 @@ fn run_episode_inner(
                 .dedup_by(|l, r| l.finding_id == r.finding_id);
             if cfg.engine.unexpected_v3() {
                 let mut list = std::mem::take(&mut run_report.findings);
-                list.extend(findings::v3_extra_findings(&run_report));
+                list.extend(findings::v3_extra_findings(
+                    &run_report,
+                    cfg.engine.recall(),
+                ));
                 findings::aggregate_unmapped_findings(&mut list, &run_report);
                 list.sort_by(|l, r| l.finding_id.cmp(&r.finding_id));
                 list.dedup_by(|l, r| l.finding_id == r.finding_id);
@@ -953,29 +970,11 @@ fn run_episode_inner(
                         .and_then(|k| identity_map.get(k))
                         .map(|m| m.asset_id().to_string())
                         .unwrap_or_else(|| host_ip.clone());
-                    let mut sources: Vec<String> = Vec::new();
-                    let mut count = 1u32;
-                    if let Some(service_report) = report_services.get(service_key) {
-                        for item in service_report
-                            .events
-                            .iter()
-                            .filter(|e| e.event.event_type == finding.finding_type)
-                        {
-                            count = count.max(item.event.count);
-                            if let Some(port) = item.event.dst_port {
-                                for source in runtime.sources_of(
-                                    &item.event.dst_ip,
-                                    &item.event.proto,
-                                    port,
-                                    &item.event.event_type,
-                                ) {
-                                    if !sources.contains(source) {
-                                        sources.push(source.clone());
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    let (count, sources) = findings::finding_signal(
+                        finding,
+                        report_services.get(service_key).copied(),
+                        |dst, proto, port, kind| runtime.sources_of(dst, proto, port, kind),
+                    );
                     // pokusy (sken) jsou stav ZDROJE: jeden stav na skener, ne na kazdy cil
                     let key = key_for_finding(finding, &entity_host, &sources);
                     let explanation = context.as_ref().and_then(|ctx| {

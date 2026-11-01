@@ -61,6 +61,11 @@ pub struct MemoryConfig {
     pub min_escalation_count: u32,
     /// Jak často se zapíše jen posun `last_seen` (stavové změny se zapisují vždy).
     pub persist_last_seen_every_s: i64,
+    /// Eskalovat i tehdy, když otevřený stav dosud žádný dominantní zdroj neměl a teď se
+    /// objeví (krok 2A: útok jednoho zdroje na službu s rozptýleným šumem se dřív
+    /// schoval pod otevřený nález bez zdrojů).
+    #[serde(default)]
+    pub escalate_first_source: bool,
 }
 
 impl Default for MemoryConfig {
@@ -74,6 +79,7 @@ impl Default for MemoryConfig {
             volume_factor: 4.0,
             min_escalation_count: 20,
             persist_last_seen_every_s: 90 * 60,
+            escalate_first_source: false,
         }
     }
 }
@@ -170,6 +176,18 @@ pub fn key_for_finding(
     let (service, _) = split_service_key(service_key);
     match (kind, sources.first()) {
         ("scan_attempts", Some(source)) => FindingKey::new(&format!("src:{source}"), kind, "-"),
+        // IDS: stav na (sluzba, signatura), jina signatura = jiny stav (krok 2A)
+        ("suricata_alert", _) => FindingKey::new(
+            entity_host,
+            kind,
+            &format!(
+                "{service}#{}",
+                finding
+                    .finding_id
+                    .rsplit_once('#')
+                    .map_or("", |(_, sid)| sid)
+            ),
+        ),
         ("unmapped_passive_event", _) => FindingKey::new(
             entity_host,
             kind,
@@ -594,7 +612,10 @@ impl FindingMemory {
                         new_sources.push(clip(source));
                     }
                 }
-                if escalation.is_none() && !new_sources.is_empty() && !entry.sources.is_empty() {
+                if escalation.is_none()
+                    && !new_sources.is_empty()
+                    && (!entry.sources.is_empty() || cfg.escalate_first_source)
+                {
                     escalation = Some(Escalation::NewSource);
                 }
                 if escalation.is_none()
@@ -1062,5 +1083,53 @@ mod tests {
             conn.execute("UPDATE finding_audit SET detail = 'x'", [])
                 .is_err()
         );
+    }
+
+    /// Krok 2A: otevřený nález bez dominantního zdroje (rozptýlený šum) a pak útok
+    /// jednoho zdroje. Krok 1 eskaloval jen při změně ZNÁMÝCH zdrojů, takže útok zapadl.
+    #[test]
+    fn first_dominant_source_escalates_only_when_enabled() {
+        let k = key("asset:9", "connection_timeout_burst");
+        let attacker = vec!["203.0.113.9".to_string()];
+        let mut step1 = FindingMemory::new(MemoryConfig::default());
+        step1.observe(&obs(&k, 0, Severity::Medium, 3, &[]), None);
+        assert_eq!(
+            step1.observe(&obs(&k, 30, Severity::Medium, 3, &attacker), None),
+            Disposition::Suppressed
+        );
+        let mut step2 = FindingMemory::new(MemoryConfig {
+            escalate_first_source: true,
+            ..MemoryConfig::default()
+        });
+        step2.observe(&obs(&k, 0, Severity::Medium, 3, &[]), None);
+        assert_eq!(
+            step2.observe(&obs(&k, 30, Severity::Medium, 3, &attacker), None),
+            Disposition::Escalated(Escalation::NewSource)
+        );
+        // tentyz zdroj znovu = uz zname, potlaceno
+        assert_eq!(
+            step2.observe(&obs(&k, 60, Severity::Medium, 3, &attacker), None),
+            Disposition::Suppressed
+        );
+    }
+
+    #[test]
+    fn ids_findings_are_keyed_by_signature() {
+        let finding = |sid: &str| crate::model::Finding {
+            finding_id: format!("finding:suricata_alert:10.0.0.1:10.0.0.1/tcp/80#{sid}"),
+            finding_type: "suricata_alert".to_string(),
+            title: String::new(),
+            severity: Severity::High,
+            confidence: crate::model::Confidence::High,
+            host_key: Some("10.0.0.1".to_string()),
+            service_key: Some("10.0.0.1/tcp/80".to_string()),
+            rationale: String::new(),
+            evidence: Vec::new(),
+            recommendation: String::new(),
+        };
+        let a = key_for_finding(&finding("100"), "asset:1", &[]);
+        let b = key_for_finding(&finding("200"), "asset:1", &[]);
+        assert_ne!(a, b);
+        assert_eq!(a.service, "tcp/80#100");
     }
 }
