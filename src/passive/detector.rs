@@ -119,6 +119,81 @@ impl ConnectionDetector for MultiscaleDetector {
     }
 }
 
+/// Engine v3 (krok 1C): stavový detektor s historií klíčů a pokusů zdrojů. Stav
+/// drží `Mutex` (detektor běží v paralelním kolektoru pipeline), po běhu se uloží
+/// do `engine-state.sqlite`. `extra_known` = perzistentní inventář s hysterezí.
+pub(crate) struct V3StatefulDetector {
+    state: std::sync::Mutex<super::anomaly_v3::DetectorState>,
+    sources: std::sync::Mutex<super::anomaly_v3::SourceMap>,
+    switches: super::anomaly_v3::V3Switches,
+    thresholds: super::anomaly_v3::V3Thresholds,
+    extra_known: HashSet<ServiceKey>,
+    known_hosts: HashSet<String>,
+    now: chrono::DateTime<chrono::Utc>,
+}
+
+impl V3StatefulDetector {
+    pub(crate) fn new(
+        state: super::anomaly_v3::DetectorState,
+        switches: super::anomaly_v3::V3Switches,
+        extra_known: HashSet<ServiceKey>,
+        known_hosts: HashSet<String>,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Self {
+        Self {
+            state: std::sync::Mutex::new(state),
+            sources: std::sync::Mutex::new(Default::default()),
+            switches,
+            thresholds: Default::default(),
+            extra_known,
+            known_hosts,
+            now,
+        }
+    }
+
+    /// Stav detektoru a dominantní zdroje posledního běhu.
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        super::anomaly_v3::DetectorState,
+        super::anomaly_v3::SourceMap,
+    ) {
+        (
+            self.state.into_inner().unwrap_or_else(|p| p.into_inner()),
+            self.sources.into_inner().unwrap_or_else(|p| p.into_inner()),
+        )
+    }
+}
+
+impl ConnectionDetector for V3StatefulDetector {
+    fn id(&self) -> &'static str {
+        "v3-baseline"
+    }
+
+    fn detect(
+        &self,
+        connections: Vec<ConnectionObservation>,
+        known_services: &HashSet<ServiceKey>,
+    ) -> Vec<NormalizedEvent> {
+        let mut known = known_services.clone();
+        known.extend(self.extra_known.iter().cloned());
+        let mut hosts = self.known_hosts.clone();
+        hosts.extend(known.iter().map(|key| key.0.clone()));
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        let out = super::anomaly_v3::detect_v3(
+            &connections,
+            &known,
+            &hosts,
+            &mut state,
+            self.switches,
+            &self.thresholds,
+            self.now,
+        );
+        *self.sources.lock().unwrap_or_else(|p| p.into_inner()) = out.sources;
+        out.events
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

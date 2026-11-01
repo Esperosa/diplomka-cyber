@@ -205,7 +205,7 @@ fn unexpected_traffic_events(
     events
 }
 
-fn aggregate_pattern_events(
+pub(super) fn aggregate_pattern_events(
     aggregates: &HashMap<ServiceKey, ConnectionAggregate>,
 ) -> Vec<NormalizedEvent> {
     let mut events = Vec::new();
@@ -331,7 +331,7 @@ fn aggregate_pattern_events(
     events
 }
 
-fn inductive_outlier_events(
+pub(super) fn inductive_outlier_events(
     aggregates: &HashMap<ServiceKey, ConnectionAggregate>,
 ) -> Vec<NormalizedEvent> {
     if aggregates.len() < 4 {
@@ -398,19 +398,19 @@ fn inductive_outlier_events(
 }
 
 #[derive(Debug, Clone)]
-struct ConnectionAggregate {
-    first_seen: DateTime<Utc>,
-    representative_src_ip: Option<String>,
-    count: u32,
-    timeout_like: u32,
-    overload_votes: u32,
-    loss_votes: u32,
-    max_pps: f64,
-    max_bps: f64,
+pub(super) struct ConnectionAggregate {
+    pub(super) first_seen: DateTime<Utc>,
+    pub(super) representative_src_ip: Option<String>,
+    pub(super) count: u32,
+    pub(super) timeout_like: u32,
+    pub(super) overload_votes: u32,
+    pub(super) loss_votes: u32,
+    pub(super) max_pps: f64,
+    pub(super) max_bps: f64,
 }
 
 impl ConnectionAggregate {
-    fn new(first_seen: DateTime<Utc>, representative_src_ip: Option<String>) -> Self {
+    pub(super) fn new(first_seen: DateTime<Utc>, representative_src_ip: Option<String>) -> Self {
         Self {
             first_seen,
             representative_src_ip,
@@ -423,7 +423,7 @@ impl ConnectionAggregate {
         }
     }
 
-    fn observe(&mut self, connection: &ConnectionObservation) {
+    pub(super) fn observe(&mut self, connection: &ConnectionObservation) {
         self.count = self.count.saturating_add(1);
         if connection.timestamp < self.first_seen {
             self.first_seen = connection.timestamp;
@@ -470,7 +470,7 @@ impl ConnectionAggregate {
         }
     }
 
-    fn timeout_ratio(&self) -> f64 {
+    pub(super) fn timeout_ratio(&self) -> f64 {
         if self.count == 0 {
             0.0
         } else {
@@ -479,7 +479,7 @@ impl ConnectionAggregate {
     }
 }
 
-fn is_timeout_like(connection: &ConnectionObservation) -> bool {
+pub(super) fn is_timeout_like(connection: &ConnectionObservation) -> bool {
     let state = connection
         .conn_state
         .as_deref()
@@ -495,7 +495,7 @@ fn is_timeout_like(connection: &ConnectionObservation) -> bool {
         || history.contains('r')
 }
 
-fn median_and_mad(values: &mut [f64]) -> (f64, f64) {
+pub(super) fn median_and_mad(values: &mut [f64]) -> (f64, f64) {
     if values.is_empty() {
         return (0.0, 0.0);
     }
@@ -529,7 +529,7 @@ fn robust_zscore(value: f64, median: f64, mad: f64) -> f64 {
     (0.6745 * (value - median).abs()) / mad
 }
 
-fn combine_optional(left: Option<u64>, right: Option<u64>) -> Option<u64> {
+pub(super) fn combine_optional(left: Option<u64>, right: Option<u64>) -> Option<u64> {
     match (left, right) {
         (Some(a), Some(b)) => Some(a.saturating_add(b)),
         (Some(a), None) => Some(a),
