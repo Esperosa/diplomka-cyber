@@ -139,3 +139,33 @@ Souhrnně 2 z 30 škodlivých hostů a 1 ze 112 neškodných. Na CTU-13 (27 ško
 **G1 až G5 nesplněny, selhal G4** (p99 času cyklu na XXXL 4,01 s proti prahu < 3 s; paměť v limitu). Podle pravidla z B tedy `legacy` zůstává výchozí a v3 zůstává volitelné (`--engine v3`). Část D se neprovádí a dlouhý běh E jako ověření výchozího režimu nemá podklad. Slepé běhy se neopakují a prahy se nemění.
 
 Proč G4 selhal: měřil jsem podle předregistrace (jedno vlákno, jedna síť najednou, bez mých dalších běhů). Překročení přišlo u 3 ze 6 sítí (3,13, 3,22 a 4,01 s), takže nejde o jednu odlehlou hodnotu. Cizí zátěž stroje popsaná výše čas zvyšuje a nedá se z měření oddělit. Proto nevím, jestli by na nezatíženém stroji v3 práh splnilo. Pro výchozí režim to ale nic nemění: o něm rozhoduje výsledek změřený podle pravidel. Další krok je profil cyklu v3 na XXXL (kde roste p99) a nové předregistrované měření na nových seedech po případné optimalizaci.
+
+## E) Dlouhý běh v3 (volitelný režim, ne ověření výchozího)
+
+Uživatel chce dlouhý komplexní běh v3 bez ohledu na G4. Výchozí režim zůstává `legacy`, běh tedy měří v3 jako volitelný režim.
+
+- Binárka z commitu `b3a6dd0` (kód shodný s `eea4060` slepého testu), kopie `F:\bakula-soak\bin\bakula-soak-v3-k4-b3a6dd0.exe`. Spuštěno 2026-11-04 20:12:17, PID 7212, priorita BelowNormal, výstup `F:\bakula-soak\run-v3-72h`, stdout a stderr `F:\bakula-soak\run-v3-72h.out` a `.err`, příkaz v `F:\bakula-soak\run-v3-72h.cmd.txt`.
+- Příkaz: `soak run --out F:\bakula-soak\run-v3-72h --seed 20261105 --wall-hours 72 --threads 12 --engine v3 --noise-mix 1:0.6,10:0.3,50:0.1 --xxxl-share 0.015 --cf-share 0.2 --families all`. Výchozí preset v3 je bez grafu (A), nohy jsou zapnuté (kotva jen vývojová část, `is_dev` v `src/eval/anchor.rs`), zpětná vazba zapnutá, blok 16 sítí.
+- Navázání po přerušení: stejný příkaz s `--resume` (zachová seed, velikost bloku i délku epizod).
+- Noha broker (H5) nemá Redis (spojení odmítnuto), hlásí se jako nedostupná. Ostatní nohy běží.
+- Binárka je starší než oprava ve F, takže časy cyklu v tomto běhu jsou zatížené zápisem varování parseru na stderr. Výsledky detekce to neovlivňuje.
+
+## F) Profil cyklu v3 na XXXL (jen ladicí seedy, po slepém testu)
+
+Držené seedy 20261201 a 20261301 jsem nepoužil. Profil běžel na ladicích seedech 20261102 až 20261104, `--size xxxl --max-networks 3 --threads 1 --block-size 1 --no-legs --no-feedback --engine v3`. Stroj byl zatížený během E a cizími procesy, proto jsem kromě reálného času měřil i CPU čas vlákna (`BAKULA_SOAK_CYCLE_TRACE=1`, `GetThreadTimes`). Podíl CPU na reálném čase byl za celé běhy jen 0,28 až 0,45.
+
+Nálezy:
+
+1. **Ustálená zátěž ve skórování harnessu.** Fáze `scoring` (hodnocení proti ground truth, ne práce enginu) brala 0,5 až 0,8 s v každém pozdním cyklu, z toho téměř vše učící smyčka, která pro každý nález volala `CaseMemory::estimate`. Ta prochází všechny záznamy paměti a pro každý alokuje klíč zdroje. Paměť se během smyčky nemění, takže teď se odhad počítá jednou za typ. Medián cyklu na seedu 20261102 klesl z přibližně 1,0 s na 0,35 až 0,6 s.
+2. **Synchronní zápis na stderr uvnitř cyklu.** Parser alertů vypisuje varování za každý poškozený řádek a simulátor poškozené řádky záměrně vkládá. Na zatíženém disku F: (kam zapisuje i SQLite noha ops-stress běhu E) jeden takový cyklus trval 14,6 s reálně při 0,23 s CPU. Starý build měl na seedu 20261104 p99 cyklu jedné sítě 10,45 s, nový 0,71 s. Soak počítá poškozené řádky sám (`corrupt_alert_lines`), proto jeho textová varianta parseru teď mlčí. Souborová produkční cesta varuje dál. Ve slepém XXXL běhu bylo takových varování 101 a 49, takže tento mechanismus mohl k selhání G4 přispět. Verdikt G4 se tím nemění.
+3. **Zbylé špičky jsou skutečná práce:** nárůst provozu (seed 20261102, síť 2, cyklus 14: 113 tisíc toků, 1,86 s CPU, hlavně `report`, `detect` a `history_end`), simulovaný restart enginu se serializací stavu (0,6 až 0,9 s) a jednorázově žebřík s Case Memory (1,0 s).
+
+Výsledky (`networks.jsonl` bez časových polí) jsou se starou binárkou bajtově stejné na všech 9 sítích. p99 cyklu po sítích v reálném čase na zatíženém stroji:
+
+| seed | před (`b3a6dd0`) | po (`d6b56f1`) | nejhorší cyklus po, CPU |
+|---|---|---|---:|
+| 20261102 | 1,64 / 1,22 / 3,52 s | 1,09 / 0,59 / 3,46 s | 1,86 s |
+| 20261103 | 2,30 / 2,26 / 1,94 s | 1,51 / 1,55 / 0,94 s | 0,92 s |
+| 20261104 | 10,45 / 1,46 / 1,48 s | 0,71 / 1,10 / 1,44 s | 1,08 s |
+
+CPU čas nejhoršího cyklu je po opravě ve všech 9 sítích nejvýš 1,86 s, tedy pod cílem 3 s. Jediné překročení v reálném čase (3,46 s) je cyklus s 1,86 s CPU, zbytek je čekání na zatíženém stroji. Měření na nezatíženém stroji zatím nemám, protože běh E trvá do 2026-11-07 asi 20:12. Do té doby je CPU čas jen náhradní ukazatel, ne splněný cíl. Případné nové předregistrované měření G4 musí proběhnout na nových seedech a na nezatíženém stroji.
