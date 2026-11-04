@@ -1091,6 +1091,68 @@ impl NetworkModel {
         changes
     }
 
+    /// Krok 5, porucha `dhcp_renumber`: 30 az 80 % dynamickych zarizeni podsite dostane
+    /// novou adresu najednou (zmena rozsahu, obnova DHCP serveru) a vybrany server novou
+    /// statickou adresu. MAC zustava. Vraci (pocet zmen, stara adresa serveru).
+    pub fn renumber(
+        &mut self,
+        subnet: usize,
+        server: Option<u32>,
+        rng: &mut Rng,
+    ) -> (usize, Option<String>) {
+        if subnet >= self.prefixes.len() {
+            return (0, None);
+        }
+        let mut used: std::collections::HashSet<u8> = self
+            .devices
+            .iter()
+            .filter(|d| d.subnet == subnet)
+            .map(|d| d.host_octet)
+            .collect();
+        let share = rng.range_f(0.3, 0.8);
+        let mut changes = 0;
+        for index in 0..self.devices.len() {
+            if self.devices[index].subnet != subnet
+                || !self.devices[index].dhcp
+                || !rng.chance(share)
+            {
+                continue;
+            }
+            for _ in 0..20 {
+                let candidate = rng.range(100, 250) as u8;
+                if used.insert(candidate) {
+                    used.remove(&self.devices[index].host_octet);
+                    self.devices[index].host_octet = candidate;
+                    changes += 1;
+                    break;
+                }
+            }
+        }
+        let mut old = None;
+        if let Some(server) = server.filter(|s| (*s as usize) < self.devices.len()) {
+            let device = server as usize;
+            let mut used: std::collections::HashSet<u8> = self
+                .devices
+                .iter()
+                .filter(|d| d.subnet == self.devices[device].subnet)
+                .map(|d| d.host_octet)
+                .collect();
+            for _ in 0..40 {
+                let candidate = rng.range(2, 99) as u8;
+                if used.insert(candidate) {
+                    old = Some(self.ip_of(server));
+                    self.devices[device].host_octet = candidate;
+                    changes += 1;
+                    break;
+                }
+            }
+        }
+        if changes > 0 {
+            self.rebuild_indexes();
+        }
+        (changes, old)
+    }
+
     /// Aktivni inventar (jako vystup nmapu): sluzby, produkty, verze. Vynecha zarizeni,
     /// ktera neběží (pad, odstaveni, jeste nenasazena); druhy vystup = jejich id.
     pub fn inventory(&self) -> (ParsedInventory, Vec<u32>) {

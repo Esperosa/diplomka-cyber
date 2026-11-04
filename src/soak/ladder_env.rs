@@ -352,6 +352,7 @@ mod tests {
                 flows_blocked: 0,
                 first_emit_cycle: None,
                 blocked_at_cycle: None,
+                cov: Default::default(),
             })
             .collect();
         let feed = SimReputation::new(&model, &truths, ReputationCoverage::default());

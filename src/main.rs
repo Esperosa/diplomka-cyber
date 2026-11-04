@@ -127,6 +127,9 @@ struct SoakRunArgs {
     /// Rodiny utoku: `all` (vychozi), `tuning` (ladici) nebo `held-out` (drzene).
     #[arg(long, default_value = "all")]
     families: String,
+    /// Svet pokryti (krok 5): `off` (vychozi), `tuning` (ladici) nebo `full` (drzeny).
+    #[arg(long, default_value = "off")]
+    coverage: String,
     /// Smes sumu po sitich `nasobek:vaha,...` (napr. `1:0.6,10:0.3,50:0.1`), krok 4.
     #[arg(long)]
     noise_mix: Option<String>,
@@ -964,6 +967,7 @@ fn main() -> anyhow::Result<()> {
                 other => anyhow::bail!("neznama velikost {other} (mix | xxxl)"),
             };
             cfg.world.families = args.families.parse().map_err(anyhow::Error::msg)?;
+            cfg.world.coverage = args.coverage.parse().map_err(anyhow::Error::msg)?;
             if let Some(text) = &args.noise_mix {
                 cfg.mix.noise = bakula_program::soak::runner::NetworkMix::parse_noise(text)
                     .map_err(anyhow::Error::msg)?;

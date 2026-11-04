@@ -317,9 +317,60 @@ pub enum Lookalike {
     SensorCrash,
     /// Poskozene logy: useknute/binarni radky a neuplne zaznamy.
     LogCorruption,
+    // --- krok 5 (jen svet `--coverage`): dalsi provozni poruchy podle auditu pokryti ---
+    /// DNS server nedostupny: dotazy bez odpovedi, opakovani, zalozni verejny resolver.
+    DnsOutage,
+    /// Hromadne precislovani podsite (DHCP), server s novou adresou.
+    DhcpRenumber,
+    /// Opakovane kolisani linky (retry bourka nekolikrat po sobe).
+    LinkFlapping,
+    /// Spatna konfigurace zarizeni: broadcast bourka a spojeni bez odpovedi.
+    Misconfig,
+    /// Selhavajici zaloha: kratka prerusena spojeni a opakovani.
+    BackupFailed,
+    /// Vyprseny certifikat serveru: RST na 443 a opakovani klientu.
+    CertExpired,
+    /// Vypadek napajeni podsite a hromadny start.
+    SegmentPowerLoss,
+    /// Hromadne znovupripojeni vzdalenych klientu k VPN.
+    VpnReconnectStorm,
+    /// Migrace do cloudu: novy blok vnejsich adres, velky prenos ven.
+    CloudMigration,
 }
 
 impl Lookalike {
+    /// Nove poruchy kroku 5 (svet pokryti).
+    pub const COVERAGE: [Lookalike; 9] = [
+        Lookalike::DnsOutage,
+        Lookalike::DhcpRenumber,
+        Lookalike::LinkFlapping,
+        Lookalike::Misconfig,
+        Lookalike::BackupFailed,
+        Lookalike::CertExpired,
+        Lookalike::SegmentPowerLoss,
+        Lookalike::VpnReconnectStorm,
+        Lookalike::CloudMigration,
+    ];
+
+    /// Drzena porucha (krok 5, predregistrace A2): v ladicim svete se nevyskytuje.
+    pub fn held_out(self) -> bool {
+        matches!(
+            self,
+            Lookalike::CertExpired
+                | Lookalike::SegmentPowerLoss
+                | Lookalike::VpnReconnectStorm
+                | Lookalike::CloudMigration
+        )
+    }
+
+    /// Porucha senzoru nebo sberu (soubeh utoku se slepotou senzoru).
+    pub fn is_sensor(self) -> bool {
+        matches!(
+            self,
+            Lookalike::SensorCrash | Lookalike::CollectorReplay | Lookalike::LogCorruption
+        )
+    }
+
     /// Udalosti bez klicovych IP: nalezy v jejich okne se pripisuji jim.
     pub fn window_scoped(self) -> bool {
         matches!(
@@ -355,6 +406,15 @@ impl Lookalike {
             Lookalike::CollectorReplay => "collector_replay",
             Lookalike::SensorCrash => "sensor_crash",
             Lookalike::LogCorruption => "log_corruption",
+            Lookalike::DnsOutage => "dns_outage",
+            Lookalike::DhcpRenumber => "dhcp_renumber",
+            Lookalike::LinkFlapping => "link_flapping",
+            Lookalike::Misconfig => "misconfig",
+            Lookalike::BackupFailed => "backup_failed",
+            Lookalike::CertExpired => "cert_expired",
+            Lookalike::SegmentPowerLoss => "segment_power_loss",
+            Lookalike::VpnReconnectStorm => "vpn_reconnect_storm",
+            Lookalike::CloudMigration => "cloud_migration",
         }
     }
 }
@@ -389,6 +449,8 @@ pub struct Truth {
     pub flows_blocked: u64,
     pub first_emit_cycle: Option<u32>,
     pub blocked_at_cycle: Option<u32>,
+    /// Svet pokryti (krok 5): variace, kampan, dalsi zdroje; vychozi = nic.
+    pub cov: crate::soak::coverage::TruthCoverage,
 }
 
 #[derive(Debug, Clone)]
@@ -487,7 +549,7 @@ pub fn diurnal(role: Role, archetype: Archetype, abs: i64, tz: i64) -> f64 {
     }
 }
 
-fn public_ip(rng: &mut Rng) -> String {
+pub(crate) fn public_ip(rng: &mut Rng) -> String {
     format!(
         "{}.{}.{}.{}",
         rng.pick(&[45u64, 61, 77, 91, 103, 154, 178, 193, 198]),
@@ -648,12 +710,6 @@ pub fn plan_episode(
     let webs = by_role(&[Role::Web, Role::Vpn, Role::Container]);
     let files = by_role(&[Role::FileServer, Role::Database]);
     let plcs = by_role(&[Role::Plc]);
-    let dormant: Vec<u32> = model
-        .devices
-        .iter()
-        .filter(|d| !d.up)
-        .map(|d| d.id)
-        .collect();
     let mut dormant_cursor = 0usize;
 
     let mut weights = [
@@ -695,26 +751,7 @@ pub fn plan_episode(
             1 => rng.range_f(0.4, 0.7),
             _ => rng.range_f(0.15, 0.35),
         };
-        let (min_len, max_len) = match family {
-            Family::PortScanVertical | Family::PortScanHorizontal => (1, 3),
-            Family::SshBrute => (2, 12),
-            Family::C2Beacon => (6, 40),
-            Family::Ddos => (1, 4),
-            Family::Exfil => (1, 2),
-            Family::Lateral => (2, 8),
-            Family::RogueDevice => (6, 48),
-            Family::Exploit => (1, 2),
-            Family::DnsTunnel => (4, 20),
-            Family::SlowScan => (8, 40),
-            Family::CredentialStuffing => (2, 24),
-            Family::Ransomware => (2, 6),
-            Family::Cryptomining => (12, 200),
-            Family::InsiderHoarding => (2, 10),
-            Family::WebExploit => (1, 6),
-            Family::IcsAttack => (1, 6),
-            Family::FleetBeacon => (24, 400),
-            Family::ApChain => (96, 720),
-        };
+        let (min_len, max_len) = len_range(family);
         let mut len = rng.range(min_len, max_len) as u32;
         // dlouhodobe kampane: 1 z 4 pomalych utoku trva ~6x delsi (dny az tydny)
         if matches!(
@@ -848,23 +885,7 @@ pub fn plan_episode(
                 | Family::Ransomware
         )
         .then(|| public_ip(rng));
-        let ids_visible = rng.chance(telemetry.ids_coverage)
-            && rng.chance(match family {
-                Family::SshBrute | Family::Exploit => 0.8,
-                Family::PortScanVertical | Family::PortScanHorizontal => 0.5,
-                Family::C2Beacon | Family::Lateral => 0.3,
-                Family::Ddos
-                | Family::Exfil
-                | Family::DnsTunnel
-                | Family::SlowScan
-                | Family::RogueDevice => 0.2,
-                Family::CredentialStuffing => 0.7,
-                Family::Ransomware | Family::Cryptomining => 0.5,
-                Family::InsiderHoarding => 0.1,
-                Family::WebExploit => 0.8,
-                Family::IcsAttack | Family::ApChain => 0.4,
-                Family::FleetBeacon => 0.15,
-            });
+        let ids_visible = rng.chance(telemetry.ids_coverage) && rng.chance(ids_share(family));
         truths.push(Truth {
             id: truths.len() as u32,
             kind: Kind::Attack(family),
@@ -883,15 +904,182 @@ pub fn plan_episode(
             flows_blocked: 0,
             first_emit_cycle: None,
             blocked_at_cycle: None,
+            cov: Default::default(),
         });
     }
 
     // --- benigni lookalike a provozni udalosti ---
+    let pools = Pools::new(model);
     let build_benign = |truths: &mut Vec<Truth>,
                         rng: &mut Rng,
                         which: Lookalike,
                         forced_start: Option<u32>,
                         dormant_cursor: &mut usize| {
+        build_benign(
+            model,
+            &pools,
+            hours,
+            truths,
+            rng,
+            which,
+            forced_start,
+            dormant_cursor,
+        )
+    };
+
+    for _ in 0..lookalikes {
+        let which = *rng.pick(&[
+            Lookalike::Backup,
+            Lookalike::AuthorizedScanner,
+            Lookalike::FlashCrowd,
+            Lookalike::SoftwareUpdate,
+            Lookalike::NtpFanout,
+        ]);
+        build_benign(&mut truths, rng, which, None, &mut dormant_cursor);
+    }
+    let ops_weights = [6.0, 3.0, 3.0, 2.0, 3.0, 3.0, 3.0, 3.0, 2.0];
+    for _ in 0..ops_events {
+        let which = OPS_KINDS[rng.weighted(&ops_weights)];
+        build_benign(&mut truths, rng, which, None, &mut dormant_cursor);
+    }
+    // slozene scenare: cast utoku se potka s benigni udalosti ve stejnem okne (sum + utok)
+    let attack_starts: Vec<u32> = truths
+        .iter()
+        .filter(|t| matches!(t.kind, Kind::Attack(_)))
+        .map(|t| t.start_cycle)
+        .collect();
+    for start in attack_starts {
+        if rng.chance(0.12) {
+            let which = *rng.pick(&[
+                Lookalike::Backup,
+                Lookalike::FlashCrowd,
+                Lookalike::SoftwareUpdate,
+                Lookalike::BatchJob,
+                Lookalike::ServiceCrash,
+                Lookalike::RetryStorm,
+            ]);
+            build_benign(&mut truths, rng, which, Some(start), &mut dormant_cursor);
+        }
+    }
+    truths
+}
+
+/// Stavajici provozni udalosti (poradi = vahy v `plan_episode`).
+pub(crate) const OPS_KINDS: [Lookalike; 9] = [
+    Lookalike::ServiceCrash,
+    Lookalike::RetryStorm,
+    Lookalike::Onboarding,
+    Lookalike::Decommission,
+    Lookalike::PatchWindow,
+    Lookalike::BatchJob,
+    Lookalike::CollectorReplay,
+    Lookalike::SensorCrash,
+    Lookalike::LogCorruption,
+];
+
+/// Rozsah delky utoku rodiny v cyklech.
+pub(crate) fn len_range(family: Family) -> (u64, u64) {
+    match family {
+        Family::PortScanVertical | Family::PortScanHorizontal => (1, 3),
+        Family::SshBrute => (2, 12),
+        Family::C2Beacon => (6, 40),
+        Family::Ddos => (1, 4),
+        Family::Exfil => (1, 2),
+        Family::Lateral => (2, 8),
+        Family::RogueDevice => (6, 48),
+        Family::Exploit => (1, 2),
+        Family::DnsTunnel => (4, 20),
+        Family::SlowScan => (8, 40),
+        Family::CredentialStuffing => (2, 24),
+        Family::Ransomware => (2, 6),
+        Family::Cryptomining => (12, 200),
+        Family::InsiderHoarding => (2, 10),
+        Family::WebExploit => (1, 6),
+        Family::IcsAttack => (1, 6),
+        Family::FleetBeacon => (24, 400),
+        Family::ApChain => (96, 720),
+    }
+}
+
+/// Pravdepodobnost, ze utok rodiny ma IDS signaturu (pri pokryti IDS).
+pub(crate) fn ids_share(family: Family) -> f64 {
+    match family {
+        Family::SshBrute | Family::Exploit => 0.8,
+        Family::PortScanVertical | Family::PortScanHorizontal => 0.5,
+        Family::C2Beacon | Family::Lateral => 0.3,
+        Family::Ddos
+        | Family::Exfil
+        | Family::DnsTunnel
+        | Family::SlowScan
+        | Family::RogueDevice => 0.2,
+        Family::CredentialStuffing => 0.7,
+        Family::Ransomware | Family::Cryptomining => 0.5,
+        Family::InsiderHoarding => 0.1,
+        Family::WebExploit => 0.8,
+        Family::IcsAttack | Family::ApChain => 0.4,
+        Family::FleetBeacon => 0.15,
+    }
+}
+
+/// Skupiny bezicich zarizeni pro planovani udalosti (bez nahody).
+pub(crate) struct Pools {
+    pub internal: Vec<u32>,
+    pub servers: Vec<u32>,
+    pub clients: Vec<u32>,
+    pub webs: Vec<u32>,
+    pub files: Vec<u32>,
+    pub dormant: Vec<u32>,
+}
+
+impl Pools {
+    pub(crate) fn new(model: &NetworkModel) -> Self {
+        let live = |d: &&crate::soak::netmodel::Device| d.up;
+        let ids = |f: &dyn Fn(&crate::soak::netmodel::Device) -> bool| -> Vec<u32> {
+            model
+                .devices
+                .iter()
+                .filter(live)
+                .filter(|d| f(d))
+                .map(|d| d.id)
+                .collect()
+        };
+        Self {
+            internal: ids(&|d| !matches!(d.role, Role::Gateway | Role::Dns)),
+            servers: ids(&|d| d.role.is_server()),
+            clients: ids(&|d| !d.role.is_server()),
+            webs: ids(&|d| matches!(d.role, Role::Web | Role::Vpn | Role::Container)),
+            files: ids(&|d| matches!(d.role, Role::FileServer | Role::Database)),
+            dormant: model
+                .devices
+                .iter()
+                .filter(|d| !d.up)
+                .map(|d| d.id)
+                .collect(),
+        }
+    }
+}
+
+/// Naplanuje jednu benigni nebo provozni udalost (stavajici druhy).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_benign(
+    model: &NetworkModel,
+    pools: &Pools,
+    hours: u32,
+    truths: &mut Vec<Truth>,
+    rng: &mut Rng,
+    which: Lookalike,
+    forced_start: Option<u32>,
+    dormant_cursor: &mut usize,
+) {
+    let cycles = hours * 2;
+    let Pools {
+        internal,
+        servers,
+        files,
+        dormant,
+        ..
+    } = pools;
+    {
         let night_cycle = |rng: &mut Rng| -> u32 {
             let day = rng.range(0, (hours as u64 / 24).max(1) - 1) as u32;
             let target_local_hour = match which {
@@ -926,12 +1114,14 @@ pub fn plan_episode(
             Lookalike::CollectorReplay => rng.range(1, 3),
             Lookalike::SensorCrash => rng.range(1, 12),
             Lookalike::LogCorruption => rng.range(1, 4),
+            // poruchy kroku 5 planuje `coverage::build_fault`, sem se nedostanou
+            _ => 1,
         } as u32;
         let attacker_device = match which {
             Lookalike::AuthorizedScanner | Lookalike::NtpFanout | Lookalike::Backup
                 if !internal.is_empty() =>
             {
-                Some(*rng.pick(&internal))
+                Some(*rng.pick(internal))
             }
             _ => None,
         };
@@ -973,7 +1163,7 @@ pub fn plan_episode(
                 if internal.is_empty() {
                     return;
                 }
-                vec![*rng.pick(&internal)]
+                vec![*rng.pick(internal)]
             }
             Lookalike::PatchWindow => {
                 if servers.len() < 2 {
@@ -1008,55 +1198,9 @@ pub fn plan_episode(
             flows_blocked: 0,
             first_emit_cycle: None,
             blocked_at_cycle: None,
+            cov: Default::default(),
         });
-    };
-
-    for _ in 0..lookalikes {
-        let which = *rng.pick(&[
-            Lookalike::Backup,
-            Lookalike::AuthorizedScanner,
-            Lookalike::FlashCrowd,
-            Lookalike::SoftwareUpdate,
-            Lookalike::NtpFanout,
-        ]);
-        build_benign(&mut truths, rng, which, None, &mut dormant_cursor);
     }
-    let ops_weights = [6.0, 3.0, 3.0, 2.0, 3.0, 3.0, 3.0, 3.0, 2.0];
-    let ops_kinds = [
-        Lookalike::ServiceCrash,
-        Lookalike::RetryStorm,
-        Lookalike::Onboarding,
-        Lookalike::Decommission,
-        Lookalike::PatchWindow,
-        Lookalike::BatchJob,
-        Lookalike::CollectorReplay,
-        Lookalike::SensorCrash,
-        Lookalike::LogCorruption,
-    ];
-    for _ in 0..ops_events {
-        let which = ops_kinds[rng.weighted(&ops_weights)];
-        build_benign(&mut truths, rng, which, None, &mut dormant_cursor);
-    }
-    // slozene scenare: cast utoku se potka s benigni udalosti ve stejnem okne (sum + utok)
-    let attack_starts: Vec<u32> = truths
-        .iter()
-        .filter(|t| matches!(t.kind, Kind::Attack(_)))
-        .map(|t| t.start_cycle)
-        .collect();
-    for start in attack_starts {
-        if rng.chance(0.12) {
-            let which = *rng.pick(&[
-                Lookalike::Backup,
-                Lookalike::FlashCrowd,
-                Lookalike::SoftwareUpdate,
-                Lookalike::BatchJob,
-                Lookalike::ServiceCrash,
-                Lookalike::RetryStorm,
-            ]);
-            build_benign(&mut truths, rng, which, Some(start), &mut dormant_cursor);
-        }
-    }
-    truths
 }
 
 pub struct CycleContext<'a> {
@@ -1395,7 +1539,28 @@ fn emit_regular(ctx: &CycleContext<'_>, t0: i64, out: &mut CycleOutput, truths: 
 }
 
 /// Pridani toku s kontrolou kernelu: zablokovany zdroj tok "nikdy nedorazi".
+/// Utok s variaci (svet pokryti, krok 5) projde nejdriv transformaci tempa, rozptylu,
+/// objemu a zdroju; bez variace je cesta beze zmeny.
 fn push(
+    out: &mut CycleOutput,
+    ctx: &CycleContext<'_>,
+    observation: ConnectionObservation,
+    truth: Option<usize>,
+    truths: &mut [Truth],
+) {
+    if let Some(index) = truth
+        && truths[index].cov.variation.is_some()
+    {
+        let t0 = cycle_start_abs(ctx.start_offset_s, ctx.cycle);
+        for varied in crate::soak::coverage::vary(&mut truths[index], observation, t0, ctx.ips) {
+            push_one(out, ctx, varied, truth, truths);
+        }
+        return;
+    }
+    push_one(out, ctx, observation, truth, truths);
+}
+
+fn push_one(
     out: &mut CycleOutput,
     ctx: &CycleContext<'_>,
     observation: ConnectionObservation,
@@ -2649,6 +2814,300 @@ fn emit_truth(
                 push(out, ctx, broken, Some(index), truths);
             }
         }
+        // --- krok 5: dalsi provozni poruchy (slozene ze stavajicich vzoru toku) ---
+        Kind::Benign(Lookalike::DnsOutage) => {
+            // DNS server je dole (stav modelu v epizode): klienti opakuji dotazy do
+            // prazdna a cast zkusi zalozni verejny resolver
+            let dns_ip = &ips[model.dns as usize];
+            let resolver = truth.target_external.clone().unwrap_or_default();
+            let clients: Vec<u32> = model
+                .devices
+                .iter()
+                .filter(|d| !d.role.is_server() && d.up)
+                .map(|d| d.id)
+                .collect();
+            for pick in rng.sample_distinct(clients.len(), clients.len().min(150)) {
+                let client = &ips[clients[pick] as usize];
+                for _ in 0..rng.range(2, 8) {
+                    flow!(at(rng), client, dns_ip, "udp", 53, 0.0, 60, 0, "S0");
+                }
+                if rng.chance(0.3) && !resolver.is_empty() {
+                    for _ in 0..rng.range(1, 6) {
+                        let rb = rng.range(80, 400);
+                        flow!(at(rng), client, &resolver, "udp", 53, 0.05, 60, rb, "SF");
+                    }
+                }
+            }
+        }
+        Kind::Benign(Lookalike::DhcpRenumber) => {
+            // klienti s ulozenou starou adresou serveru jeste chvili volaji do prazdna
+            let Some(old_ip) = truth.cov.extra_external.first() else {
+                return;
+            };
+            let Some(&server) = truth.victim_devices.first() else {
+                return;
+            };
+            let port = model.devices[server as usize]
+                .services
+                .first()
+                .map(|s| s.port)
+                .unwrap_or(445);
+            let clients: Vec<u32> = model
+                .devices
+                .iter()
+                .filter(|d| !d.role.is_server() && d.up && d.peers.contains(&server))
+                .map(|d| d.id)
+                .collect();
+            for &client in clients.iter().take(200) {
+                for _ in 0..rng.range(1, 5) {
+                    flow!(
+                        at(rng),
+                        &ips[client as usize],
+                        old_ip,
+                        "tcp",
+                        port,
+                        0.0,
+                        0,
+                        0,
+                        "S0"
+                    );
+                }
+            }
+        }
+        Kind::Benign(Lookalike::LinkFlapping) => {
+            // linka padne kazdy `period`-ty cyklus (opakovana retry bourka)
+            let period = truth.cov.param.max(2);
+            if (ctx.cycle - truth.start_cycle) % period != 0 {
+                return;
+            }
+            let clients: Vec<u32> = model
+                .devices
+                .iter()
+                .filter(|d| !d.role.is_server() && d.up)
+                .map(|d| d.id)
+                .collect();
+            for pick in rng.sample_distinct(clients.len(), clients.len().min(200)) {
+                let client = clients[pick];
+                for _ in 0..rng.range(4, 16) {
+                    let dst = model.externals
+                        [rng.range(0, model.externals.len() as u64 - 1) as usize]
+                        .clone();
+                    flow!(
+                        at(rng),
+                        &ips[client as usize],
+                        &dst,
+                        "tcp",
+                        443,
+                        0.0,
+                        0,
+                        0,
+                        "S0"
+                    );
+                }
+            }
+        }
+        Kind::Benign(Lookalike::Misconfig) => {
+            // spatna maska / VLAN: broadcast bourka a spojeni na servery bez odpovedi
+            let Some(device) = truth.attacker_device else {
+                return;
+            };
+            let src = ips[device as usize].clone();
+            let broadcast = match src.rsplit_once('.') {
+                Some((prefix, _)) => format!("{prefix}.255"),
+                None => return,
+            };
+            let n = (200.0 + 1300.0 * truth.intensity) as usize;
+            for _ in 0..n {
+                let port = *rng.pick(&[137u16, 138, 1900, 5353]);
+                flow!(at(rng), &src, &broadcast, "udp", port, 0.0, 90, 0, "S0");
+            }
+            let servers: Vec<u32> = model
+                .devices
+                .iter()
+                .filter(|d| d.role.is_server() && d.up && d.id != device)
+                .map(|d| d.id)
+                .collect();
+            for pick in rng.sample_distinct(servers.len(), servers.len().min(30)) {
+                let server = servers[pick];
+                let Some(service) = model.devices[server as usize].services.first() else {
+                    continue;
+                };
+                for _ in 0..rng.range(2, 6) {
+                    flow!(
+                        at(rng),
+                        &src,
+                        &ips[server as usize],
+                        service.proto,
+                        service.port,
+                        0.0,
+                        0,
+                        0,
+                        "S0"
+                    );
+                }
+            }
+        }
+        Kind::Benign(Lookalike::BackupFailed) => {
+            let (Some(src_dev), Some(&server)) =
+                (truth.attacker_device, truth.victim_devices.first())
+            else {
+                return;
+            };
+            if src_dev == server {
+                return;
+            }
+            for _ in 0..rng.range(20, 200) {
+                let state = if rng.chance(0.6) { "RSTO" } else { "S0" };
+                let ob = if state == "S0" {
+                    0
+                } else {
+                    rng.range(200, 4000)
+                };
+                flow!(
+                    at(rng),
+                    &ips[src_dev as usize],
+                    &ips[server as usize],
+                    "tcp",
+                    445,
+                    rng.range_f(0.0, 3.0),
+                    ob,
+                    0,
+                    state
+                );
+            }
+        }
+        Kind::Benign(Lookalike::CertExpired) => {
+            let Some(&server) = truth.victim_devices.first() else {
+                return;
+            };
+            let dst = ips[server as usize].clone();
+            let clients: Vec<u32> = model
+                .devices
+                .iter()
+                .filter(|d| !d.role.is_server() && d.up)
+                .map(|d| d.id)
+                .collect();
+            for pick in rng.sample_distinct(clients.len(), clients.len().min(100)) {
+                for _ in 0..rng.range(1, 4) {
+                    let rb = rng.range(0, 200);
+                    flow!(
+                        at(rng),
+                        &ips[clients[pick] as usize],
+                        &dst,
+                        "tcp",
+                        443,
+                        0.05,
+                        517,
+                        rb,
+                        "RSTO"
+                    );
+                }
+            }
+            for _ in 0..rng.range(20, 200) {
+                let client = public_ip(rng);
+                let rb = rng.range(0, 200);
+                flow!(at(rng), &client, &dst, "tcp", 443, 0.05, 517, rb, "RSTO");
+            }
+        }
+        Kind::Benign(Lookalike::SegmentPowerLoss) => {
+            // posledni cyklus okna = hromadny start (DHCP, DNS, NTP, aktualizace)
+            if ctx.cycle != truth.end_cycle {
+                return;
+            }
+            let gateway = &ips[model.gateway as usize];
+            let dns = &ips[model.dns as usize];
+            for &device in &truth.victim_devices {
+                if !model.devices[device as usize].up {
+                    continue;
+                }
+                let src = ips[device as usize].clone();
+                flow!(at(rng), &src, gateway, "udp", 67, 0.01, 300, 300, "SF");
+                for _ in 0..rng.range(5, 30) {
+                    let rb = rng.range(80, 400);
+                    flow!(at(rng), &src, dns, "udp", 53, 0.05, 60, rb, "SF");
+                }
+                let ext = model.externals[rng.range(0, model.externals.len() as u64 - 1) as usize]
+                    .clone();
+                flow!(at(rng), &src, &ext, "udp", 123, 0.05, 76, 76, "SF");
+                for _ in 0..rng.range(1, 4) {
+                    let ext = model.externals
+                        [rng.range(0, model.externals.len() as u64 - 1) as usize]
+                        .clone();
+                    let rb = rng.lognormal(2.0e5, 1.0) as u64;
+                    flow!(at(rng), &src, &ext, "tcp", 443, 2.0, 3000, rb, "SF");
+                }
+            }
+        }
+        Kind::Benign(Lookalike::VpnReconnectStorm) => {
+            let Some(&server) = truth.victim_devices.first() else {
+                return;
+            };
+            let dst = ips[server as usize].clone();
+            let port = model.devices[server as usize]
+                .services
+                .iter()
+                .map(|s| s.port)
+                .find(|p| matches!(p, 1194 | 443 | 500 | 4500))
+                .unwrap_or(443);
+            // stejni vzdaleni klienti v kazdem cyklu (vlastni proud podle udalosti)
+            let mut clients_rng = Rng::new(derive(model.seed ^ 0x5F7_0000, truth.id as u64));
+            let n = (100.0 + 500.0 * truth.intensity) as usize;
+            for _ in 0..n {
+                let client = public_ip(&mut clients_rng);
+                for _ in 0..rng.range(2, 8) {
+                    let (state, ob, rb) = match rng.weighted(&[0.45, 0.3, 0.25]) {
+                        0 => ("S0", 0, 0),
+                        1 => ("RSTO", rng.range(100, 600), rng.range(0, 300)),
+                        _ => ("SF", rng.range(2000, 20000), rng.range(2000, 40000)),
+                    };
+                    flow!(
+                        at(rng),
+                        &client,
+                        &dst,
+                        "tcp",
+                        port,
+                        rng.range_f(0.0, 5.0),
+                        ob,
+                        rb,
+                        state
+                    );
+                }
+            }
+        }
+        Kind::Benign(Lookalike::CloudMigration) => {
+            if truth.cov.extra_external.is_empty() {
+                return;
+            }
+            let block = &truth.cov.extra_external;
+            let early = ctx.cycle < truth.start_cycle + 4;
+            for &device in &truth.victim_devices {
+                if !model.devices[device as usize].up {
+                    continue;
+                }
+                let src = ips[device as usize].clone();
+                let server = model.devices[device as usize].role.is_server();
+                for _ in 0..rng.range(2, 6) {
+                    let dst = block[rng.range(0, block.len() as u64 - 1) as usize].clone();
+                    let ob = if early && server {
+                        rng.lognormal(1.5e9 * truth.intensity, 0.5) as u64
+                    } else {
+                        rng.lognormal(4000.0, 1.0) as u64
+                    };
+                    let rb = rng.lognormal(20000.0, 1.0) as u64;
+                    flow!(
+                        at(rng),
+                        &src,
+                        &dst,
+                        "tcp",
+                        443,
+                        rng.range_f(0.5, 600.0),
+                        ob,
+                        rb,
+                        "SF"
+                    );
+                }
+            }
+        }
     }
     let _ = (benign_marker, family);
 }
@@ -2900,6 +3359,7 @@ mod tests {
             flows_blocked: 0,
             first_emit_cycle: None,
             blocked_at_cycle: None,
+            cov: Default::default(),
         }];
         let mut rng = Rng::new(5);
         let ctx = CycleContext {

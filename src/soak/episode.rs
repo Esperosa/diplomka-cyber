@@ -99,6 +99,8 @@ pub struct WorldOptions {
     /// Rodiny utoku ve svete (`--families`); ostatni utoky se z planu vyradi, svet
     /// zbylych utoku a pozadi je beze zmeny (kazda udalost ma vlastni proud).
     pub families: crate::soak::traffic::FamilySet,
+    /// Svet pokryti (krok 5, `--coverage off|tuning|full`); vychozi vypnuto.
+    pub coverage: crate::soak::coverage::CoverageMode,
 }
 
 impl Default for WorldOptions {
@@ -107,6 +109,7 @@ impl Default for WorldOptions {
             noise: 1.0,
             xxxl: false,
             families: Default::default(),
+            coverage: Default::default(),
         }
     }
 }
@@ -242,6 +245,10 @@ struct Ledger {
     cf_types: BTreeSet<String>,
     /// Leave-one-out (jen vybrane utoky): zobrazena detekce proti svetu bez TOHOTO utoku.
     loo_displayed: Option<bool>,
+    /// Krok 5: pripsany nalez utoku byl automaticky zavren nebo vyvracen (a slo o
+    /// prvni vyskyt dvojice typ a entita v siti).
+    auto_closed: bool,
+    auto_closed_first: bool,
 }
 
 /// Zobrazeni nalezu v cyklu (legacy: vse, v3: podle pameti a kontextu).
@@ -288,6 +295,13 @@ fn key_ips(truth: &Truth, ips: &[String], rogue: &Option<(String, String)>) -> V
         keys.insert(ip.clone());
     }
     if let Some(ip) = &truth.target_external {
+        keys.insert(ip.clone());
+    }
+    // krok 5: dalsi zdroje utoku, blok cloudu, stara adresa serveru
+    for &device in &truth.cov.extra_devices {
+        keys.insert(ips[device as usize].clone());
+    }
+    for ip in &truth.cov.extra_external {
         keys.insert(ip.clone());
     }
     if matches!(
@@ -406,13 +420,23 @@ pub fn run_episode(cfg: &EpisodeConfig) -> EpisodeResult {
     let mut digest = EpisodeDigest(0x5EED);
     let mut world = CfWorld::default();
     let mut attack_ids = Vec::new();
-    if let Err(error) = run_episode_inner(cfg, &mut agg, &mut digest, &mut world, &mut attack_ids) {
+    let mut records = CoverageRecords::default();
+    if let Err(error) = run_episode_inner(
+        cfg,
+        &mut agg,
+        &mut digest,
+        &mut world,
+        &mut attack_ids,
+        &mut records,
+    ) {
         agg.violation("episode_error", format!("sit {}: {error}", cfg.network_id));
     }
     agg.networks += 1;
     agg.episodes += 1;
     let mut summary = NetworkSummary::from_aggregate(&agg, cfg.run_seed, cfg.network_id);
     summary.wall_s = started.elapsed().as_secs_f64();
+    summary.attacks = records.attacks;
+    summary.faults = records.faults;
     EpisodeResult {
         digest: digest.0 ^ agg.deterministic_digest(),
         agg,
@@ -422,6 +446,13 @@ pub fn run_episode(cfg: &EpisodeConfig) -> EpisodeResult {
     }
 }
 
+/// Zaznamy sveta pokryti (krok 5) pro `networks.jsonl`.
+#[derive(Default)]
+struct CoverageRecords {
+    attacks: Vec<crate::soak::coverage::AttackRecord>,
+    faults: Vec<crate::soak::coverage::FaultRecord>,
+}
+
 #[allow(clippy::too_many_lines)]
 fn run_episode_inner(
     cfg: &EpisodeConfig,
@@ -429,6 +460,7 @@ fn run_episode_inner(
     digest: &mut EpisodeDigest,
     world: &mut CfWorld,
     attack_ids: &mut Vec<u32>,
+    records: &mut CoverageRecords,
 ) -> Result<()> {
     let mut model = NetworkModel::generate_with(cfg.run_seed, cfg.network_id, cfg.world.xxxl);
     *agg.archetypes
@@ -469,8 +501,31 @@ fn run_episode_inner(
         }
     }
     let mut truths = plan_episode(&model, &mut rng, hours, &telemetry);
+    // krok 5: svet pokryti (vlastni proud; pri `off` nic)
+    crate::soak::coverage::plan_coverage(
+        &model,
+        &mut truths,
+        hours,
+        &telemetry,
+        cfg.world.coverage,
+    );
+    // kampan s vyrazenou rodinou se vyradi cela (jinak by zbyla torza)
+    let dropped_campaigns: HashSet<u32> = truths
+        .iter()
+        .filter_map(|t| match (t.kind, t.cov.campaign) {
+            (Kind::Attack(family), Some(tag)) if !cfg.world.families.includes(family) => {
+                Some(tag.id)
+            }
+            _ => None,
+        })
+        .collect();
     truths.retain(|t| match t.kind {
-        Kind::Attack(family) => cfg.world.families.includes(family),
+        Kind::Attack(family) => {
+            cfg.world.families.includes(family)
+                && t.cov
+                    .campaign
+                    .is_none_or(|tag| !dropped_campaigns.contains(&tag.id))
+        }
         Kind::Benign(_) => true,
     });
     // krok 3: neskodne pravidelne vzory (vlastni proud, svet utoku beze zmeny)
@@ -585,8 +640,14 @@ fn run_episode_inner(
             cf_typed_displayed: false,
             cf_types: BTreeSet::new(),
             loo_displayed: None,
+            auto_closed: false,
+            auto_closed_first: false,
         })
         .collect();
+    // krok 5: zobrazene FP neskodnych udalosti a prvni vyskyty (typ, entita)
+    let coverage_on = cfg.world.coverage.on();
+    let mut lookalike_displayed: HashSet<usize> = HashSet::new();
+    let mut seen_finding_keys: HashSet<(String, String)> = HashSet::new();
     for (ledger, truth) in ledgers.iter_mut().zip(&truths) {
         if loo_of.contains_key(&truth.id) {
             ledger.loo_displayed = Some(false);
@@ -713,6 +774,18 @@ fn run_episode_inner(
                             desired[v as usize] = false;
                         }
                     }
+                    // krok 5: DNS server dole po celou poruchu
+                    Lookalike::DnsOutage if cycle <= truth.end_cycle => {
+                        for &v in &truth.victim_devices {
+                            desired[v as usize] = false;
+                        }
+                    }
+                    // krok 5: podsit bez napajeni, v poslednim cyklu hromadny start
+                    Lookalike::SegmentPowerLoss if cycle < truth.end_cycle => {
+                        for &v in &truth.victim_devices {
+                            desired[v as usize] = false;
+                        }
+                    }
                     Lookalike::PatchWindow if cycle <= truth.end_cycle => {
                         let span = (truth.end_cycle - truth.start_cycle + 1) as usize;
                         for (i, &v) in truth.victim_devices.iter().enumerate() {
@@ -767,6 +840,17 @@ fn run_episode_inner(
         };
         let changes = model.churn(&mut rng, churn_share, 0.02);
         agg.identity.churn_events += changes as u64;
+        // krok 5: hromadne precislovani podsite (vlastni proud udalosti)
+        for truth in truths.iter_mut() {
+            if truth.kind == Kind::Benign(Lookalike::DhcpRenumber) && cycle == truth.start_cycle {
+                let mut renumber_rng = Rng::new(derive(model.seed ^ 0xD4C9, truth.id as u64));
+                let server = truth.victim_devices.first().copied();
+                let (moved, old) =
+                    model.renumber(truth.cov.param as usize, server, &mut renumber_rng);
+                agg.identity.churn_events += moved as u64;
+                truth.cov.extra_external = old.into_iter().collect();
+            }
+        }
         let ips: Vec<String> = (0..model.devices.len() as u32)
             .map(|d| model.ip_of(d))
             .collect();
@@ -1631,6 +1715,13 @@ fn run_episode_inner(
             let mut attacked = false;
             let mut attack_family: Option<&'static str> = None;
             let fhash = finding_hash(&finding.finding_id);
+            let first_key = coverage_on
+                && is_behavioral
+                && seen_finding_keys.insert((
+                    finding.finding_type.clone(),
+                    finding.host_key.clone().unwrap_or_default(),
+                ));
+            let closed = show.auto.is_some() || show.ladder_refuted;
             if is_behavioral && collect_world {
                 // kontrafaktualni svet: zapamatovat nalezy, ktere by fakticky beh mohl
                 // pripsat nekteremu utoku (stejne okno a klicove IP)
@@ -1681,6 +1772,15 @@ fn run_episode_inner(
                                 ledger.displayed_detect.get_or_insert(cycle);
                                 ledger.typed_displayed |= typed;
                             }
+                            if coverage_on
+                                && closed
+                                && cf
+                                    .as_deref()
+                                    .is_none_or(|c| c.all.absent(cycle, fhash, false))
+                            {
+                                ledger.auto_closed = true;
+                                ledger.auto_closed_first |= first_key;
+                            }
                             if let Some(cf) = cf.as_deref() {
                                 // pripsat jen nalez, ktery ve svete bez utoku chybi;
                                 // zobrazeni jen tehdy, kdyz ho kontrafaktual nezobrazil
@@ -1708,7 +1808,12 @@ fn run_episode_inner(
                                 }
                             }
                         }
-                        Kind::Benign(_) => *attributed_to_lookalike.entry(index).or_default() += 1,
+                        Kind::Benign(_) => {
+                            *attributed_to_lookalike.entry(index).or_default() += 1;
+                            if coverage_on && show.displayed {
+                                lookalike_displayed.insert(index);
+                            }
+                        }
                     }
                 }
                 if !attributed {
@@ -1721,6 +1826,9 @@ fn run_episode_inner(
                             {
                                 attributed = true;
                                 *attributed_to_lookalike.entry(index).or_default() += 1;
+                                if coverage_on && show.displayed {
+                                    lookalike_displayed.insert(index);
+                                }
                                 break;
                             }
                         }
@@ -2551,6 +2659,76 @@ fn run_episode_inner(
             }
         }
     }
+    // krok 5: zaznamy po utocich a udalostech (jen svet pokryti)
+    if coverage_on {
+        use crate::soak::coverage::{AttackRecord, FaultRecord, overlaps};
+        let mut first_of: HashMap<&'static str, (u32, u32)> = HashMap::new();
+        for truth in &truths {
+            if let Kind::Attack(family) = truth.kind
+                && truth.first_emit_cycle.is_some()
+            {
+                let entry = first_of
+                    .entry(family.label())
+                    .or_insert((truth.start_cycle, truth.id));
+                if (truth.start_cycle, truth.id) < *entry {
+                    *entry = (truth.start_cycle, truth.id);
+                }
+            }
+        }
+        for (index, truth) in truths.iter().enumerate() {
+            let ledger = &ledgers[index];
+            let cycles_len = truth.end_cycle - truth.start_cycle + 1;
+            match truth.kind {
+                Kind::Attack(family) => {
+                    let emitted = truth.first_emit_cycle.is_some();
+                    let overlaps: Vec<String> = truths
+                        .iter()
+                        .filter(|other| {
+                            matches!(other.kind, Kind::Benign(_))
+                                && overlaps(truth, other, ATTRIBUTION_LATENCY)
+                        })
+                        .map(|other| match other.kind {
+                            Kind::Benign(look) => look.label().to_string(),
+                            Kind::Attack(f) => f.label().to_string(),
+                        })
+                        .collect();
+                    let variation = truth.cov.variation;
+                    records.attacks.push(AttackRecord {
+                        id: truth.id,
+                        family: family.label().to_string(),
+                        held: family.held_out(),
+                        campaign: truth.cov.campaign,
+                        intensity: truth.intensity,
+                        variation,
+                        stealth: variation.unwrap_or_default().stealth(truth.intensity),
+                        ids_visible: truth.ids_visible,
+                        first_of_family: first_of
+                            .get(family.label())
+                            .is_some_and(|(_, id)| *id == truth.id),
+                        overlaps,
+                        cycles: cycles_len,
+                        emitted,
+                        detected: emitted && ledger.first_detect.is_some(),
+                        displayed: emitted && ledger.displayed_detect.is_some(),
+                        cf: (cf.is_some() && emitted).then_some(ledger.cf_displayed),
+                        cf_types: ledger.cf_types.iter().cloned().collect(),
+                        auto_closed: ledger.auto_closed,
+                        auto_closed_first: ledger.auto_closed_first,
+                    });
+                }
+                Kind::Benign(look) => records.faults.push(FaultRecord {
+                    id: truth.id,
+                    label: look.label().to_string(),
+                    held: look.held_out(),
+                    ops: look.is_ops(),
+                    new: Lookalike::COVERAGE.contains(&look),
+                    cycles: cycles_len,
+                    fp_captured: lookalike_with_fp.contains(&index),
+                    fp_displayed: lookalike_displayed.contains(&index),
+                }),
+            }
+        }
+    }
     tracker.finish(&mut agg.output);
     if let Some(memory) = v3.as_ref().and_then(|runtime| runtime.memory.as_ref()) {
         agg.output.memory_peak_entries = memory.stats.peak_entries;
@@ -3088,6 +3266,70 @@ mod engine_v3_tests {
             );
         }
         assert!(seen_tuning > 0);
+    }
+
+    /// Krok 5: svet pokryti je deterministicky, ma zaznamy po utocich a udalostech,
+    /// ladici svet nema drzene poruchy ani drzene urovne os, pozadi zustane stejne.
+    #[test]
+    fn coverage_world_is_deterministic_records_every_truth_and_respects_tuning_set() {
+        use crate::soak::coverage::CoverageMode;
+        let with = |id: u64, mode: CoverageMode| {
+            run_episode(&EpisodeConfig {
+                world: WorldOptions {
+                    coverage: mode,
+                    families: if mode == CoverageMode::Tuning {
+                        crate::soak::traffic::FamilySet::Tuning
+                    } else {
+                        Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..cfg_v3(id, 72)
+            })
+        };
+        let mut new_faults = std::collections::BTreeSet::new();
+        let mut campaigns = 0usize;
+        for id in [3u64, 8] {
+            let off = run_episode(&cfg_v3(id, 72));
+            assert!(off.summary.attacks.is_empty() && off.summary.faults.is_empty());
+            let tuning = with(id, CoverageMode::Tuning);
+            let again = with(id, CoverageMode::Tuning);
+            assert_eq!(tuning.digest, again.digest, "sit {id}");
+            assert_eq!(tuning.summary.attacks, again.summary.attacks);
+            assert!(
+                tuning.agg.invariant_violations.is_empty(),
+                "{:?}",
+                tuning.agg.violation_samples
+            );
+            for attack in &tuning.summary.attacks {
+                assert!(!attack.held, "{}", attack.family);
+                let v = attack.variation.expect("kazdy utok ma variaci");
+                assert!(![0.25, 8.0].contains(&v.tempo) && v.sources < 10 && v.jitter < 0.5);
+                assert!(attack.intensity >= 0.1 && (0.0..=1.0).contains(&attack.stealth));
+                campaigns += attack.campaign.is_some() as usize;
+            }
+            for fault in &tuning.summary.faults {
+                assert!(!fault.held, "{}", fault.label);
+                if fault.new {
+                    new_faults.insert(fault.label.clone());
+                }
+            }
+            let full = with(id, CoverageMode::Full);
+            assert!(full.agg.invariant_violations.is_empty());
+            campaigns += full
+                .summary
+                .attacks
+                .iter()
+                .filter(|a| a.campaign.is_some())
+                .count();
+            for fault in full.summary.faults.iter().filter(|f| f.new) {
+                new_faults.insert(fault.label.clone());
+            }
+            let attacks = full.agg.families.values().map(|f| f.truth).sum::<u64>();
+            assert!(attacks > 0);
+        }
+        assert!(campaigns > 0, "zadna faze kampane");
+        assert!(new_faults.len() >= 3, "{new_faults:?}");
     }
 
     fn cfg_v3(id: u64, hours: u32) -> EpisodeConfig {

@@ -828,6 +828,11 @@ pub struct NetworkSummary {
     /// Svet site ve smisenem behu (krok 4, `--noise-mix`); jinak chybi.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub world: Option<NetworkWorld>,
+    /// Svet pokryti (krok 5): zaznam o kazdem utoku a neskodne udalosti; jinak chybi.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub attacks: Vec<crate::soak::coverage::AttackRecord>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub faults: Vec<crate::soak::coverage::FaultRecord>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
@@ -911,6 +916,8 @@ impl NetworkSummary {
                 .unwrap_or(0.0),
             wall_s: 0.0,
             world: None,
+            attacks: Vec::new(),
+            faults: Vec::new(),
         }
     }
 }

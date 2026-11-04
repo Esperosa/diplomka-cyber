@@ -3,6 +3,7 @@
 
 pub mod alloc;
 pub mod benign_regular;
+pub mod coverage;
 pub mod episode;
 pub mod hist;
 pub mod kernel;
