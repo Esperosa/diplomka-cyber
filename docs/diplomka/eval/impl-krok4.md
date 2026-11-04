@@ -63,3 +63,79 @@ Metriky jsou ty z `tools/soak_ab.py` (poměr součtů na virtuální síť-den, 
 **Rozhodnutí:** v3 se stane výchozím jen při splnění všech G1 až G5. Při nesplnění kteréhokoli zůstává `legacy` výchozí, v3 volitelné a v sekci C se uvede, který práh selhal a proč. Prahy se dodatečně nemění, slepé běhy se neopakují s jiným nastavením a po pohledu na výsledek se nic neladí.
 
 Poznámka k měření času (G4): stroj sdílí jiné úlohy mimo tuto práci (lokální jazykový model, jiný Python proces), které v době kroku 4 zpomalují běhy zhruba 1,5 až 2× proti kroku 3. Čas se proto měří s jedním vláknem a bez mých dalších běhů; zátěž cizích procesů ovlivnit nemohu a uvádím ji.
+
+## C) Výsledky slepého testu
+
+Binárka z commitu `eea4060` (zapsáno ve všech `final-report.md`), skript `F:\bakula-soak\ab\k4\blind\run-blind.ps1`, běh 2026-11-04 18:45 až 20:10, vše s nízkou prioritou. Všech 16 soak běhů doběhlo (log `blind.log`), v logech není žádná panika, `ERROR` ani `WARN`. Jediná hlášení `VAROVANI ... nelze naparsovat JSON` patří k záměrně poškozeným řádkům alertů ze simulátoru (`src/soak/episode.rs`), mají ve všech ramenech stejného seedu stejný počet a zpracují se bez pádu. Vyhodnocení `tools/soak_gates.py` beze změny prahů, plný výstup v `F:\bakula-soak\ab\k4\blind\gates.txt`.
+
+### G1: zobrazené FP na síť-den
+
+| práh | srovnání | sítí | hodnoty | změna / poměr | 95% CI | výsledek |
+|---|---|---:|---|---:|---|---|
+| G1a | `s4` vs `legacy`, 1× | 80 | 753,6 → 17,6 | −97,7 % | −98,3 až −96,6 % | splněno (≤ −90 %) |
+| G1b | `s4` vs `s2`, 1× | 80 | 17,4 → 17,6 | 1,010 | 1,006 až 1,017 | splněno (≤ 1,10) |
+| G1c | `s4` vs `s2`, 10× | 32 | 33,4 → 34,5 | 1,031 | 1,020 až 1,057 | splněno (≤ 1,5) |
+| G1d | `s4` vs `s2`, 50× | 32 | 38,5 → 41,7 | 1,083 | 1,055 až 1,144 | splněno (≤ 2,5) |
+
+### G2: kontrafaktuální zobrazená detekce, `s4` − `legacy` (80 sítí)
+
+| rodina | n | legacy | s4 | rozdíl (p. b.) | 95% CI | práh |
+|---|---:|---:|---:|---:|---|---|
+| apt_chain | 42 | 90,5 % | 100,0 % | +9,5 | +2,1 až +18,8 | (n < 100) |
+| c2_beacon | 106 | 3,8 % | 88,7 % | +84,9 | +78,4 až +90,9 | OK |
+| credential_stuffing | 100 | 93,0 % | 95,0 % | +2,0 | −2,9 až +7,2 | OK |
+| cryptomining | 73 | 5,5 % | 95,9 % | +90,4 | +83,3 až +96,8 | (n < 100) |
+| ddos_volume | 57 | 94,7 % | 93,0 % | −1,8 | −6,1 až +0,0 | (n < 100) |
+| dns_tunnel | 55 | 27,3 % | 98,2 % | +70,9 | +54,7 až +83,8 | (n < 100) |
+| exfiltration | 70 | 2,9 % | 92,9 % | +90,0 | +75,9 až +100,0 | (n < 100) |
+| exploit_attempt | 124 | 13,7 % | 35,5 % | +21,8 | +10,2 až +36,5 | OK |
+| fleet_beacon | 34 | 50,0 % | 70,6 % | +20,6 | +3,7 až +41,7 | (n < 100) |
+| ics_attack | 3 | 100,0 % | 33,3 % | −66,7 | −66,7 až −66,7 | (n < 100) |
+| insider_hoarding | 29 | 100,0 % | 100,0 % | +0,0 | +0,0 až +0,0 | (n < 100) |
+| lateral_movement | 93 | 89,2 % | 86,0 % | −3,2 | −13,4 až +4,8 | (n < 100) |
+| port_scan_horizontal | 121 | 76,0 % | 90,9 % | +14,9 | +3,2 až +25,7 | OK |
+| port_scan_vertical | 178 | 21,9 % | 94,4 % | +72,5 | +59,2 až +83,6 | OK |
+| ransomware | 29 | 100,0 % | 100,0 % | +0,0 | +0,0 až +0,0 | (n < 100) |
+| rogue_device | 43 | 11,6 % | 97,7 % | +86,0 | +71,4 až +97,7 | (n < 100) |
+| slow_scan | 98 | 85,7 % | 100,0 % | +14,3 | +7,1 až +24,1 | (n < 100) |
+| ssh_bruteforce | 231 | 95,2 % | 96,5 % | +1,3 | −1,5 až +4,4 | OK |
+| web_exploit | 87 | 87,4 % | 92,0 % | +4,6 | +0,0 až +9,8 | (n < 100) |
+| **souhrnně** | 1 573 | 57,5 % | 89,1 % | +31,6 | +28,1 až +35,3 | OK (≥ −2) |
+
+G2a splněno (všech 6 rodin s n ≥ 100 nad −5 p. b.), G2b splněno. Pod prahem n je výrazný jen pokles `ics_attack` (3 útoky, 3 → 1 detekovaný); vzhledem k n ho nelze zobecnit, ale je to kandidát na samostatnou kontrolu.
+
+### G3, G4, G5
+
+| práh | výsledek | 95% CI | splněno? |
+|---|---|---|---|
+| G3 zavřeno omylem (`s4`, 1×) | 10 / 875 = 1,14 % | Wilson 0,62 až 2,09 % | ano (horní mez ≤ 5 %) |
+| G4 XXXL p99 cyklu | max 4,01 s; po sítích 2,70 / 3,22 / 3,13 s (seed 20261201) a 1,67 / 2,58 / 4,01 s (seed 20261301) | | **ne** (práh < 3 s, překročen u 3 ze 6 sítí) |
+| G4 XXXL peak haldy | 449 a 410 MiB | | ano (< 1 536 MiB) |
+| G5 ramena v3 | 294 sítí, 0 panik, 0 porušených invariantů (legacy 80 sítí, 0 / 0) | | ano |
+
+### G6: zamčená testovací část kotvy (bez prahu)
+
+Spuštěno jednou (krok skriptu slepého testu, 20:08 až 20:10, `cargo test --release --lib behavior_anchor_test_once -- --ignored`, výstup `F:\bakula-soak\ab\k4\blind\anchor.out`). Podruhé jsem ji nespouštěl. Hosté s libovolným behaviorálním nálezem (škodliví / neškodní):
+
+| scénář | toků | škodliví s nálezem | neškodní s nálezem | typy |
+|---|---:|---:|---:|---|
+| ctu13/Botnet-43 | 229 265 | 0 / 1 | 0 / 8 | |
+| ctu13/Botnet-45 | 229 289 | 0 / 1 | 0 / 13 | |
+| ctu13/Botnet-48 | 114 077 | 0 / 1 | 0 / 13 | |
+| ctu13/Botnet-50 | 229 364 | 0 / 10 | 0 / 17 | |
+| ctu13/Botnet-51 | 228 760 | 0 / 10 | 0 / 14 | |
+| ctu13/Botnet-53 | 228 811 | 0 / 3 | 0 / 14 | |
+| ctu13/Botnet-54 | 229 653 | 0 / 1 | 0 / 16 | |
+| iot23/CTU-Honeypot-Capture-5-1 | 1 374 | 0 / 0 | 0 / 10 | |
+| iot23/CTU-Honeypot-Capture-7-1-Somfy-01 | 130 | 0 / 0 | 1 / 3 | interactive_session |
+| iot23/CTU-IoT-Malware-Capture-8-1 | 10 403 | 0 / 1 | 0 / 1 | |
+| iot23/CTU-IoT-Malware-Capture-21-1 | 3 286 | 1 / 1 | 0 / 2 | beacon_periodic, interactive_session |
+| iot23/CTU-IoT-Malware-Capture-44-1 | 237 | 1 / 1 | 0 / 1 | egress_volume_anomaly, interactive_session |
+
+Souhrnně 2 z 30 škodlivých hostů a 1 ze 112 neškodných. Na CTU-13 (27 škodlivých, 95 neškodných) behaviorální vrstva s výchozím presetem nenahlásí nic, ani škodlivé, ani neškodné hosty. Na IoT-23 zachytí 2 ze 3 škodlivých za cenu 1 ze 17 neškodných. Na reálných datech je vrstva tedy tichá a málo citlivá. Simulace ukazuje víc, ale přenos na reálný provoz z CTU-13 tímto potvrzený není.
+
+### Rozhodnutí
+
+**G1 až G5 nesplněny, selhal G4** (p99 času cyklu na XXXL 4,01 s proti prahu < 3 s; paměť v limitu). Podle pravidla z B tedy `legacy` zůstává výchozí a v3 zůstává volitelné (`--engine v3`). Část D se neprovádí a dlouhý běh E jako ověření výchozího režimu nemá podklad. Slepé běhy se neopakují a prahy se nemění.
+
+Proč G4 selhal: měřil jsem podle předregistrace (jedno vlákno, jedna síť najednou, bez mých dalších běhů). Překročení přišlo u 3 ze 6 sítí (3,13, 3,22 a 4,01 s), takže nejde o jednu odlehlou hodnotu. Cizí zátěž stroje popsaná výše čas zvyšuje a nedá se z měření oddělit. Proto nevím, jestli by na nezatíženém stroji v3 práh splnilo. Pro výchozí režim to ale nic nemění: o něm rozhoduje výsledek změřený podle pravidel. Další krok je profil cyklu v3 na XXXL (kde roste p99) a nové předregistrované měření na nových seedech po případné optimalizaci.
