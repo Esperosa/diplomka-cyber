@@ -308,3 +308,135 @@ Detektory jsem neměnil. Na ladicích seedech jsem změřil dvě existující ob
 | `--v3-off beacon` (kontrola LOFO) | −5,7 p. b. (−6,6 až −4,9) | 18,8 → 18,5 | c2_beacon 78,4 → 34,8 % |
 
 Graf nových vztahů je jediná obecná změna, která ve světě skrytých útoků a kampaní pomáhá znatelně. Zavírá většinu slabého místa lateral_movement a v3 tím přestává být v pohybu po síti horší než legacy. Platí se za to +21 % zobrazených FP. Krok 4 graf vyřadil z presetu na výchozím světě (+0,2 p. b. detekce za +3,7 % FP). Ve světě pokrytí je výměna jiná. Preset ale neměním: držené rameno je podle A3 preset po kroku 4 a změna presetu by potřebovala vlastní předregistraci. Je to doporučení pro další krok. Opravy pro exploit_attempt (signatury a CVE) a pro třídění provozních problémů nejsou obecné změny detektoru podle zadání, proto zůstávají v registru slepých míst.
+
+## G) Držený běh (seedy 20261401 a 20261501, jednou, binárka `c4598de`)
+
+Svět `--coverage full --families all`, 2 × 40 sítí (80 párů, 2 856 útoků, z toho 745 z držených rodin). Hranice S jsou z E, prahy z A6 beze změny. Běh 2026-11-04 23:47 až 2026-11-05 00:50, priorita Idle. Plný výstup je v `docs/diplomka/eval/k5/held-legacy-v3.md`. Po pohledu na výsledek se nic neladilo a běh se neopakoval.
+
+| práh | hodnota | splněno |
+|---|---|---|
+| K1 | Q5 / Q1 = 75,6 % / 80,1 % = 0,94 | ano |
+| K2 | párově v3 − legacy: vše +16,5 p. b. (+14,1 až +19,0), Q4 + Q5 +13,6 p. b. (+10,3 až +16,9) | ano |
+| K3 | zobrazené FP držených nových poruch 78,8 % proti laděným novým poruchám 66,3 % (+12,5 p. b.) | **ne** |
+| K4 | souběh s nesenzorovou poruchou proti bez souběhu: −1,9 p. b. (78,2 % proti 80,9 %) | ano |
+| K5 | LOFO zobecňuje 2 ze 6 (ssh_bruteforce 75,9 %, dns_tunnel 54,5 %) | 4 slepá místa |
+| K6 | zavřeno omylem 185 / 3 165 = 5,8 %, Wilson 5,1 až 6,7 % | **ne** |
+| K6b | útoky s automaticky zavřeným nálezem: držené rodiny 4,2 % proti laděným 1,0 % | ano (≤ +5 p. b.) |
+| K7 | kampaně zachycené aspoň v jedné fázi 98,0 % (95,0 až 99,2 %) | ano |
+| K8 | 0 panik, 0 porušených invariantů (160 sítí) | ano |
+
+**Souhrn (v3 / legacy):** detekce 77,9 % / 61,4 %, zobrazené FP na síť-den 14,1 / 653,8.
+
+**Křivka skrytosti (v3):** Q1 80,1 %, Q2 80,1 %, Q3 80,6 %, Q4 77,5 %, Q5 75,6 %. Držené krajní úrovně os (v3):
+
+| osa | držená úroveň | detekce | srovnání |
+|---|---|---:|---|
+| tempo | 0,25× | 80,3 % | |
+| tempo | 8× | 80,1 % | |
+| rozptyl | 0,5 | 76,9 % | |
+| zdroje | 10 | 73,6 % | 1 zdroj: 78,7 % |
+| intenzita | pod 0,2 | 73,3 % | |
+
+Ve držených rodinách:
+
+| rodina | n | detekce |
+|---|---:|---:|
+| apt_chain | 59 | 98,3 % |
+| insider_hoarding | 53 | 94,3 % |
+| ransomware | 82 | 92,7 % |
+| slow_scan | 201 | 86,1 % |
+| web_exploit | 188 | 84,6 % |
+| cryptomining | 125 | 79,2 % |
+| fleet_beacon | 34 | 76,5 % |
+| ics_attack | 3 | nedostatečná data |
+
+**Kampaně:** zachycena první fáze 79,8 %, všechny fáze 41,9 %. Držené šablony: K-H1 100 %, K-H2 97,4 %, K-H3 94,6 % aspoň v jedné fázi.
+
+**Proč selhal K6.** Ze 163 omylem zavřených nálezů kontextem jich 147 zavřel kontext „výpadek senzoru“ (v ladicím běhu 5 ze 47). Kontext výpadku senzoru nemá klíčové hosty a vysvětluje v celém svém okně jakýkoli nález. Ve světě `full` běží dlouhé držené útoky (těžba, kampaně, fleet) přes výpadky senzoru častěji a jejich nálezy po návratu dat kontext zavře. Je to obecná vada pravidla kontextu, ne vlastnost jedné rodiny. Ladicí svět ji neukázal, protože ladicí útoky jsou kratší. Opravu (výpadek senzoru vysvětluje jen typy způsobené mezerou v datech a jen v cyklech výpadku plus jeden po něm) jsem po pohledu na držená data neudělal a nepouštěl. Patří do dalšího kroku s novou předregistrací a novými seedy.
+
+**Proč selhal K3.** Držené poruchy vyvolají zobrazené FP častěji než laděné:
+
+| držená porucha | podíl výskytů se zobrazeným FP |
+|---|---:|
+| cloud_migration | 89,9 % |
+| cert_expired | 89,1 % |
+| vpn_reconnect_storm | 79,4 % |
+| segment_power_loss | 58,6 % |
+
+Engine pro ně nemá žádný kontext a nové vnější cíle nebo bouře neúspěšných spojení vypadají jako útok. Žádná z poruch se neladila, laděné nové poruchy mají vysoké FP také (66,3 %). Rozdíl je tedy hlavně v tom, jak moc daná porucha útok připomíná, ne v přeučení.
+
+**Veřejné datasety (C).** Vývojová část proběhla jednou na začátku G (bez ladění), zamčená testovací část `behavior_anchor_k5_test_once` jednou hned po ní. Výstupy jsou v `F:\claude-tmp\k5\anchor-k5-dev.out` a `anchor-k5-test.out`.
+
+| výřez | část | toků | škodlivých | behaviorální vrstva: škodliví / neškodní vnitřní hosté s nálezem | pasivní detektory D: TP / FP / FN / TN klíčů služby |
+|---|---|---:|---:|---|---|
+| tue-ftp-patator | dev | 102 995 | 3 984 | 0/0 z 0/13 | 1 / 2 555 / 0 / 2 724 |
+| wed-dos-slow | dev | 95 251 | 10 843 | 0/0 z 0/13 | 1 / 2 301 / 0 / 2 643 |
+| fri-botnet | dev | 135 702 | 1 509 | 0/0 z 7/6 | 1 / 3 031 / 2 / 3 387 |
+| mon-benign-am | dev | 59 849 | 0 | 0/0 z 0/13 | 0 / 1 844 / 0 / 2 287 |
+| unsw-h0 | dev | 138 993 | 30 525 | 0/0 z 0/15 | 275 / 17 118 / 544 / 10 194 |
+| tue-ssh-patator | test | 122 372 | 2 988 | 0/0 z 0/13 | 1 / 2 922 / 0 / 3 338 |
+| wed-dos-hulk-goldeneye | test | 211 284 | 166 709 | 0/0 z 0/13 | 1 / 1 403 / 0 / 1 795 |
+| thu-web | test | 86 752 | 2 056 | 0/0 z 0/13 | 1 / 2 210 / 0 / 2 716 |
+| thu-infiltration | test | 174 824 | 48 | 0/0 z 1/12 | 1 / 13 471 / 0 / 2 924 |
+| fri-portscan | test | 225 719 | 139 741 | 0/0 z 5/9 | 999 / 2 292 / 1 / 3 122 |
+| fri-ddos | test | 143 780 | 95 123 | 0/0 z 0/13 | 1 / 1 328 / 0 / 2 058 |
+| mon-benign-pm | test | 35 878 | 0 | 0/0 z 0/12 | 0 / 1 082 / 0 / 1 427 |
+| unsw-h2 | test | 132 138 | 29 411 | 0/0 z 0/23 | 272 / 18 134 / 542 / 10 209 |
+
+Behaviorální vrstva (preset v3) nenahlásí na žádném výřezu nic. Dva až tři hodinové výřezy jsou na ni krátké (3 až 7 oken; periodicita a profil hostu potřebují aspoň den historie). Útoky v CIC-IDS2017 navíc jdou většinou zvenku na servery, ne z vnitřních hostů. Šest škodlivých vnitřních hostů (botnet, infiltrace, port scan) nezachytí.
+
+Pasivní detektory (ablace D) na úrovni služby najdou napadenou službu skoro vždy (CIC recall 1/1 na výřez, port scan 999/1 000, UNSW 272/814 = 33 %). Jenže označí i většinu neškodných klíčů (přesnost 0,03 až 30 %). Na pondělních čistě neškodných výřezech označí 1 844 ze 4 131 a 1 082 z 2 509 klíčů. Bez paměti, kontextu a žebříku v3 jsou na reálných tocích nepoužitelné. Plnou cestu v3 nad těmito toky (s pamětí a kontextem) kotva zatím nemá. To je otevřený bod a přímé pokračování pro laboratoř (D).
+
+## H) Registr slepých míst a co nezachytíme
+
+Seřazeno podle dopadu. U každého je uvedený obecný signál, který by mohl pomoct, a zda jde o vlastnost simulace. Zdroj je držený běh, pokud není uvedeno jinak.
+
+| # | slepé místo | měření (v3) | proč | obecný signál, který by mohl pomoct |
+|---|---|---|---|---|
+| 1 | Kontext „výpadek senzoru“ zavírá nálezy útoků | 147 omylem zavřených nálezů, K6 nesplněn | globální kontext bez klíčových hostů vysvětluje každý typ | omezit na typy z mezery v datech a na cykly výpadku |
+| 2 | Neznámá rodina podobná majáku, exfiltraci, vertikálnímu skenu nebo pohybu v síti, bez vlastního detektoru a signatury | LOFO 0 až 47 % (c2 16 %, exfil 15 %, vertikální sken 0 %, lateral 47 %) | detekce stojí na detektoru rodiny | dlouhodobé součty drobných odchylek hostu proti jeho profilu a peer skupině; nové vztahy (graf: lateral +13 p. b. v ladění) |
+| 3 | exploit_attempt | 49,6 % (n = 270), v ladění 46,3 % | bez IDS signatury jen pár toků na službu | IDS a CVE kontext, ne tokový detektor (mimo zadání kroku 5) |
+| 4 | Provozní problémy se zobrazují jako podezření na útok | 12 z 18 neškodných druhů má zobrazené FP u > 20 % výskytů, nejvíc misconfig 96,8 %, authorized_scanner 93,4 %, cloud_migration 89,9 %, cert_expired 89,1 %, dns_outage 89,1 % | chybí třída „provozní problém“ a kontext pro nové poruchy | oddělit výstup „provozní problém“ (selhávající spojení mnoha klientů na jeden cíl) od podezření |
+| 5 | c2_beacon se zrychleným tempem (2× až 8×, kratší trvání) | 36,8 až 43,6 % (n = 22 až 39) | detektor periodicity potřebuje ≥ 24 h | jen přes obecný profil hostu (nový stálý cíl), ne úpravou detektoru majáku |
+| 6 | Útok rozložený na 10 zdrojů | 73,6 % proti 78,7 % u jednoho zdroje; c2 53,8 %, dns_tunnel 54,8 %, exploit 40,6 % | na zdroj připadá málo toků | součet přes skupinu nových zdrojů se stejným cílem |
+| 7 | lateral_movement | 69,5 %, horší než legacy (74,9 %) | v3 potlačí část `unexpected_traffic`; graf je mimo preset | zapnout graf nových vztahů (v ladění +13,2 p. b. za +21 % FP), po předregistraci |
+| 8 | Krátké útoky (doba 0,5×) | 68,7 % | málo cyklů na potvrzení | – (vlastnost útoku) |
+| 9 | Reálná data | behaviorální vrstva 0 nálezů na 13 výřezech CIC a UNSW; na CTU-13 v kroku 4 také 0 | krátké výřezy, útoky zvenku, chybí plná cesta v3 v kotvě | laboratoř a pasivní domácí sběr (`lab-plan.md`), kotva s plnou cestou v3 |
+| 10 | ics_attack | n = 3 | v síti je málo PLC | cílený běh průmyslových sítí |
+
+Co engine podle měření spolehlivě zachytí (v3, držený běh, ≥ 80 % s dolní mezí ≥ 75 %):
+
+- hádání hesel: ssh 90,2 %, credential stuffing 81,8 %;
+- rogue zařízení 96,8 %;
+- vícefázové kampaně aspoň v jedné fázi 98 %;
+- apt_chain 98,3 %;
+- insider 94,3 %;
+- ransomware 92,7 %;
+- slow_scan 86,1 %;
+- web_exploit 84,6 %;
+- vertikální sken 83,3 %;
+- exfiltrace 82,4 %.
+
+To ale platí jen v simulaci a díky vlastním detektorům těchto rodin.
+
+Co z toho plyne pro tvrzení práce: v simulaci je v3 proti parametrické skrytosti (tempo 0,25× až 8×, rozptyl, objem, víc zdrojů, noc, míchání s provozem) a proti souběhu s provozními poruchami odolné v rozsahu K1, K2 a K4. Detekce v nejskrytější pětině je 94 % detekce v nejhlučnější. Odolnost proti neznámým rodinám doložená není: obecné signály zobecňují jen u 2 ze 6 vynechaných rodin. Automatické zavírání drží chybu pod 5 % jen v ladicím světě, v drženém ne (K6). Reálná veřejná data zatím odolnost nepotvrzují ani nevyvracejí, protože behaviorální vrstva na nich nemá dost historie.
+
+### Odchylky od předregistrace (souhrn)
+
+1. Harness: náhodné rozdělení toků mezi zdroje bylo nahrazeno rozdělením po řadě, po prvním ladicím běhu a před drženým během (B).
+2. A9: hranice středečních výřezů CIC je v mezeře mezi skupinami štítků a UNSW se dělí po čase. Obojí bylo rozhodnuto před během jakéhokoli detektoru.
+3. A9: pondělní neškodná okna jsem v A9 přesně nevymezil. Použita byla hodina 1 až 2 a 5 až 6 od prvního toku dne, rozhodnuto před během.
+4. A5: kontrolní ablace `--v3-off beacon` proběhla na ladicích seedech, jak bylo předregistrováno. Ablace grafu `--v3-on graph` předregistrovaná nebyla, je jen popisná a na držených seedech neběžela.
+
+### Co zůstává otevřené
+
+- Oprava kontextu výpadku senzoru (bod 1), třída výstupu „provozní problém“ (bod 4) a zapnutí grafu (bod 7) jen s novou předregistrací a novými seedy. Držené seedy kroku 5 už jsou použité.
+- Kotva veřejných datasetů s plnou cestou v3 (paměť, kontext, žebřík) a s delšími výřezy (celý den), aby behaviorální vrstva měla historii.
+- CSE-CIC-IDS2018 a CICIoT2023 (oficiálně jen přes formulář s osobními údaji).
+- Laboratoř a pasivní sběr podle `lab-plan.md`, dotaz pro UHK neodeslán.
+- G4 (čas cyklu XXXL) z kroku 4 zůstává nesplněný, legacy zůstává výchozí.
+- Audit pokrytí (`audit-pokryti.md`, bod 0) uvádí, že generátor změny IP zařízení chybí. Ve skutečnosti existuje: `NetworkModel::churn` přečísluje 1 % dynamických zařízení za cyklus. Krok 5 k tomu přidal hromadné přečíslování podsítě (`dhcp_renumber`).
+
+## Commity kroku 5
+
+`6428952` předregistrace, `ada1b47` svět pokrytí, `b414f00` zdroje CIC-IDS2017 a UNSW-NB15 a kotva k5, `f8729af` plán laboratoře, `c4598de` rozdělení zdrojů po řadě a `--v3-on`, `90243f3` hranice pásem S, `bebcf93` ladicí měření, a commit této sekce.
