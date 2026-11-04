@@ -2,7 +2,7 @@
 
 Datum 2026-11-01 až 2026-11-04. Kód: commity `333329a` a `2ef75f8` (detektory, z dřívějška), `08efd59` až `HEAD` tohoto kroku (větev `main`, nepushnuto). Měření: ladicí seedy 20261102, 20261103, 20261104, každý 40 sítí, `--block-size 2 --no-legs --no-feedback --counterfactual`, šum neškodných vzorů 1× (výchozí). Držené seedy (20261201, 20261301) ani testovací část kotvy se nespustily. Všechna soak čísla jsou ze simulace.
 
-Surové výstupy: `F:\bakula-soak\ab\k3\reports\`. Přepočet: `python tools/soak_ab.py --a <dirs> --b <dirs>`.
+Commity: `08efd59` (bod 1), `06d77bc` (body 2 až 4 v generátoru: šum, XXXL a rodiny sdílejí stejné konfigurační struktury, proto jeden commit), `33d967c` (bod 4, kotva), `05af7f5` (měření pro bod 5), dokumentace zvlášť. Surové výstupy: `F:\bakula-soak\ab\k3\reports\`. Přepočet: `python tools/soak_ab.py --a <dirs> --b <dirs>`.
 
 Ramena (stejný harness, stejný svět včetně neškodných vzorů 1×, párově po sítích, 120 sítí, 1 236 virtuálních síť-dnů):
 
