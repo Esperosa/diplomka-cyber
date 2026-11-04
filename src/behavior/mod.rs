@@ -135,7 +135,8 @@ pub struct BehaviorThresholds {
 }
 
 impl BehaviorThresholds {
-    pub const VERSION: u32 = 1;
+    /// 2 = krok 4 (novost periodicity, nahraný objem bez symetrických relací).
+    pub const VERSION: u32 = 2;
 }
 
 /// Jedno okno vrstvy. `frozen` = hosté a dvojice s otevřeným poplachem (neučí se do
@@ -161,6 +162,26 @@ pub fn run_window(
         state.prevalence.observe(input.outbound, now);
     }
     if switches.beacon {
+        // krok 4: prvni vyskyt hostu v provozu (novost periodicity)
+        let seen = input
+            .outbound
+            .iter()
+            .filter_map(|f| f.src_ip.as_deref().map(|s| (s, f.timestamp.timestamp())))
+            .chain(input.internal.iter().flat_map(|f| {
+                let at = f.timestamp.timestamp();
+                f.src_ip
+                    .as_deref()
+                    .map(|s| (s, at))
+                    .into_iter()
+                    .chain(std::iter::once((f.dst_ip.as_str(), at)))
+            }));
+        state
+            .beacon
+            .observe_hosts(seen, thresholds.beacon.max_hosts);
+        let profile = &state.profile;
+        let habit = |host: &str, peer: &str, proto: &str, port: u16| {
+            profile.is_habit(host, peer, proto, port)
+        };
         out.findings.extend(beacon::detect(
             &mut state.beacon,
             &state.prevalence,
@@ -168,6 +189,7 @@ pub fn run_window(
             input.outbound,
             now,
             state.first_window.unwrap_or(now),
+            &habit,
         ));
     }
     if switches.interactive {
@@ -275,7 +297,7 @@ fn median_sorted(values: &[f64]) -> f64 {
 }
 
 /// Odstraní nejstarší položky mapy nad stropem (podle klíče `last`).
-pub(crate) fn evict_oldest<K: Clone + Eq + std::hash::Hash, V>(
+pub(crate) fn evict_oldest<K: Clone + Eq + Ord + std::hash::Hash, V>(
     map: &mut std::collections::HashMap<K, V>,
     cap: usize,
     last: impl Fn(&V) -> i64,
@@ -286,7 +308,9 @@ pub(crate) fn evict_oldest<K: Clone + Eq + std::hash::Hash, V>(
     // davkove 10 %, aby se nevyrazovalo v kazdem okne
     let target = cap - cap / 10;
     let mut ages: Vec<(i64, K)> = map.iter().map(|(k, v)| (last(v), k.clone())).collect();
-    ages.sort_by_key(|(t, _)| *t);
+    // krok 4: shoda casu se rozhoduje klicem; drive poradi HashMap (nahodne v kazdem
+    // procesu) a beh nebyl bit po bitu reprodukovatelny
+    ages.sort();
     let remove = map.len() - target;
     for (_, key) in ages.into_iter().take(remove) {
         map.remove(&key);

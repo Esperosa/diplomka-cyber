@@ -7,6 +7,14 @@
 //! kvantifikaci z toků RQ4 nenašla (§3c), takže prahy jsou volba autora a výsledek je
 //! hypotéza. Alarmové okno se do historie neučí (RQ2 Z3).
 //!
+//! Krok 4: počítá se NAHRANÝ PŘEBYTEK toku, `max(0, orig − resp)` (poměr nahraných
+//! a stažených bajtů, D3FEND „Per Host Download-Upload Ratio Analysis“). Symetrická
+//! relace (videohovor přes TURN, sdílení obrazovky) nahraje stovky MB, ale stejně tolik
+//! stáhne; exfiltrace a záloha jsou jednosměrné. Krok 3 D ukázal videohovory jako
+//! největší zdroj FP vrstvy při hustém neškodném provozu (25,3 na síť-den při šumu 50×).
+//! Riziko: útočník, který stahování uměle dorovná, detekci objemem obejde; cenou je
+//! dvojnásobný provoz.
+//!
 //! `egress_ids_alert`: Suricata alert se zdrojem uvnitř a cílem venku (C2, miner),
 //! jeden nález na (vnitřní host, signatura). Dřív ho parser zahodil (A10).
 
@@ -35,6 +43,8 @@ pub struct EgressThresholds {
     pub max_hosts: usize,
     /// Od tohoto objemu závažnost High (B).
     pub high_bytes: f64,
+    /// Krok 4: počítat jen nahraný přebytek toku (bez symetrických relací).
+    pub net_upload: bool,
 }
 
 impl Default for EgressThresholds {
@@ -48,6 +58,7 @@ impl Default for EgressThresholds {
             history: 48,
             max_hosts: 50_000,
             high_bytes: 1.0e9,
+            net_upload: true,
         }
     }
 }
@@ -67,13 +78,21 @@ pub struct EgressVolumeState {
 }
 
 /// Nahraný objem hostů v okně: host -> (bajty, cíl -> bajty).
-fn uploads(outbound: &[ConnectionObservation]) -> BTreeMap<&str, (f64, BTreeMap<&str, f64>)> {
+fn uploads(
+    outbound: &[ConnectionObservation],
+    net_upload: bool,
+) -> BTreeMap<&str, (f64, BTreeMap<&str, f64>)> {
     let mut by_host: BTreeMap<&str, (f64, BTreeMap<&str, f64>)> = BTreeMap::new();
     for flow in outbound {
         let Some(src) = flow.src_ip.as_deref() else {
             continue;
         };
-        let bytes = flow.orig_bytes.unwrap_or(0) as f64;
+        let orig = flow.orig_bytes.unwrap_or(0);
+        let bytes = if net_upload {
+            orig.saturating_sub(flow.resp_bytes.unwrap_or(0)) as f64
+        } else {
+            orig as f64
+        };
         let entry = by_host.entry(src).or_default();
         entry.0 += bytes;
         *entry.1.entry(flow.dst_ip.as_str()).or_default() += bytes;
@@ -88,7 +107,7 @@ pub fn detect(
     now: i64,
 ) -> Vec<BehaviorFinding> {
     let mut out = Vec::new();
-    for (host, (bytes, by_dst)) in uploads(outbound) {
+    for (host, (bytes, by_dst)) in uploads(outbound, t.net_upload) {
         let entry = state.hosts.entry(host.to_string()).or_default();
         entry.last = now;
         let x = bytes.ln_1p();
@@ -318,6 +337,32 @@ mod tests {
             );
         }
         assert!(detect(&mut state, &t, &[up("10.0.0.8", "x", 320_000_000)], 9).is_empty());
+    }
+
+    /// Krok 4: symetrický videohovor (stejně nahráno i staženo) není anomálie, stejný
+    /// objem jednosměrně ano.
+    #[test]
+    fn symmetric_session_is_not_upload_but_one_way_is() {
+        let t = EgressThresholds::default();
+        let mut state = EgressVolumeState::default();
+        for w in 0..10 {
+            detect(&mut state, &t, &[up("10.0.0.5", "x", 30_000)], w * 1800);
+        }
+        let mut call = up("10.0.0.5", "198.51.100.3", 900_000_000);
+        call.resp_bytes = Some(900_000_000);
+        assert!(detect(&mut state, &t, &[call.clone()], 20 * 1800).is_empty());
+        let exfil = up("10.0.0.5", "198.51.100.3", 900_000_000);
+        assert_eq!(detect(&mut state, &t, &[exfil], 21 * 1800).len(), 1);
+        // puvodni pocitani nahranych bajtu hlasi i hovor
+        let raw = EgressThresholds {
+            net_upload: false,
+            ..Default::default()
+        };
+        let mut state = EgressVolumeState::default();
+        for w in 0..10 {
+            detect(&mut state, &raw, &[up("10.0.0.5", "x", 30_000)], w * 1800);
+        }
+        assert_eq!(detect(&mut state, &raw, &[call], 20 * 1800).len(), 1);
     }
 
     #[test]

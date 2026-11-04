@@ -200,7 +200,7 @@ pub fn detect(
             if let Some(oldest) = host
                 .edges
                 .iter()
-                .min_by_key(|(_, at)| **at)
+                .min_by(|a, b| a.1.cmp(b.1).then_with(|| a.0.cmp(b.0)))
                 .map(|(k, _)| k.clone())
             {
                 host.edges.remove(&oldest);

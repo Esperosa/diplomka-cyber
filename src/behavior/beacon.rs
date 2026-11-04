@@ -22,6 +22,15 @@
 //!   hlásí se jen NOVÝ cíl flotily, který se objevil po zahřátí senzoru (kompromitovaný
 //!   update, studie 03 N28). Riziko: útok přítomný od začátku se naučí (RQ2 Z3, 01-analyza
 //!   §8 riziko 4); měří se zvlášť.
+//! - Novost (krok 4, docs/diplomka/eval/impl-krok4.md): poplach jen na periodicitu, která
+//!   je NOVÁ proti tomu, co o hostu víme. Dvojice, kterou host měl od svého prvního
+//!   výskytu v provozu (do `baseline_grace_s`), je jeho výchozí chování (NTP, cron, VPN
+//!   keepalive, agent); dvojice zavedená v profilu hostu (stáří a opakování, `profile`)
+//!   je zvyk. Obojí je pozitivní znalost o hostu, ne prázdný výsledek. Bez toho rostly
+//!   falešné poplachy lineárně s počtem pravidelných neškodných vzorů (krok 3 D: 8,7 →
+//!   34,1 → 96,7 na síť-den při šumu 1×, 10×, 50×). RQ4 Z1/Z2: periodicita sama nestačí.
+//!   Riziko: implantát aktivní od prvního výskytu hostu (nové zařízení s ním) se nehlásí;
+//!   měří se jako ztráta recallu c2_beacon.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -55,6 +64,11 @@ pub struct BeaconThresholds {
     pub max_pairs: usize,
     /// Dvojice bez spojení déle než toto se zapomene (s).
     pub idle_s: i64,
+    /// Krok 4: hlásit jen novou periodicitu (viz modul).
+    pub require_novelty: bool,
+    /// Dvojice viděná do tolika s od prvního výskytu hostu je jeho výchozí chování.
+    pub baseline_grace_s: i64,
+    pub max_hosts: usize,
 }
 
 impl Default for BeaconThresholds {
@@ -73,6 +87,10 @@ impl Default for BeaconThresholds {
             history: 64,
             max_pairs: 200_000,
             idle_s: 3 * 86_400,
+            require_novelty: true,
+            // hodinovy cron s jitterem a prvni tok vzoru: 2 h (volba autora)
+            baseline_grace_s: 2 * 3600,
+            max_hosts: 50_000,
         }
     }
 }
@@ -151,14 +169,42 @@ struct Pair {
     hits: u8,
     misses: u8,
     alarmed: bool,
+    /// Dvojice od prvního výskytu hostu (krok 4).
+    #[serde(default)]
+    baseline: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BeaconState {
     pairs: HashMap<String, Pair>,
+    /// Krok 4: host -> (první, poslední výskyt v provozu vrstvy).
+    #[serde(default)]
+    hosts: HashMap<String, (i64, i64)>,
     pub evicted: u64,
     pub evaluations: u64,
+    /// Periodické dvojice nehlášené, protože nejsou nové (výchozí chování nebo zvyk).
+    #[serde(default)]
+    pub not_novel: u64,
+}
+
+impl BeaconState {
+    /// Zapíše první a poslední výskyt vnitřních hostů okna (zdroj odchozího toku,
+    /// obě strany vnitřního). Volá se před `detect`.
+    pub fn observe_hosts<'a>(&mut self, flows: impl Iterator<Item = (&'a str, i64)>, cap: usize) {
+        for (host, at) in flows {
+            match self.hosts.get_mut(host) {
+                Some(entry) => {
+                    entry.0 = entry.0.min(at);
+                    entry.1 = entry.1.max(at);
+                }
+                None => {
+                    self.hosts.insert(host.to_string(), (at, at));
+                }
+            }
+        }
+        self.evicted += evict_oldest(&mut self.hosts, cap, |h| h.1) as u64;
+    }
 }
 
 /// Vyhodnocení periodicity dvojice (veřejné kvůli testům a měření).
@@ -198,6 +244,9 @@ pub fn periodicity(iats: &[f32], sizes: &[f32], gap_factor: f64) -> Option<Perio
     })
 }
 
+/// Je dvojice zavedený zvyk v profilu hostu (krok 3E)? Bez profilu `false`.
+pub type HabitLookup<'a> = &'a dyn Fn(&str, &str, &str, u16) -> bool;
+
 pub fn detect(
     state: &mut BeaconState,
     prevalence: &Prevalence,
@@ -205,6 +254,7 @@ pub fn detect(
     outbound: &[ConnectionObservation],
     now: i64,
     first_window: i64,
+    habit: HabitLookup<'_>,
 ) -> Vec<BehaviorFinding> {
     // toky okna po dvojicich (zdroj, cil, protokol, port), serazene podle casu
     type PairKey = (String, String, String, u16);
@@ -229,8 +279,10 @@ pub fn detect(
     for ((src, dst, proto, port), mut times) in by_pair {
         times.sort_by_key(|(ts, _)| *ts);
         let key = format!("{src}|{dst}|{proto}/{port}");
+        let host_first = state.hosts.get(src.as_str()).map(|h| h.0);
         let pair = state.pairs.entry(key).or_insert_with(|| Pair {
             first: times[0].0,
+            baseline: host_first.is_some_and(|h| times[0].0 - h <= t.baseline_grace_s),
             ..Default::default()
         });
         let mut fresh = 0;
@@ -280,6 +332,11 @@ pub fn detect(
             continue;
         }
         let Some(p) = verdict else { continue };
+        if t.require_novelty && (pair.baseline || habit(&src, &dst, &proto, port)) {
+            // periodicita neni nova: vychozi chovani hostu nebo zavedeny zvyk
+            state.not_novel += 1;
+            continue;
+        }
         let target = target_key(&dst, &proto, port);
         let (sources, first_seen) = prevalence.of(&target, now);
         if sources >= t.fleet_min {
@@ -412,7 +469,15 @@ mod tests {
                 .filter(|ts| **ts >= start && **ts < start + 1800)
                 .map(|ts| conn(src, dst, *ts, 300))
                 .collect();
-            let found = detect(&mut state, &prevalence, &t, &flows, start, 0);
+            let found = detect(
+                &mut state,
+                &prevalence,
+                &t,
+                &flows,
+                start,
+                0,
+                &|_, _, _, _| false,
+            );
             if !found.is_empty() && first.is_none() {
                 first = Some(w);
             }
@@ -529,6 +594,7 @@ mod tests {
                     &window,
                     start,
                     1_700_000_000,
+                    &|_, _, _, _| false,
                 ));
             }
             // zadna dvojice flotily se nehlasi jednotlive
@@ -540,6 +606,77 @@ mod tests {
             }));
             assert_eq!(!alarms.is_empty(), expect_alarm, "offset {offset}");
         }
+    }
+
+    fn novelty_run(
+        t: &BeaconThresholds,
+        series: &[(&Vec<i64>, &str)],
+        start: i64,
+        habit: HabitLookup<'_>,
+    ) -> (Vec<String>, BeaconState) {
+        let mut state = BeaconState::default();
+        let prevalence = Prevalence::default();
+        let mut alarms: Vec<String> = Vec::new();
+        let mut w = start;
+        while w < start + 4 * 86_400 {
+            let flows: Vec<ConnectionObservation> = series
+                .iter()
+                .flat_map(|(times, dst)| {
+                    times
+                        .iter()
+                        .filter(|ts| **ts >= w && **ts < w + 1800)
+                        .map(|ts| conn("10.0.0.5", dst, *ts, 300))
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            state.observe_hosts(
+                flows
+                    .iter()
+                    .map(|f| (f.src_ip.as_deref().unwrap(), f.timestamp.timestamp())),
+                t.max_hosts,
+            );
+            for found in detect(&mut state, &prevalence, t, &flows, w, start, habit) {
+                alarms.push(found.sources[0].clone());
+            }
+            w += 1800;
+        }
+        alarms.sort();
+        alarms.dedup();
+        (alarms, state)
+    }
+
+    /// Krok 4: periodicita od prvního výskytu hostu je výchozí chování (NTP, cron),
+    /// zvyk z profilu také; nová periodická dvojice téhož hostu později je poplach.
+    #[test]
+    fn only_novel_periodicity_alarms() {
+        let start = 1_700_000_000i64;
+        let shift = |v: Vec<i64>, to: i64| -> Vec<i64> {
+            v.into_iter().map(|ts| ts - 1_700_000_000 + to).collect()
+        };
+        let ntp = jittered(1024.0, 0.05, 400, 3);
+        let c2 = shift(jittered(300.0, 0.2, 400, 9), start + 2 * 86_400);
+        let cron = shift(jittered(900.0, 0.01, 300, 4), start + 86_400);
+        let series = [
+            (&ntp, "203.0.113.10"),
+            (&c2, "203.0.113.20"),
+            (&cron, "203.0.113.30"),
+        ];
+        let habit = |_: &str, peer: &str, _: &str, _: u16| peer == "203.0.113.30";
+        let t = BeaconThresholds::default();
+        let (alarms, state) = novelty_run(&t, &series, start, &habit);
+        assert_eq!(alarms, vec!["203.0.113.20".to_string()]);
+        assert!(state.not_novel > 0);
+        // bez pozadavku novosti hlasi vsechny tri (chovani kroku 3)
+        let off = BeaconThresholds {
+            require_novelty: false,
+            ..Default::default()
+        };
+        let (all, _) = novelty_run(&off, &series, start, &habit);
+        assert_eq!(all.len(), 3);
+        // stav s prvnim vyskytem hostu prezije serializaci
+        let json = serde_json::to_string(&state).unwrap();
+        let back: BeaconState = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.hosts.len(), 1);
     }
 
     #[test]
@@ -566,6 +703,7 @@ mod tests {
             &flows,
             1_700_000_000,
             0,
+            &|_, _, _, _| false,
         );
         assert!(state.pairs.len() <= 50);
         let json = serde_json::to_string(&state).unwrap();
