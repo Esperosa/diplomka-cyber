@@ -1584,6 +1584,21 @@ fn run_episode_inner(
             .iter()
             .map(|e| (e.event.event_id.as_str(), &e.event))
             .collect();
+        // krok 4 (vykon): jen pravdy, jejichz okno nebo placebo okno zasahuje cyklus
+        // (podminky uvnitr smycek se nemeni, poradi indexu zustava vzestupne)
+        let relevant_truths: Vec<usize> = truths
+            .iter()
+            .enumerate()
+            .filter(|(index, truth)| {
+                let window_ok = cycle + ATTRIBUTION_LATENCY >= truth.start_cycle
+                    && cycle <= truth.end_cycle + ATTRIBUTION_LATENCY;
+                let placebo_ok = ledgers[*index].placebo.is_some_and(|(ps, pe)| {
+                    cycle + ATTRIBUTION_LATENCY >= ps && cycle <= pe + ATTRIBUTION_LATENCY
+                });
+                window_ok || placebo_ok
+            })
+            .map(|(index, _)| index)
+            .collect();
         for (finding_index, finding) in run_report.findings.iter().enumerate() {
             let show = &shown[finding_index];
             let is_behavioral = !is_static_exposure(&finding.finding_type);
@@ -1594,7 +1609,8 @@ fn run_episode_inner(
             if is_behavioral && collect_world {
                 // kontrafaktualni svet: zapamatovat nalezy, ktere by fakticky beh mohl
                 // pripsat nekteremu utoku (stejne okno a klicove IP)
-                let candidate = truths.iter().enumerate().any(|(index, truth)| {
+                let candidate = relevant_truths.iter().any(|&index| {
+                    let truth = &truths[index];
                     matches!(truth.kind, Kind::Attack(_))
                         && cycle + ATTRIBUTION_LATENCY >= truth.start_cycle
                         && cycle <= truth.end_cycle + ATTRIBUTION_LATENCY
@@ -1607,7 +1623,8 @@ fn run_episode_inner(
                 }
             }
             if is_behavioral {
-                for (index, truth) in truths.iter().enumerate() {
+                for &index in &relevant_truths {
+                    let truth = &truths[index];
                     if let Some((ps, pe)) = ledgers[index].placebo
                         && cycle + ATTRIBUTION_LATENCY >= ps
                         && cycle <= pe + ATTRIBUTION_LATENCY
@@ -2219,22 +2236,30 @@ fn run_episode_inner(
                 .iter()
                 .filter_map(|f| f.host_key.as_deref())
                 .collect();
+            // krok 4 (vykon): toky po cili jednim pruchodem; driv se pro kazdy host
+            // s nalezem prochazely vsechny toky (plosny sken XXXL: 8 700 x 95 800 = 2 s)
+            let mut by_victim: HashMap<&str, (u64, HashMap<&str, u64>)> = HashMap::new();
+            if !flagged.is_empty() {
+                for o in &in_scope_obs {
+                    let Some(entry) = flagged
+                        .contains(o.dst_ip.as_str())
+                        .then(|| by_victim.entry(o.dst_ip.as_str()).or_default())
+                    else {
+                        continue;
+                    };
+                    entry.0 += 1;
+                    if let Some(src) = o.src_ip.as_deref() {
+                        if !scope.contains(src) {
+                            *entry.1.entry(src).or_default() += 1;
+                        }
+                    }
+                }
+            }
             for victim in flagged {
                 if proposed_now >= 3 {
                     break;
                 }
-                let mut per_source: HashMap<&str, u64> = HashMap::new();
-                let mut total = 0u64;
-                for o in &in_scope_obs {
-                    if o.dst_ip == victim {
-                        total += 1;
-                        if let Some(src) = o.src_ip.as_deref() {
-                            if !scope.contains(src) {
-                                *per_source.entry(src).or_default() += 1;
-                            }
-                        }
-                    }
-                }
+                let (total, per_source) = by_victim.remove(victim).unwrap_or_default();
                 let mut ranked: Vec<(&str, u64)> = per_source.into_iter().collect();
                 ranked.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
                 for (src, count) in ranked.into_iter().take(2) {

@@ -181,13 +181,23 @@ pub fn build_hypotheses_for_report(
     identity_by_host_key: &std::collections::HashMap<String, IdentityMatch>,
     memory: Option<&CaseMemory>,
 ) -> Vec<SecurityHypothesis> {
+    // krok 4 (vykon): host podle klice a odhad Case Memory podle typu jednou za volani;
+    // driv O(nalezy x hoste) a O(nalezy x zaznamy pameti), na XXXL ~1 s za cyklus.
+    // Prvni host se stejnym klicem vyhrava (stejne jako drivejsi `find`).
+    let mut by_key: std::collections::HashMap<&str, &HostReport> =
+        std::collections::HashMap::with_capacity(hosts.len());
+    for host in hosts {
+        by_key.entry(host.host_key.as_str()).or_insert(host);
+    }
+    let mut estimates: std::collections::HashMap<String, Option<crate::case_memory::Estimate>> =
+        std::collections::HashMap::new();
     findings
         .iter()
         .map(|finding| {
             let host = finding
                 .host_key
                 .as_ref()
-                .and_then(|host_key| hosts.iter().find(|host| &host.host_key == host_key));
+                .and_then(|host_key| by_key.get(host_key.as_str()).copied());
             let identity = finding
                 .host_key
                 .as_ref()
@@ -202,7 +212,10 @@ pub fn build_hypotheses_for_report(
             });
             let mut hypothesis = build_hypothesis(finding, None, identity, inventory);
             if let Some(memory) = memory {
-                apply_case_memory(&mut hypothesis, memory);
+                let estimate = estimates
+                    .entry(hypothesis.hypothesis_type.clone())
+                    .or_insert_with(|| memory.estimate(&hypothesis.hypothesis_type));
+                apply_estimate(&mut hypothesis, estimate.as_ref());
             }
             hypothesis
         })
@@ -212,7 +225,17 @@ pub fn build_hypotheses_for_report(
 /// Doplni `probability`, `epistemic` a `model_version` z Case Memory - jen kdyz
 /// odhad existuje (jinak hypotezu nemeni, ani o bajt).
 pub fn apply_case_memory(hypothesis: &mut SecurityHypothesis, memory: &CaseMemory) {
-    if let Some(estimate) = memory.estimate(&hypothesis.hypothesis_type) {
+    apply_estimate(
+        hypothesis,
+        memory.estimate(&hypothesis.hypothesis_type).as_ref(),
+    );
+}
+
+fn apply_estimate(
+    hypothesis: &mut SecurityHypothesis,
+    estimate: Option<&crate::case_memory::Estimate>,
+) {
+    if let Some(estimate) = estimate {
         hypothesis.probability = Some(estimate.probability);
         hypothesis.uncertainty.epistemic = Some((estimate.hi95 - estimate.lo95).clamp(0.0, 1.0));
         hypothesis.model_version = format!(
