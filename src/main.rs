@@ -127,6 +127,15 @@ struct SoakRunArgs {
     /// Rodiny utoku: `all` (vychozi), `tuning` (ladici) nebo `held-out` (drzene).
     #[arg(long, default_value = "all")]
     families: String,
+    /// Smes sumu po sitich `nasobek:vaha,...` (napr. `1:0.6,10:0.3,50:0.1`), krok 4.
+    #[arg(long)]
+    noise_mix: Option<String>,
+    /// Podil siti tridy XXXL ve smesi (0 az 1), krok 4.
+    #[arg(long, default_value_t = 0.0)]
+    xxxl_share: f64,
+    /// Podil siti s kontrafaktualem (0 az 1; `--counterfactual` = vsechny), krok 4.
+    #[arg(long, default_value_t = 0.0)]
+    cf_share: f64,
 }
 
 #[derive(Args, Debug)]
@@ -955,6 +964,15 @@ fn main() -> anyhow::Result<()> {
                 other => anyhow::bail!("neznama velikost {other} (mix | xxxl)"),
             };
             cfg.world.families = args.families.parse().map_err(anyhow::Error::msg)?;
+            if let Some(text) = &args.noise_mix {
+                cfg.mix.noise = bakula_program::soak::runner::NetworkMix::parse_noise(text)
+                    .map_err(anyhow::Error::msg)?;
+            }
+            if !(0.0..=1.0).contains(&args.xxxl_share) || !(0.0..=1.0).contains(&args.cf_share) {
+                anyhow::bail!("--xxxl-share a --cf-share musi byt v intervalu 0 az 1");
+            }
+            cfg.mix.xxxl_share = args.xxxl_share;
+            cfg.mix.cf_share = args.cf_share;
             bakula_program::soak::runner::run(cfg, args.resume)?;
         }
         Command::Soak(SoakCommand::Verify(args)) => {

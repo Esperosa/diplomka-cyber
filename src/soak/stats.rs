@@ -825,6 +825,16 @@ pub struct NetworkSummary {
     pub cycle_p99_s: f64,
     /// Nedeterministicke (cas behu), mimo otisk.
     pub wall_s: f64,
+    /// Svet site ve smisenem behu (krok 4, `--noise-mix`); jinak chybi.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world: Option<NetworkWorld>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
+pub struct NetworkWorld {
+    pub noise: f64,
+    pub xxxl: bool,
+    pub counterfactual: bool,
 }
 
 impl NetworkSummary {
@@ -900,6 +910,7 @@ impl NetworkSummary {
                 .map(|h| h.percentile(0.99))
                 .unwrap_or(0.0),
             wall_s: 0.0,
+            world: None,
         }
     }
 }

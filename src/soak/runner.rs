@@ -73,6 +73,80 @@ pub struct SoakConfig {
     /// Volby sveta (krok 3): `--noise`.
     #[serde(default)]
     pub world: crate::soak::episode::WorldOptions,
+    /// Smiseny svet po sitich (krok 4, dlouhy beh): sum, podil XXXL a vzorek
+    /// kontrafaktualu. Vychozi = vypnuto (vsechny site podle `world` a `counterfactual`).
+    #[serde(default)]
+    pub mix: NetworkMix,
+}
+
+/// Volba sveta jednotlive site z jejiho seedu (deterministicky, stejna pri `--resume`
+/// i `soak verify`): sum podle vah, trida XXXL s pravdepodobnosti `xxxl_share`,
+/// kontrafaktual s pravdepodobnosti `cf_share`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NetworkMix {
+    /// (vaha, nasobek sumu); prazdne = `world.noise` pro vsechny site.
+    pub noise: Vec<(f64, f64)>,
+    pub xxxl_share: f64,
+    pub cf_share: f64,
+}
+
+impl NetworkMix {
+    /// (sum, XXXL, kontrafaktual) site.
+    pub fn pick(
+        &self,
+        run_seed: u64,
+        network_id: u64,
+        cfg_cf: bool,
+        base: f64,
+    ) -> (f64, bool, bool) {
+        let unit = |salt: u64| {
+            (crate::soak::rng::derive(run_seed ^ salt, network_id) >> 11) as f64
+                / (1u64 << 53) as f64
+        };
+        let total: f64 = self.noise.iter().map(|(w, _)| w.max(0.0)).sum();
+        let noise = if total > 0.0 {
+            let mut at = unit(0x4015E) * total;
+            let mut chosen = self.noise.last().map_or(base, |(_, n)| *n);
+            for (weight, level) in &self.noise {
+                if at < weight.max(0.0) {
+                    chosen = *level;
+                    break;
+                }
+                at -= weight.max(0.0);
+            }
+            chosen
+        } else {
+            base
+        };
+        let xxxl = self.xxxl_share > 0.0 && unit(0x0888_8) < self.xxxl_share;
+        let cf = cfg_cf || (self.cf_share > 0.0 && unit(0x0CF5) < self.cf_share);
+        (noise, xxxl, cf)
+    }
+
+    /// Text `1:0.6,10:0.3,50:0.1` (nasobek:vaha).
+    pub fn parse_noise(text: &str) -> std::result::Result<Vec<(f64, f64)>, String> {
+        text.split(',')
+            .filter(|p| !p.trim().is_empty())
+            .map(|part| {
+                let (level, weight) = part
+                    .split_once(':')
+                    .ok_or_else(|| format!("smes sumu `{part}`: ocekavam nasobek:vaha"))?;
+                let level: f64 = level
+                    .trim()
+                    .parse()
+                    .map_err(|_| format!("nasobek `{level}`"))?;
+                let weight: f64 = weight
+                    .trim()
+                    .parse()
+                    .map_err(|_| format!("vaha `{weight}`"))?;
+                if level < 0.0 || weight < 0.0 {
+                    return Err(format!("zaporna hodnota v `{part}`"));
+                }
+                Ok((weight, level))
+            })
+            .collect()
+    }
 }
 
 fn default_true() -> bool {
@@ -102,6 +176,7 @@ impl SoakConfig {
             cf_loo: 0,
             calibration: None,
             world: Default::default(),
+            mix: Default::default(),
         }
     }
 }
@@ -180,6 +255,17 @@ pub fn run_block_with_summaries(
     });
     for offset in 0..cfg.block_size {
         let network_id = block * cfg.block_size + offset;
+        let (noise, xxxl, counterfactual) = cfg.mix.pick(
+            cfg.run_seed,
+            network_id,
+            cfg.counterfactual,
+            cfg.world.noise,
+        );
+        let world = crate::soak::episode::WorldOptions {
+            noise,
+            xxxl: cfg.world.xxxl || xxxl,
+            ..cfg.world
+        };
         let episode = EpisodeConfig {
             run_seed: cfg.run_seed,
             network_id,
@@ -190,10 +276,10 @@ pub fn run_block_with_summaries(
             mask: WorldMask::None,
             counterfactual: None,
             calibration: calibration.clone(),
-            world: cfg.world,
+            world,
         };
         let run = || {
-            if cfg.counterfactual {
+            if counterfactual {
                 run_with_counterfactual(&episode, cfg.cf_loo)
             } else {
                 run_episode(&episode)
@@ -203,7 +289,15 @@ pub fn run_block_with_summaries(
             Ok(result) => {
                 digest = mix(digest ^ result.digest);
                 agg.merge(&result.agg);
-                summaries.push(result.summary);
+                let mut summary = result.summary;
+                if cfg.mix != NetworkMix::default() {
+                    summary.world = Some(crate::soak::stats::NetworkWorld {
+                        noise,
+                        xxxl: world.xxxl,
+                        counterfactual,
+                    });
+                }
+                summaries.push(summary);
             }
             Err(payload) => {
                 agg.panics += 1;
@@ -259,6 +353,10 @@ pub fn run(mut cfg: SoakConfig, resume: bool) -> Result<()> {
         cfg.run_seed = old.run_seed;
         cfg.block_size = old.block_size;
         cfg.episode_hours = old.episode_hours;
+        // svet site je soucast identity bloku (krok 4: smiseny svet)
+        cfg.mix = old.mix.clone();
+        cfg.world = old.world;
+        cfg.counterfactual = old.counterfactual;
         persisted.config = cfg.clone();
         persisted.sessions += 1;
         persisted
@@ -529,6 +627,34 @@ mod tests {
         cfg.checkpoint_secs = 1;
         cfg.report_secs = 1;
         cfg
+    }
+
+    /// Krok 4: smíšený svět je deterministický podle sítě, podíly sedí a výchozí stav
+    /// nic nemění.
+    #[test]
+    fn network_mix_is_deterministic_and_respects_shares() {
+        let off = NetworkMix::default();
+        assert_eq!(off.pick(5, 9, false, 1.0), (1.0, false, false));
+        assert_eq!(off.pick(5, 9, true, 10.0), (10.0, false, true));
+        let mix = NetworkMix {
+            noise: NetworkMix::parse_noise("1:0.6,10:0.3,50:0.1").unwrap(),
+            xxxl_share: 0.02,
+            cf_share: 0.1,
+        };
+        let picks: Vec<_> = (0..20_000)
+            .map(|n| mix.pick(20261105, n, false, 1.0))
+            .collect();
+        assert_eq!(picks[17], mix.pick(20261105, 17, false, 1.0));
+        let share = |f: &dyn Fn(&(f64, bool, bool)) -> bool| {
+            picks.iter().filter(|p| f(p)).count() as f64 / picks.len() as f64
+        };
+        assert!((share(&|p| p.0 == 1.0) - 0.6).abs() < 0.02);
+        assert!((share(&|p| p.0 == 10.0) - 0.3).abs() < 0.02);
+        assert!((share(&|p| p.0 == 50.0) - 0.1).abs() < 0.02);
+        assert!((share(&|p| p.1) - 0.02).abs() < 0.005);
+        assert!((share(&|p| p.2) - 0.1).abs() < 0.01);
+        assert!(NetworkMix::parse_noise("1:x").is_err());
+        assert!(NetworkMix::parse_noise("1:-1").is_err());
     }
 
     #[test]
