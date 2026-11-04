@@ -30,7 +30,15 @@ pub fn parse_suricata_mode(
     mode: ScopeMode,
 ) -> Result<Vec<NormalizedEvent>> {
     let content = fs::read_to_string(path)?;
-    parse_suricata_str_mode(&content, &path.to_string_lossy(), scope, start, end, mode)
+    parse_lines(
+        &content,
+        &path.to_string_lossy(),
+        scope,
+        start,
+        end,
+        mode,
+        true,
+    )
 }
 
 /// Stejna logika nad textem (`label` nahrazuje cestu v logu/`raw_ref`) - pouziva ji
@@ -46,6 +54,8 @@ pub(crate) fn parse_suricata_str(
     parse_suricata_str_mode(content, label, scope, start, end, ScopeMode::DstOnly)
 }
 
+/// Bez varovani na stderr: soak pocita poskozene radky sam (`corrupt_alert_lines`)
+/// a synchronni zapis na stderr uvnitr cyklu zkresloval mereni casu cyklu (krok 4, G4).
 pub(crate) fn parse_suricata_str_mode(
     content: &str,
     label: &str,
@@ -53,6 +63,18 @@ pub(crate) fn parse_suricata_str_mode(
     start: DateTime<Utc>,
     end: DateTime<Utc>,
     mode: ScopeMode,
+) -> Result<Vec<NormalizedEvent>> {
+    parse_lines(content, label, scope, start, end, mode, false)
+}
+
+fn parse_lines(
+    content: &str,
+    label: &str,
+    scope: &[IpNet],
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    mode: ScopeMode,
+    warn: bool,
 ) -> Result<Vec<NormalizedEvent>> {
     let mut events = Vec::new();
     for (line_no, raw_line) in content.lines().enumerate() {
@@ -63,11 +85,13 @@ pub(crate) fn parse_suricata_str_mode(
         let row: serde_json::Value = match serde_json::from_str(line) {
             Ok(value) => value,
             Err(error) => {
-                eprintln!(
-                    "VAROVANI: {} radek {}: nelze naparsovat JSON ({error}), radek se vynecha",
-                    label,
-                    line_no + 1
-                );
+                if warn {
+                    eprintln!(
+                        "VAROVANI: {} radek {}: nelze naparsovat JSON ({error}), radek se vynecha",
+                        label,
+                        line_no + 1
+                    );
+                }
                 continue;
             }
         };
@@ -83,11 +107,13 @@ pub(crate) fn parse_suricata_str_mode(
         let timestamp = match parse_suricata_ts(row["timestamp"].as_str().unwrap_or_default()) {
             Ok(timestamp) => timestamp,
             Err(error) => {
-                eprintln!(
-                    "VAROVANI: {} radek {}: {error}, radek se vynecha",
-                    label,
-                    line_no + 1
-                );
+                if warn {
+                    eprintln!(
+                        "VAROVANI: {} radek {}: {error}, radek se vynecha",
+                        label,
+                        line_no + 1
+                    );
+                }
                 continue;
             }
         };
