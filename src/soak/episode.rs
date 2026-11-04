@@ -667,8 +667,17 @@ fn run_episode_inner(
         ..ExecutionBudget::default()
     };
 
+    // rucni profil (krok 4): BAKULA_SOAK_CYCLE_TRACE=1 vypise cas fazi kazdeho cyklu
+    let trace_cycles = std::env::var_os("BAKULA_SOAK_CYCLE_TRACE").is_some();
+    let mut trace_sums: BTreeMap<String, f64> = BTreeMap::new();
+    let mut trace_lines: Vec<String> = Vec::new();
     for cycle in 0..cycles {
         let cycle_started = Instant::now();
+        let cycle_cpu = if trace_cycles {
+            crate::soak::stats::thread_cpu_secs()
+        } else {
+            0.0
+        };
         let t0 = crate::soak::traffic::cycle_start_abs(start_offset_s, cycle);
         clock.store(t0, Ordering::SeqCst);
 
@@ -728,6 +737,7 @@ fn run_episode_inner(
         }
         // restart enginu: ztrata volatilniho stavu (inventar), identita se nacte z uloziste
         if restart_cycles.contains(&cycle) {
+            let restart_started = Instant::now();
             let json = serde_json::to_string(&resolver)
                 .map_err(|e| BakulaError::Processing(format!("serializace identity: {e}")))?;
             resolver = serde_json::from_str(&json)
@@ -744,6 +754,7 @@ fn run_episode_inner(
             }
             restart_cold = true;
             agg.ops.engine_restarts += 1;
+            agg.perf_record("restart", restart_started.elapsed().as_secs_f64());
         }
 
         let churn_share = if matches!(
@@ -912,6 +923,7 @@ fn run_episode_inner(
         // alerty s cilem v rozsahu jdou dal beze zmeny, odchozi do behavioralni vrstvy
         let behavior_on = v3.is_some() && cfg.engine.behavior();
         let mut outbound_alerts: Vec<NormalizedEvent> = Vec::new();
+        let alerts_started = Instant::now();
         if !output.alerts.is_empty() {
             let joined = output.alerts.join("\n");
             if behavior_on && cfg.engine.egress() {
@@ -939,6 +951,16 @@ fn run_episode_inner(
                     window_end,
                 )?);
             }
+        }
+        agg.perf_record("alerts", alerts_started.elapsed().as_secs_f64());
+        if trace_cycles {
+            trace_lines.push(format!(
+                "ALERTS cycle={cycle} lines={} obs={} in_scope={} events={}",
+                output.alerts.len(),
+                output.observations.len(),
+                in_scope_obs.len(),
+                events.len()
+            ));
         }
         // krok 3: behavioralni vrstva nad odchozimi a vnitrnimi toky okna
         let mut behavior_signal: BehaviorSignal = HashMap::new();
@@ -1564,8 +1586,10 @@ fn run_episode_inner(
         let mut labels: HashMap<String, bool> = HashMap::new();
         let mut attributed_to_attack = 0usize;
         let mut attributed_to_lookalike: BTreeMap<usize, usize> = BTreeMap::new();
+        let rank_started = Instant::now();
         let ranks_prod = rank_sources(&in_scope_obs);
         let ranks_egress = rank_sources(&output.observations);
+        agg.perf_record("scoring.rank", rank_started.elapsed().as_secs_f64());
         let inventory_ips: HashSet<&str> = hosts.iter().map(|h| h.ip.as_str()).collect();
         agg.output.regular_flows += output.regular_flows;
         // dvojice neskodnych pravidelnych vzoru v cyklu (oba smery) pro mereni FP
@@ -1599,6 +1623,7 @@ fn run_episode_inner(
             })
             .map(|(index, _)| index)
             .collect();
+        let findings_started = Instant::now();
         for (finding_index, finding) in run_report.findings.iter().enumerate() {
             let show = &shown[finding_index];
             let is_behavioral = !is_static_exposure(&finding.finding_type);
@@ -1874,6 +1899,8 @@ fn run_episode_inner(
                 &mut agg.output,
             );
         }
+        agg.perf_record("scoring.findings", findings_started.elapsed().as_secs_f64());
+        let ladder_started = Instant::now();
         agg.behavioral_tp += attributed_to_attack as u64;
         for decision in &lc.decisions {
             use crate::verify_ladder::Status;
@@ -2039,6 +2066,11 @@ fn run_episode_inner(
             attributed_noise_cycles += 1;
         }
 
+        agg.perf_record(
+            "scoring.ladder_rank",
+            ladder_started.elapsed().as_secs_f64(),
+        );
+        let learn_started = Instant::now();
         // --- 5b. uceni: predikce vs ground truth, zpetna vazba, otravovani pameti ---
         {
             let now = ts(t0 + CYCLE_SECS);
@@ -2055,12 +2087,19 @@ fn run_episode_inner(
                     labels.get(&finding.finding_id).copied()
                 }
             };
+            // krok 4 (vykon): pamet se v teto smycce nemeni, odhad staci jednou za typ
+            // (driv O(nalezy x zaznamy pameti), na XXXL 0,5 az 0,7 s za cyklus)
+            let mut effective_by_type: HashMap<&str, f64> = HashMap::new();
             for (finding, hypothesis) in run_report.findings.iter().zip(hypotheses.iter()) {
                 if let (Some(p), Some(label)) = (hypothesis.probability, label_of(finding)) {
-                    let effective = memory
-                        .estimate(&finding.finding_type)
-                        .map(|e| e.effective_cases)
-                        .unwrap_or(0.0);
+                    let effective = *effective_by_type
+                        .entry(finding.finding_type.as_str())
+                        .or_insert_with(|| {
+                            memory
+                                .estimate(&finding.finding_type)
+                                .map(|e| e.effective_cases)
+                                .unwrap_or(0.0)
+                        });
                     agg.learning.record_prediction(p, label, effective);
                 }
             }
@@ -2138,6 +2177,7 @@ fn run_episode_inner(
             }
         }
 
+        agg.perf_record("scoring.learn", learn_started.elapsed().as_secs_f64());
         // expozice z inventare (kazdy 4. cyklus)
         if cycle % 4 == 0 {
             let found_keys: HashSet<(&str, &str)> = run_report
@@ -2384,6 +2424,21 @@ fn run_episode_inner(
             ));
         }
         agg.perf_record("cycle_total", cycle_started.elapsed().as_secs_f64());
+        if trace_cycles {
+            let mut line = format!(
+                "CYCLE net={} cycle={cycle} cpu={:.0}",
+                cfg.network_id,
+                (crate::soak::stats::thread_cpu_secs() - cycle_cpu) * 1000.0
+            );
+            for (stage, hist) in &agg.perf {
+                let before = trace_sums.insert(stage.clone(), hist.sum).unwrap_or(0.0);
+                line.push_str(&format!(" {stage}={:.0}", (hist.sum - before) * 1000.0));
+            }
+            trace_lines.push(line);
+        }
+    }
+    for line in &trace_lines {
+        eprintln!("{line}");
     }
 
     // --- uzaverecne skorovani epizody ---

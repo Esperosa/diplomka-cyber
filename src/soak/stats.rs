@@ -940,6 +940,42 @@ pub fn wilson(k: u64, n: u64) -> (f64, f64, f64) {
     (p, lo, hi)
 }
 
+/// CPU cas aktualniho vlakna v sekundach (Windows, jinde 0). Rucni profil cyklu
+/// (`BAKULA_SOAK_CYCLE_TRACE`): oddeli praci cyklu od cekani na zatizenem stroji.
+pub fn thread_cpu_secs() -> f64 {
+    #[cfg(windows)]
+    {
+        #[repr(C)]
+        #[derive(Default, Clone, Copy)]
+        struct FileTime {
+            low: u32,
+            high: u32,
+        }
+        unsafe extern "system" {
+            fn GetCurrentThread() -> *mut core::ffi::c_void;
+            fn GetThreadTimes(
+                thread: *mut core::ffi::c_void,
+                creation: *mut FileTime,
+                exit: *mut FileTime,
+                kernel: *mut FileTime,
+                user: *mut FileTime,
+            ) -> i32;
+        }
+        let (mut c, mut e, mut k, mut u) = Default::default();
+        // SAFETY: pseudo-handle aktualniho vlakna, vystupni struktury jsou platne.
+        let ok = unsafe { GetThreadTimes(GetCurrentThread(), &mut c, &mut e, &mut k, &mut u) };
+        if ok == 0 {
+            return 0.0;
+        }
+        let ticks = |t: FileTime| ((t.high as u64) << 32 | t.low as u64) as f64 * 1e-7;
+        ticks(k) + ticks(u)
+    }
+    #[cfg(not(windows))]
+    {
+        0.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
