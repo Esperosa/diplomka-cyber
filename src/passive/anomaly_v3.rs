@@ -213,6 +213,118 @@ const F_PKTS: usize = 3;
 const BANDS: usize = 8;
 const MISSING: f32 = -1.0;
 
+/// Skupina podobných služeb jednoho cyklu (studený start): seřazené hodnoty každého
+/// rysu a počty shodných vzorků. `without` vrací totéž jako původní „sesbírej hodnoty
+/// ostatních členů (bez vzorků shodných s tímto), seřaď, medián a MAD“, ale v O(log n).
+struct PeerStats {
+    sorted: [Vec<f64>; FEATURES],
+    same: HashMap<[u32; FEATURES], usize>,
+}
+
+fn sample_bits(sample: &[f32; FEATURES]) -> [u32; FEATURES] {
+    // f32 `==`: +0 a -0 jsou shodné (NaN nevzniká, hodnoty jsou log1p nebo MISSING)
+    sample.map(|v| if v == 0.0 { 0 } else { v.to_bits() })
+}
+
+impl PeerStats {
+    fn new(members: &[[f32; FEATURES]]) -> Self {
+        let sorted = std::array::from_fn(|feature| {
+            let mut values: Vec<f64> = members
+                .iter()
+                .map(|m| f64::from(m[feature]))
+                .filter(|v| *v >= 0.0)
+                .collect();
+            values.sort_by(|a, b| a.total_cmp(b));
+            values
+        });
+        let mut same: HashMap<[u32; FEATURES], usize> = HashMap::new();
+        for member in members {
+            *same.entry(sample_bits(member)).or_default() += 1;
+        }
+        Self { sorted, same }
+    }
+
+    /// (počet hodnot, medián, MAD) hodnot rysu bez členů shodných se `sample`.
+    fn without(&self, sample: &[f32; FEATURES], feature: usize) -> (usize, f64, f64) {
+        let all = &self.sorted[feature];
+        let v = f64::from(sample[feature]);
+        let copies = if v >= 0.0 {
+            self.same.get(&sample_bits(sample)).copied().unwrap_or(0)
+        } else {
+            0
+        };
+        let at = all.partition_point(|x| *x < v);
+        let n = all.len() - copies;
+        if n == 0 {
+            return (0, 0.0, 0.0);
+        }
+        let r = |i: usize| if i < at { all[i] } else { all[i + copies] };
+        let median = median_of(n, &r);
+        // odchylky: vlevo od mediánu (sestupně hodnoty = vzestupně odchylky), vpravo
+        let split = partition_point_by(n, |i| r(i) < median);
+        let left = |j: usize| (r(split - 1 - j) - median).abs();
+        let right = |j: usize| (r(split + j) - median).abs();
+        let kth = |k: usize| kth_of_two(split, n - split, &left, &right, k);
+        let mad = if n % 2 == 0 {
+            (kth(n / 2 - 1) + kth(n / 2)) / 2.0
+        } else {
+            kth(n / 2)
+        };
+        (n, median, mad)
+    }
+}
+
+fn median_of(n: usize, at: &impl Fn(usize) -> f64) -> f64 {
+    let mid = n / 2;
+    if n % 2 == 0 {
+        (at(mid - 1) + at(mid)) / 2.0
+    } else {
+        at(mid)
+    }
+}
+
+fn partition_point_by(n: usize, pred: impl Fn(usize) -> bool) -> usize {
+    let (mut lo, mut hi) = (0usize, n);
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if pred(mid) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    lo
+}
+
+/// k-tá nejmenší hodnota (od 0) sjednocení dvou vzestupných posloupností.
+fn kth_of_two(
+    a_len: usize,
+    b_len: usize,
+    a: &impl Fn(usize) -> f64,
+    b: &impl Fn(usize) -> f64,
+    k: usize,
+) -> f64 {
+    // i = kolik prvku vzit z A; nejmensi i s A[i] >= B[k - i]
+    let (mut lo, mut hi) = ((k + 1).saturating_sub(b_len), (k + 1).min(a_len));
+    while lo < hi {
+        let i = lo + (hi - lo) / 2;
+        let j = k + 1 - i;
+        if a(i) < b(j - 1) {
+            lo = i + 1;
+        } else {
+            hi = i;
+        }
+    }
+    let i = lo;
+    let j = k + 1 - i;
+    match (i > 0, j > 0) {
+        (true, true) => a(i - 1).max(b(j - 1)),
+        (true, false) => a(i - 1),
+        (false, true) => b(j - 1),
+        (false, false) => unreachable!("k < a_len + b_len"),
+    }
+}
+
 /// Kruhový buffer posledních pozorování (log1p hodnoty, `MISSING` = nedostupné).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Ring {
@@ -604,6 +716,15 @@ pub(crate) fn detect_v3(
         }
     }
 
+    // Krok 4 (výkon): seřazené hodnoty skupiny a počty shodných vzorků se spočítají
+    // jednou. Dřív každý klíč bez historie znovu sbíral a řadil celou skupinu, což při
+    // plošném skenu (tisíce nových klíčů na stejném portu) bylo O(K² log K): 12 s cyklu
+    // na XXXL. Výsledek je bit po bitu stejný (test `peer_stats_match_bruteforce`).
+    let peer_stats: HashMap<(&str, &str, u16), PeerStats> = peers
+        .iter()
+        .map(|(group, members)| (*group, PeerStats::new(members)))
+        .collect();
+
     let evaluate = |state: &DetectorState,
                     key: &ServiceKey,
                     sample: &[f32; FEATURES],
@@ -637,35 +758,29 @@ pub(crate) fn detect_v3(
                 });
             }
         }
-        let collect = |group: &str| -> Vec<f64> {
-            peers
+        // hodnoty ostatnich clenu skupiny (bez vzorku shodnych s timto), median a MAD
+        let collect = |group: &str| -> Option<(usize, f64, f64)> {
+            peer_stats
                 .get(&(group, key.1.as_str(), key.2))
-                .map(|members| {
-                    members
-                        .iter()
-                        .filter(|other| *other != sample)
-                        .map(|other| f64::from(other[feature]))
-                        .filter(|v| *v >= 0.0)
-                        .collect()
-                })
-                .unwrap_or_default()
+                .map(|stats| stats.without(sample, feature))
         };
         // nejdriv zarizeni stejneho typu a podsite, pri male skupine vsechny sluzby portu
         let own_group = group_of(&key.0);
-        let mut values = if own_group.is_empty() {
-            Vec::new()
+        let mut found = if own_group.is_empty() {
+            None
         } else {
             collect(own_group)
         };
         let mut basis = "skupina_typu_zarizeni";
-        if values.len() < th.peer_min {
-            values = collect("");
+        if found.is_none_or(|(n, _, _)| n < th.peer_min) {
+            found = collect("");
             basis = "skupina_sluzeb";
         }
-        if values.len() < th.peer_min {
+        let (n, median, mad) = found?;
+        if n == 0 || n < th.peer_min {
             return None; // bez historie a bez skupiny: jen sbirat
         }
-        let (z, median) = robust(x, &mut values, th.peer_mad_floor)?;
+        let z = 0.6745 * (x - median) / mad.max(th.peer_mad_floor);
         let ratio = (x - median).exp();
         (z >= th.z && ratio >= th.peer_ratio.max(ratio_min)).then_some(Verdict {
             z,
@@ -1251,6 +1366,57 @@ fn evict_oldest_scanners(state: &mut DetectorState, count: usize) {
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    /// Krok 4: rychlé statistiky skupiny dávají přesně (bitově) totéž co původní
+    /// sesbírání hodnot ostatních členů, seřazení, medián a MAD.
+    #[test]
+    fn peer_stats_match_bruteforce() {
+        let mut seed = 99u64;
+        let mut next = || {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (seed >> 33) as u32
+        };
+        for round in 0..300 {
+            let n = 1 + (next() % 60) as usize;
+            // malo ruznych hodnot (shody jako pri skenu) i spojite hodnoty
+            let levels = if round % 3 == 0 { 3 } else { 1000 };
+            let members: Vec<[f32; FEATURES]> = (0..n)
+                .map(|_| {
+                    std::array::from_fn(|f| {
+                        if f == F_P95 && next() % 4 == 0 {
+                            MISSING
+                        } else {
+                            ((next() % levels) as f32 / 7.0).ln_1p()
+                        }
+                    })
+                })
+                .collect();
+            let stats = PeerStats::new(&members);
+            for sample in &members {
+                for feature in 0..FEATURES {
+                    if sample[feature] < 0.0 {
+                        continue;
+                    }
+                    let mut values: Vec<f64> = members
+                        .iter()
+                        .filter(|other| *other != sample)
+                        .map(|other| f64::from(other[feature]))
+                        .filter(|v| *v >= 0.0)
+                        .collect();
+                    let (n_fast, median, mad) = stats.without(sample, feature);
+                    assert_eq!(n_fast, values.len());
+                    if values.is_empty() {
+                        continue;
+                    }
+                    let (m0, d0) = median_and_mad(&mut values);
+                    assert_eq!(median.to_bits(), m0.to_bits(), "median {round}");
+                    assert_eq!(mad.to_bits(), d0.to_bits(), "mad {round}");
+                }
+            }
+        }
+    }
 
     fn flow(
         src: &str,
