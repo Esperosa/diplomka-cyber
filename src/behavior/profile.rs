@@ -294,6 +294,14 @@ impl HostProfiles {
         self.hosts.len()
     }
 
+    /// Zavedený a nepoznamenaný zvyk hostu (krok 4: periodicita na zvyk není nová).
+    pub fn is_habit(&self, host: &str, peer: &str, proto: &str, port: u16) -> bool {
+        self.hosts
+            .get(host)
+            .and_then(|p| p.habits.get(&habit_key(peer, proto, port)))
+            .is_some_and(|h| h.established.is_some() && !h.tainted)
+    }
+
     /// Verdikt pro dvojici (host, cíl, protokol, port). `group_size` = velikost peer
     /// skupiny hostu (typ zařízení a podsíť), pokud je známá.
     #[allow(clippy::too_many_arguments)]
@@ -376,10 +384,48 @@ pub fn case_verdict(
     group_size: Option<usize>,
     now: i64,
 ) -> ProfileVerdict {
+    if case.finding_type == "unexpected_traffic"
+        && case.sources.len() != 1
+        && let Some(verdict) = service_habit_verdict(profiles, policy, case)
+    {
+        return verdict;
+    }
     let Some((actor, peer, proto, port)) = case_pair(case) else {
         return ProfileVerdict::Unknown("pripad nema jednu dvojici host-cil".into());
     };
     profiles.verdict(&actor, &peer, &proto, port, group_size, now, policy)
+}
+
+/// Krok 4 (3b, pozitivní důkaz neškodnosti): neočekávaný provoz na službu mimo inventář
+/// s více klienty. Když je spojení na tuto službu zavedený zvyk všech dominantních
+/// zdrojů, nebo (bez dominantního zdroje) aspoň `fleet_min` hostů, služba běží dlouho
+/// a nález vysvětluje zastaralý inventář, ne nový port (A08). Zvyk vzniká jen ze
+/// spojení bez poplachu, po opakování a stáří (viz modul), takže krátký útok ho nevytvoří.
+fn service_habit_verdict(
+    profiles: &HostProfiles,
+    policy: &ProfilePolicy,
+    case: &crate::verify_ladder::CaseInput,
+) -> Option<ProfileVerdict> {
+    let service = case.key.service.split('#').next().unwrap_or("");
+    let mut parts = service.rsplit('/');
+    let port: u16 = parts.next()?.parse().ok()?;
+    let proto = parts.next()?;
+    let key = habit_key(&case.host_ip, proto, port);
+    if case.sources.is_empty() {
+        let hosts = profiles.established_index.get(&key).copied().unwrap_or(0);
+        return (hosts >= policy.fleet_min).then_some(ProfileVerdict::Fleet { hosts });
+    }
+    let mut since = i64::MIN;
+    let mut days = u16::MAX;
+    for source in &case.sources {
+        let habit = profiles.hosts.get(source)?.habits.get(&key)?;
+        if habit.tainted {
+            return None;
+        }
+        since = since.max(habit.established?);
+        days = days.min(habit.days);
+    }
+    Some(ProfileVerdict::Established { since, days })
 }
 
 /// Dvojice s poplachem v okně (neučí se do profilu, RQ2 Z3): aktér a každý zdroj
@@ -512,6 +558,69 @@ mod tests {
         // ctvrty den splni podminky vsech 5 zvyku, povysit smi jen 2
         assert_eq!(p.promotions, 2);
         assert!(p.rate_limited >= 3);
+    }
+
+    /// Krok 4 (3b): neočekávaný provoz na dlouho používanou službu mimo inventář má
+    /// pozitivní důkaz z profilu klientů; nový port bez zvyku ne.
+    #[test]
+    fn unexpected_traffic_on_long_standing_service_is_benign_evidence() {
+        use crate::finding_memory::FindingKey;
+        let policy = ProfilePolicy::default();
+        let mut p = HostProfiles::default();
+        for i in 1..=4 {
+            feed(
+                &mut p,
+                &format!("10.0.0.{i}"),
+                "10.0.0.9",
+                6,
+                6,
+                &HashSet::new(),
+                &policy,
+            );
+        }
+        let now = 1_700_006_400 + 6 * 86_400;
+        let case = |sources: &[&str], port: u16| crate::verify_ladder::CaseInput {
+            key: FindingKey::new("10.0.0.9", "unexpected_traffic", &format!("tcp/{port}")),
+            finding_id: "finding:unexpected_traffic:10.0.0.9".into(),
+            finding_type: "unexpected_traffic".into(),
+            host_ip: "10.0.0.9".into(),
+            port: Some(port),
+            sources: sources.iter().map(|s| s.to_string()).collect(),
+            volume: 10.0,
+            history_key: None,
+            high_impact: false,
+            prior: 0.15,
+        };
+        assert_eq!(
+            case_verdict(&p, &policy, &case(&[], 443), None, now),
+            ProfileVerdict::Fleet { hosts: 4 }
+        );
+        assert!(matches!(
+            case_verdict(
+                &p,
+                &policy,
+                &case(&["10.0.0.1", "10.0.0.2"], 443),
+                None,
+                now
+            ),
+            ProfileVerdict::Established { .. }
+        ));
+        // jeden ze zdroju bez zvyku: nic neplyne
+        assert!(matches!(
+            case_verdict(
+                &p,
+                &policy,
+                &case(&["10.0.0.1", "10.0.0.7"], 443),
+                None,
+                now
+            ),
+            ProfileVerdict::Unknown(_)
+        ));
+        // jiny port: zadny zvyk
+        assert!(matches!(
+            case_verdict(&p, &policy, &case(&[], 8443), None, now),
+            ProfileVerdict::Unknown(_)
+        ));
     }
 
     #[test]

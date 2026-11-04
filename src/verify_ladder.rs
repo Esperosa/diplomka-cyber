@@ -406,6 +406,10 @@ pub struct LadderPolicy {
     pub lr: LrTable,
     /// Kontrola profilu hostu (krok 3E); vypnuto = plán jako v kroku 2.
     pub profile: bool,
+    /// „Nový cíl zralého profilu“ jako podezřelý důkaz (krok 3E). Krok 4: vypnuto,
+    /// empirické LR v kroku 3 vyšlo 1,03 (bez informace) a nový cíl sám potvrzoval
+    /// neškodné případy (přesnost potvrzení 96,5 → 91,9 %); RQ4 Z10: nová hrana je rys.
+    pub profile_new_evidence: bool,
 }
 
 impl Default for LadderPolicy {
@@ -425,6 +429,7 @@ impl Default for LadderPolicy {
             max_open_cases: 5_000,
             lr: LrTable::default(),
             profile: false,
+            profile_new_evidence: false,
         }
     }
 }
@@ -1281,10 +1286,15 @@ fn evaluate(
                     lr: lr.profile_fleet,
                     detail: format!("zavedeny zvyk u {hosts} hostu stejne skupiny"),
                 },
-                ProfileVerdict::NewForMature { profile_days } => Outcome::Evidence {
-                    lr: lr.profile_new,
-                    detail: format!("novy cil pro profil hostu ({profile_days:.0} dni dat)"),
-                },
+                ProfileVerdict::NewForMature { profile_days } if policy.profile_new_evidence => {
+                    Outcome::Evidence {
+                        lr: lr.profile_new,
+                        detail: format!("novy cil pro profil hostu ({profile_days:.0} dni dat)"),
+                    }
+                }
+                ProfileVerdict::NewForMature { profile_days } => Outcome::Undetermined(format!(
+                    "novy cil pro profil hostu ({profile_days:.0} dni dat): rys, ne dukaz"
+                )),
                 ProfileVerdict::Unknown(why) => Outcome::Undetermined(why),
             }
         }
@@ -1373,6 +1383,7 @@ mod tests {
         suspicious: HashSet<String>,
         liveness_calls: usize,
         kev: bool,
+        profile: Option<crate::behavior::profile::ProfileVerdict>,
     }
 
     impl LadderEvidence for Env {
@@ -1415,6 +1426,35 @@ mod tests {
         }
         fn suspicious_on(&self, ip: &str) -> usize {
             self.suspicious.contains(ip) as usize
+        }
+        fn profile(&self, _: &CaseInput) -> crate::behavior::profile::ProfileVerdict {
+            self.profile
+                .clone()
+                .unwrap_or(crate::behavior::profile::ProfileVerdict::Unknown(
+                    "test".into(),
+                ))
+        }
+    }
+
+    /// Krok 4: nový cíl zralého profilu je rys bez vlivu na víru (empirické LR 1,03),
+    /// jako důkaz jen při výslovném zapnutí.
+    #[test]
+    fn new_target_of_mature_profile_is_not_evidence_by_default() {
+        use crate::behavior::profile::ProfileVerdict;
+        for (on, tag) in [(false, "profile:undetermined"), (true, "profile:malicious")] {
+            let policy = LadderPolicy {
+                profile: true,
+                profile_new_evidence: on,
+                ..Default::default()
+            };
+            let mut ladder = Ladder::new(policy, 7);
+            let mut env = Env {
+                profile: Some(ProfileVerdict::NewForMature { profile_days: 9.0 }),
+                ..Env::default()
+            };
+            ladder.open(input("beacon_periodic", "10.0.0.5", &["203.0.113.9"]), 0);
+            run_until_decided(&mut ladder, &mut env);
+            assert_eq!(ladder.stats.outcomes.get(tag), Some(&1), "{on}");
         }
     }
 
