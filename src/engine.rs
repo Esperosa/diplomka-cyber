@@ -213,14 +213,23 @@ impl V3Features {
     }
 
     /// Vypne vyjmenované změny (seznam oddělený čárkami, např. `rate,volume`).
-    pub fn disable_list(mut self, list: &str) -> Result<Self, String> {
+    pub fn disable_list(self, list: &str) -> Result<Self, String> {
+        self.set_list(list, false)
+    }
+
+    /// Zapne vyjmenované změny mimo preset (ablace kroku 5, např. `graph`).
+    pub fn enable_list(self, list: &str) -> Result<Self, String> {
+        self.set_list(list, true)
+    }
+
+    fn set_list(mut self, list: &str, on: bool) -> Result<Self, String> {
         for name in list.split(',').map(str::trim).filter(|n| !n.is_empty()) {
             *self.slot(name).ok_or_else(|| {
                 format!(
                     "neznama zmena v3 '{name}' (povolene: {})",
                     Self::NAMES.join(", ")
                 )
-            })? = false;
+            })? = on;
         }
         Ok(self)
     }
@@ -361,6 +370,10 @@ mod tests {
         let features = V3Features::all().disable_list("rate, volume").unwrap();
         assert!(!features.rate && !features.volume && features.memory);
         assert!(V3Features::all().disable_list("nic").is_err());
+        // krok 5: zapnuti mimo preset (graf neni v doporucenem presetu)
+        let with_graph = V3Features::recommended().enable_list("graph").unwrap();
+        assert!(with_graph.graph && !V3Features::recommended().graph);
+        assert!(V3Features::recommended().enable_list("nic").is_err());
         let cfg = EngineConfig {
             mode: EngineMode::V3,
             v3: features,

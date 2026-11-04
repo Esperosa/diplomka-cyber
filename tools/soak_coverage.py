@@ -60,6 +60,10 @@ def pct(x):
     return "–" if x != x else f"{100 * x:.1f}".replace(".", ",")
 
 
+def pp(x):
+    return "–" if x != x else f"{100 * x:+.1f}".replace(".", ",")
+
+
 def wtxt(k, n):
     p, lo, hi = wilson(k, n)
     return f"{pct(p)} % ({pct(lo)} až {pct(hi)})"
@@ -258,7 +262,7 @@ def main():
                            ("Q4 + Q5", lambda a: band(a["stealth"], edges) >= 3),
                            ("Q5", lambda a: band(a["stealth"], edges) == 4)]:
             (d, lo, hi), n = diff_for(sel)
-            prow.append([label, n, f"{100 * d:+.1f} p. b. ({100 * lo:+.1f} až {100 * hi:+.1f})".replace(".", ",")])
+            prow.append([label, n, f"{pp(d)} p. b. ({pp(lo)} až {pp(hi)})"])
         rep.add(f"### Párově `{last}` − `{names[0]}`")
         rep.add()
         rep.table(["výběr", "párů", "rozdíl detekce"], prow)
@@ -407,7 +411,7 @@ def main():
         if len(names) >= 2:
             (d_all, lo_a, hi_a), _ = diff_for(lambda a: True)
             (d_q, lo_q, hi_q), _ = diff_for(lambda a: band(a["stealth"], edges) >= 3)
-            g.append(["K2", f"vše {100 * d_all:+.1f} p. b., Q4+Q5 {100 * d_q:+.1f} p. b.".replace(".", ","),
+            g.append(["K2", f"vše {pp(d_all)} p. b., Q4+Q5 {pp(d_q)} p. b.",
                       "ano" if d_all >= 0 and d_q >= 0 else "ne"])
         tuned = pooled.get((last, False), [0, 0])
         heldf = pooled.get((last, True), [0, 0])
@@ -423,7 +427,7 @@ def main():
                 cnt["ops"][0] += a["cf"]; cnt["ops"][1] += 1
         if cnt["none"][1] and cnt["ops"][1]:
             d4 = cnt["ops"][0] / cnt["ops"][1] - cnt["none"][0] / cnt["none"][1]
-            g.append(["K4", f"{100 * d4:+.1f} p. b.".replace(".", ","), "ano" if d4 >= -0.10 else "ne"])
+            g.append(["K4", f"{pp(d4)} p. b.", "ano" if d4 >= -0.10 else "ne"])
         g.append(["K5", ", ".join(f"{f}: {k}/{n}" for f, (k, n, _) in lofo.items()),
                   f"{sum(1 for _, _, ok in lofo.values() if ok)} ze 6 zobecňuje"])
         out = [x.get("output", {}) for x in rows[last].values()]
@@ -455,7 +459,7 @@ def main():
     if args.out:
         with open(args.out, "w", encoding="utf-8") as handle:
             handle.write(text)
-    sys.stdout.write(text)
+    sys.stdout.buffer.write(text.encode("utf-8"))
 
 
 if __name__ == "__main__":

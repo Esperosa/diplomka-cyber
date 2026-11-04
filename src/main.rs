@@ -106,6 +106,9 @@ struct SoakRunArgs {
     /// Vypnout vyjmenovane zmeny v3 (ablace), napr. `rate,volume`.
     #[arg(long, default_value = "")]
     v3_off: String,
+    /// Zapnout zmeny v3 mimo preset (ablace), napr. `graph`.
+    #[arg(long, default_value = "")]
+    v3_on: String,
     /// Parove A/B: zasahy enginu nezpetnuji generator provozu (stejny provoz v ramenech).
     #[arg(long, default_value_t = false)]
     no_feedback: bool,
@@ -954,6 +957,7 @@ fn main() -> anyhow::Result<()> {
                 mode: args.engine.parse().map_err(anyhow::Error::msg)?,
                 v3: bakula_program::engine::V3Features::recommended()
                     .disable_list(&args.v3_off)
+                    .and_then(|v| v.enable_list(&args.v3_on))
                     .map_err(anyhow::Error::msg)?,
             };
             cfg.feedback = !args.no_feedback;

@@ -123,6 +123,8 @@ pub struct TruthCoverage {
     pub param: u32,
     /// Akumulator tempa (deterministicke rideni poctu kopii toku).
     pub acc: f64,
+    /// Pocitadlo toku utocnika pro rozdeleni po rade mezi zdroje.
+    pub split: u64,
 }
 
 /// Sablony kampani (A2): rodiny v poradi, drzena = obsahuje drzenou rodinu.
@@ -235,7 +237,10 @@ pub(crate) fn vary(
         }
         if !extra.is_empty() && attacker.is_some() && copy.src_ip.as_deref() == attacker.as_deref()
         {
-            let k = (mix(h ^ 0x5_0C) % (extra.len() as u64 + 1)) as usize;
+            // po rade (kazdy N-ty tok): kazdy zdroj si necha pravidelnost puvodniho proudu
+            // s N-krat delsi mezerou (nekolik nakazenych hostu, kazdy vlastni rytmus)
+            let k = (truth.cov.split % (extra.len() as u64 + 1)) as usize;
+            truth.cov.split += 1;
             if k > 0 {
                 copy.src_ip = Some(extra[k - 1].clone());
             }
