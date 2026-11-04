@@ -161,3 +161,53 @@ U každého slepého místa se uvádí, jaký obecný signál by ho mohl zachyti
   - vývojová část: CIC `tue-ftp-patator`, `wed-dos-slow` (slowloris, Slowhttptest), `fri-botnet`, `mon-benign-am`; UNSW první výřez s kategoriemi Reconnaissance a Exploits;
   - testovací část (zamčená, otevře se jednou v G): CIC `tue-ssh-patator`, `wed-dos-hulk-goldeneye`, `thu-web`, `thu-infiltration`, `fri-portscan`, `fri-ddos`, `mon-benign-pm`; UNSW druhý výřez s ostatními kategoriemi.
 - Metrika je stejná jako u kotvy kroku 3 (hosté s nálezem, škodliví a neškodní, po scénářích), behaviorální vrstva s výchozím presetem v3.
+
+## B) Harness (commity `ada1b47`, `c4598de`)
+
+- `src/soak/coverage.rs`: svět pokrytí `--coverage off|tuning|full` podle A2. Obsahuje:
+  - variaci útoku (`Variation`, transformace toku v `traffic::push` přes `coverage::vary`):
+    - tempo: akumulátor, při zpomalení každý k-tý tok, při zrychlení časová osa cyklu stlačená k-krát, takže periodicita zůstane;
+    - rozptyl časů a objem;
+    - rozdělení na víc zdrojů po řadě (každý zdroj si nechá rytmus původního proudu);
+  - index skrytosti S;
+  - kampaně (6 šablon, sdílený útočník, oběť vstupní fáze je útočníkem dalších fází);
+  - 9 nových poruch (`Lookalike::COVERAGE`, 4 držené);
+  - souběhy útok + provozní porucha (p = 0,25, senzorové poruchy 1/3);
+  - záznamy `AttackRecord` a `FaultRecord` v `networks.jsonl`.
+- `traffic.rs`: emitory nových poruch ze stávajících vzorů toků. Plánování benigních událostí je vytažené do `build_benign` beze změny pořadí náhody a `len_range` a `ids_share` jako čisté funkce.
+- `episode.rs`: plán pokrytí po `plan_episode` (vlastní proud). Kampaň s vyřazenou rodinou se vyřadí celá. Stavy nových poruch: DNS dole, podsíť bez napájení, hromadné přečíslování přes `NetworkModel::renumber`. Klíčové IP zahrnují další zdroje, blok cloudu a starou adresu serveru. Záznamy po útocích obsahují i to, zda byl připsaný nález automaticky zavřen a zda šlo o první výskyt (typ, entita).
+- `--v3-on` zapíná změny mimo preset (ablace F).
+- `tools/soak_coverage.py` počítá:
+  - křivky skrytosti, osy, rodiny × osy, souběhy, kampaně, LOFO, poruchy a registr slepých míst podle A8;
+  - prahy K1 až K8 a párové rozdíly s bootstrapem po sítích.
+
+**Zpětná kompatibilita.** Výchozí svět (`--coverage off`) dává bajtově stejný `networks.jsonl` (bez časových polí) jako binárka před krokem 5. Ověřeno na 6 sítích seedu 20261411, v3 s kontrafaktuálem: 0 rozdílů (`F:\claude-tmp\k5\scripts\cmp_networks.py`). `cargo test --lib soak::` prošlo (65 testů), včetně `run_stop_resume…verify_confirms_reproducibility`. Nové testy:
+
+- tempo, rozptyl, objem, zdroje a index S;
+- `off` nemění plán, `tuning` nemá držené části;
+- každá nová porucha emituje toky;
+- svět pokrytí je deterministický a má záznam o každé pravdě.
+
+`cargo clippy --all-targets`: lib 89, lib test 97, bin 3, e2e 1. Nová varování v kódu kroku 5 jsou opravená, zbytek je ze stavu před krokem 5.
+
+**Odchylka před ladicím během.** První ladicí běh (binárka `f8729af`) rozděloval toky mezi zdroje náhodně podle otisku toku. Rozbíjel tak pravidelnost každého zdroje (C2 ze 3 hostů vypadal jako náhodný šum, ne jako tři pravidelné majáky). To je chyba harnessu, ne vlastnost útoku. Oprava je rozdělení po řadě (`c4598de`). Ladicí běh se pustil znovu a čísla v E jsou jen z opravené binárky. Rozhodnuto na ladicích datech, držená data se neotevřela.
+
+## C) Veřejné datasety
+
+- Zdroje `src/eval/sources/cicids2017.rs` a `unsw_nb15.rs` (`ScenarioSource`, vzor iot23/ctu13) s testy parseru.
+- Kotva `behavior_anchor::run_k5`: behaviorální vrstva na úrovni vnitřního hostu (jako G6) a pasivní detektory (ablace D) na úrovni cílové služby. Útoky zvenku behaviorální vrstva na vnitřních hostech nevidí.
+- Rozdělení `[dev-k5]` a `[test-k5]` v `anchor-split.txt` se SHA-256, zamčení testem.
+- Licence, velikosti a hashe jsou v `dataset-registry.md` (vlna 1), skripty výřezu v `tools/datasets/`.
+- Ověřeno na oficiálních stránkách 2026-11-04. CIC-IDS2017 nemá výslovnou licenci, jen požadavek citace. Oficiální stažení chce formulář s osobními údaji, proto je použita veřejná přegenerovaná verze Engelen a kol. (334 MB ZIP, po dnech přes HTTP Range). UNSW-NB15 je volně pro akademický výzkum (komerčně po dohodě), staženo z oficiální sdílené složky (`UNSW-NB15_4.csv`, 97,6 MB).
+- Obsahový filtr při práci nezasáhl.
+- Dvě odchylky od A9 byly zjištěné a opravené před během jakéhokoli detektoru (podrobně v registru):
+  1. Středeční okna CIC se překrývala, proto je hranice v mezeře mezi skupinami štítků.
+  2. UNSW se dělí po čase, protože kategorie se v čase prolínají.
+
+## D) Plán laboratoře a pasivního sběru
+
+`docs/diplomka/eval/lab-plan.md` (commit `f8729af`): izolovaná laboratoř se standardními nástroji a runbookem pozemní pravdy, poruchy naostro, pasivní Zeek v domácí síti s pseudonymizací a souhlasem domácnosti, dotaz pro UHK. Zatím nic nenasazeno.
+
+## E) Ladicí měření (seedy 20261411 až 20261413, binárka `c4598de`)
+
+**Hranice pásem S** (A2) z plánu ladicího světa, 3 047 naplánovaných útoků ve 3 × 40 sítích, spočítané před pohledem na jakoukoli detekci: Q1 < 0,1718 ≤ Q2 < 0,2363 ≤ Q3 < 0,3053 ≤ Q4 < 0,3917 ≤ Q5. Platí beze změny i pro držený běh (`--edges 0.1718,0.2363,0.3053,0.3917`).
