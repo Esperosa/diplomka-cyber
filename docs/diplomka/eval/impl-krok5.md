@@ -211,3 +211,100 @@ U každého slepého místa se uvádí, jaký obecný signál by ho mohl zachyti
 ## E) Ladicí měření (seedy 20261411 až 20261413, binárka `c4598de`)
 
 **Hranice pásem S** (A2) z plánu ladicího světa, 3 047 naplánovaných útoků ve 3 × 40 sítích, spočítané před pohledem na jakoukoli detekci: Q1 < 0,1718 ≤ Q2 < 0,2363 ≤ Q3 < 0,3053 ≤ Q4 < 0,3917 ≤ Q5. Platí beze změny i pro držený běh (`--edges 0.1718,0.2363,0.3053,0.3917`).
+
+Svět `--coverage tuning --families tuning`, 3 × 40 sítí (120 párů, 3 042 útoků s emitovanými toky a kontrafaktuálem). Nástroj `tools/soak_coverage.py`, plné výstupy v `docs/diplomka/eval/k5/tuning-*.md`. Všech 12 ramen doběhlo, 0 panik a 0 porušených invariantů.
+
+| metrika | legacy | v3 | rozdíl (95% CI, bootstrap po sítích) |
+|---|---:|---:|---|
+| kontrafaktuální zobrazená detekce | 56,6 % | 79,7 % | +23,1 p. b. (+20,6 až +25,7) |
+| totéž v pásmech Q4 + Q5 | | | +23,3 p. b. (+19,8 až +26,8) |
+| zobrazené FP na síť-den | 969,6 | 18,8 | |
+| zavřeno omylem (G3) | – | 67 / 4 023 = 1,7 % (Wilson 1,3 až 2,1 %) | |
+| útoky s automaticky zavřeným připsaným nálezem | 0,0 % | 0,9 % (0,6 až 1,3 %) | |
+
+**Křivka skrytosti (v3):** Q1 80,2 %, Q2 80,0 %, Q3 78,6 %, Q4 81,4 %, Q5 78,5 %. U legacy je to 58,5 % → 52,9 %. Po jednotlivých osách (v3, n = 362 až 2 396 na úroveň) je detekce mezi 72 a 85 %. Nejsilněji působí:
+
+- IDS signatura: bez ní 75,0 %, s ní 93,2 %;
+- krátké trvání: doba 0,5× 72,2 %, 4× 84,6 %;
+- nejnižší intenzita: 0 až 0,2 75,1 %.
+
+Rozptyl, počet zdrojů, objem, denní doba ani míchání s provozem souhrnnou detekci neposunou o víc než 3 p. b. Plochá křivka ale neznamená, že skrytost nevadí. Detekce stojí hlavně na signálech, které osy harnessu nemění (nová vazba, nový cíl, pokusy bez odpovědi). Variace harnessu jsou jen parametrické a nevytvářejí útoky, které by tyto signály skutečně obcházely. To je omezení metody, ne důkaz odolnosti proti libovolné skrytosti.
+
+**Rodiny (v3, n):**
+
+| rodina | n | v3 | legacy |
+|---|---:|---:|---:|
+| ssh_bruteforce | 456 | 93,2 % | 88,6 % |
+| credential_stuffing | 267 | 90,3 % | 85,0 % |
+| rogue_device | 81 | 90,1 % | 34,6 % |
+| exfiltration | 289 | 89,3 % | 13,8 % |
+| ddos_volume | 104 | 88,5 % | 88,5 % |
+| port_scan_vertical | 297 | 86,9 % | 57,9 % |
+| dns_tunnel | 164 | 86,0 % | 42,1 % |
+| c2_beacon | 388 | 78,4 % | 26,3 % |
+| port_scan_horizontal | 316 | 77,2 % | 78,5 % |
+| lateral_movement | 371 | 66,3 % | 71,2 % |
+| exploit_attempt | 309 | 46,3 % | 24,6 % |
+
+**Souběhy (v3):** bez souběhu 78,3 % (n = 711), s nesenzorovou poruchou 81,1 % (n = 2 118), se senzorovou poruchou 78,7 % (n = 934). Souběh s poruchou detekci nesnižuje. Senzorová porucha útok zakryje jen tehdy, když trvá déle než útok.
+
+**Kampaně (v3, 276):**
+
+- aspoň jedna fáze zachycena: 98,2 % (95,8 až 99,2 %);
+- zachycena už první fáze: 67,0 %, nejméně u K-T3 (exploit na vstupu), 48,4 %;
+- zachyceny všechny fáze: 38,8 %.
+
+U legacy je to 89,1 %, 61,2 % a 11,2 %.
+
+**LOFO (v3, první útok rodiny v síti, bez signatury, bez vlastních typů):**
+
+| rodina | n | všemi signály | obecná detekce | verdikt |
+|---|---:|---:|---:|---|
+| ssh_bruteforce | 53 | 94,3 % | 92,5 % (82,1 až 97,0) | zobecňuje |
+| dns_tunnel | 57 | 91,2 % | 57,9 % (45,0 až 69,8) | zobecňuje |
+| lateral_movement | 68 | 66,2 % | 42,6 % (31,6 až 54,5) | slepé místo |
+| c2_beacon | 67 | 67,2 % | 11,9 % (6,2 až 21,8) | slepé místo |
+| port_scan_vertical | 61 | 86,9 % | 4,9 % (1,7 až 13,5) | slepé místo |
+| exfiltration | 70 | 85,7 % | 2,9 % (0,8 až 9,8) | slepé místo |
+
+Kontrola náhrady skutečnou ablací (`--v3-off beacon`): c2_beacon na stejných útocích s vypnutým detektorem periodicity dává 13,4 % proti náhradě 11,9 %. Náhrada tedy odpovídá skutečnému vypnutí detektoru (rozdíl 1,5 p. b.). Celkově c2_beacon klesne bez detektoru z 78,4 % na 34,8 % a souhrnná detekce o 5,7 p. b. (−6,6 až −4,9).
+
+Závěr pro neznámé rodiny: obecné signály zachytí nové hádání hesel a DNS tunel. Neznámý maják, exfiltraci, vertikální sken a z větší části i pohyb v síti zachytí jen proto, že pro ně existuje vlastní detektor. Rodina, která by se podobala těmto čtyřem a neměla vlastní detektor ani signaturu, by s velkou pravděpodobností prošla.
+
+**Poruchy a lookalike (v3, podíl výskytů s aspoň jedním zobrazeným FP):**
+
+| porucha | podíl | pozn. |
+|---|---:|---|
+| misconfig | 97,0 % | nové, laděné |
+| authorized_scanner | 94,3 % | |
+| patch_window | 93,4 % | |
+| backup_failed | 89,3 % | nové, laděné |
+| dns_outage | 85,2 % | nové, laděné |
+| collector_replay | 76,8 % | |
+| dhcp_renumber | 75,6 % | nové, laděné |
+| batch_job | 64,1 % | |
+| service_crash | 62,4 % | |
+| log_corruption | 46,2 % | |
+| flash_crowd | 45,4 % | |
+| backup_burst | 40,1 % | |
+| device_onboarding | 16,1 % | |
+| sensor_crash | 14,0 % | |
+| device_decommission | 9,9 % | |
+| ntp_fanout | 4,8 % | |
+| software_update | 1,2 % | |
+| link_flapping, retry_storm | 0,0 % | |
+
+Část „FP“ jsou skutečné provozní problémy: špatná konfigurace, výpadek DNS, selhaná záloha, přečíslování. Správce o nich vědět chce, ale ne jako o útoku. Engine je teď neodliší od útoku a zobrazí je stejně. To je slepé místo výstupu (třídění „provozní problém“ proti „podezření na útok“), ne jen detektorů.
+
+**Pravidlo A7:** 12 automatických zavření u útoků připadlo na první výskyt dvojice (typ, entita). Každé automatické zavření v enginu má doložené vysvětlení: buď kontext (kalendář, CMDB, monitoring), nebo vyvrácení žebříkem ověřování. Zavření bez vysvětlení engine neumí. Pravidlo je tedy splněno konstrukcí a těchto 12 jsou omylem zavřené útoky, které spadly do okna platného kontextu. Jsou započtené v G3.
+
+## F) Obecné opravy na ladicích datech
+
+Detektory jsem neměnil. Na ladicích seedech jsem změřil dvě existující obecné části mimo preset:
+
+| ablace | detekce | zobrazené FP/síť-den | pozn. |
+|---|---|---|---|
+| `--v3-on graph` (nové vztahy, `pivot_chain`) | +2,0 p. b. (+1,4 až +2,6) | 18,8 → 22,7 (+21 %) | lateral_movement 66,3 → 79,5 %, kampaně „všechny fáze“ 38,8 → 47,1 % |
+| `--v3-off beacon` (kontrola LOFO) | −5,7 p. b. (−6,6 až −4,9) | 18,8 → 18,5 | c2_beacon 78,4 → 34,8 % |
+
+Graf nových vztahů je jediná obecná změna, která ve světě skrytých útoků a kampaní pomáhá znatelně. Zavírá většinu slabého místa lateral_movement a v3 tím přestává být v pohybu po síti horší než legacy. Platí se za to +21 % zobrazených FP. Krok 4 graf vyřadil z presetu na výchozím světě (+0,2 p. b. detekce za +3,7 % FP). Ve světě pokrytí je výměna jiná. Preset ale neměním: držené rameno je podle A3 preset po kroku 4 a změna presetu by potřebovala vlastní předregistraci. Je to doporučení pro další krok. Opravy pro exploit_attempt (signatury a CVE) a pro třídění provozních problémů nejsou obecné změny detektoru podle zadání, proto zůstávají v registru slepých míst.
