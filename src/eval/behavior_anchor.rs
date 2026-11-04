@@ -180,13 +180,12 @@ pub(crate) fn run_behavior(scenario: &str, dataset: &LabeledDataset) -> Behavior
 
     let mut order: Vec<usize> = (0..dataset.observations.len()).collect();
     order.sort_by_key(|i| dataset.observations[*i].timestamp);
-    let switches = BehaviorSwitches {
-        egress: true,
-        beacon: true,
-        interactive: true,
-        graph: true,
-        profile: false,
-    };
+    // krok 4: stejne zapnute casti jako vychozi preset v3 (co se nasazuje)
+    let switches = BehaviorSwitches::from_engine(&crate::engine::EngineConfig {
+        mode: crate::engine::EngineMode::V3,
+        v3: crate::engine::V3Features::recommended(),
+    });
+    let profile_policy = crate::behavior::profile::ProfilePolicy::default();
     let thresholds = BehaviorThresholds::default();
     let policy = EgressPolicy::default();
     let mut state = BehaviorState::default();
@@ -205,17 +204,21 @@ pub(crate) fn run_behavior(scenario: &str, dataset: &LabeledDataset) -> Behavior
         }
         let split = split_flows(batch, &scope, &policy);
         let now: DateTime<Utc> = DateTime::from_timestamp(window_start, 0).unwrap_or_else(Utc::now);
-        let out = run_window(
-            &mut state,
-            switches,
-            &thresholds,
-            &BehaviorInput {
-                outbound: &split.outbound,
-                internal: &split.internal,
-                outbound_alerts: &[],
-                now,
-            },
-        );
+        let input = BehaviorInput {
+            outbound: &split.outbound,
+            internal: &split.internal,
+            outbound_alerts: &[],
+            now,
+        };
+        let out = run_window(&mut state, switches, &thresholds, &input);
+        if switches.profile {
+            let frozen = crate::behavior::profile::frozen_pairs(
+                out.findings
+                    .iter()
+                    .map(|f| (f.actor.as_str(), f.sources.as_slice())),
+            );
+            crate::behavior::learn_profile(&mut state, &input, &frozen, &profile_policy);
+        }
         windows += 1;
         for item in out.findings {
             flagged
@@ -397,10 +400,27 @@ mod tests {
             missed_bytes: Some(0),
         };
         let mut dataset = LabeledDataset::default();
+        // krok 4: host nejdriv den bezne komunikuje (nepravidelne), pak zacne pravidelne
+        // volat novy cil; periodicita od prvniho vyskytu hostu by nova nebyla
+        let mut seed = 7u64;
+        for i in 0..200i64 {
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            dataset.observations.push(flow(
+                "192.168.1.5",
+                "203.0.113.7",
+                i * 400 + (seed >> 54) as i64,
+            ));
+            dataset.labels.push(GroundTruthLabel {
+                label: "Benign".into(),
+                detailed_label: "-".into(),
+            });
+        }
         for i in 0..(48 * 12) {
-            dataset
-                .observations
-                .push(flow("192.168.1.5", "198.51.100.9", i * 300 + (i % 3) * 7));
+            dataset.observations.push(flow(
+                "192.168.1.5",
+                "198.51.100.9",
+                86_400 + i * 300 + (i % 3) * 7,
+            ));
             dataset.labels.push(GroundTruthLabel {
                 label: "Malicious".into(),
                 detailed_label: "C&C".into(),
@@ -418,7 +438,29 @@ mod tests {
         assert_eq!(other.windows, row.windows);
         assert_eq!(other.any.1, 1);
         let empirical = empirical_benign(&relabeled);
-        assert_eq!(empirical.periodic_pairs, 1);
+        assert!(empirical.periodic_pairs >= 1);
+        // periodicita od prvniho toku hostu (zadna drivejsi znalost) se nehlasi (krok 4)
+        let from_start = LabeledDataset {
+            observations: dataset.observations[200..].to_vec(),
+            labels: dataset.labels[200..].to_vec(),
+            ..Default::default()
+        };
+        assert_eq!(run_behavior("iot23/synth", &from_start).any.0, 0);
+    }
+
+    /// Krok 4, G6: ZAMČENÁ testovací část, spouští se jednou pro závěrečné měření
+    /// (`cargo test --release --lib behavior_anchor_test_once -- --ignored --nocapture`).
+    #[test]
+    #[ignore]
+    fn behavior_anchor_test_once() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        for scenario in scenarios(Part::Test, true).unwrap() {
+            let Some(dataset) = load(root, scenario).unwrap() else {
+                println!("{scenario}: chybi data");
+                continue;
+            };
+            println!("ROW {:?}", run_behavior(scenario, &dataset));
+        }
     }
 
     /// Ruční běh vývojové části: `cargo test --release --lib behavior_anchor_dev --
