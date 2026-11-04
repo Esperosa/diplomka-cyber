@@ -133,10 +133,14 @@ impl V3Features {
     }
 
     /// Doporučené (výchozí) nastavení v3: vše kromě peer baseline detektoru, která
-    /// v párovém A/B kroku 2 neměla měřitelný přínos (impl-krok2.md, D).
+    /// v párovém A/B kroku 2 neměla měřitelný přínos (impl-krok2.md, D), a kromě
+    /// grafu nových hran (`pivot_chain`), který v A/B kroku 4 na ladicích seedech
+    /// přidal +3,7 % zobrazených FP při zisku detekce jen u malých rodin
+    /// (impl-krok4.md, A). Graf zůstává volitelný.
     pub fn recommended() -> Self {
         Self {
             peers: false,
+            graph: false,
             ..Self::all()
         }
     }
@@ -374,6 +378,9 @@ mod tests {
             "v3[memory+rate+volume+unexpected+context+identity+recall+ladder+learning+devices]"
         );
         assert!(!step2.behavior() && !step2.egress());
+        // krok 4 A: graf nových hran není ve výchozím presetu
+        let recommended = V3Features::recommended();
+        assert!(!recommended.graph && !recommended.peers && recommended.beacon);
         let no_egress = EngineConfig {
             mode: EngineMode::V3,
             v3: V3Features::all().disable_list("egress").unwrap(),

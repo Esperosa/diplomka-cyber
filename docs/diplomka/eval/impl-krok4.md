@@ -4,6 +4,24 @@ Datum 2026-11-04. Kód: commity od `686e9fa` (větev `main`, nepushnuto). Všech
 
 Pořadí práce je pevné: A (oprava zbytků jen na ladicích seedech 20261102 až 20261104), B (předregistrace prahů, zamčená commitem PŘED slepým testem), C (slepý test na držených seedech 20261201 a 20261301 a jednou na zamčené testovací části kotvy), D (výchozí `engine.mode = v3` jen při splnění G1 až G5), E (dlouhý běh).
 
+## A) Rozhodnutí o grafu (ladicí seedy, před commitem slepého testu)
+
+Párové A/B ramen `s4` (preset s grafem) a `s4-nograph` (`--v3-off graph`) na ladicích seedech 20261102 až 20261104, 3 × 40 sítí (120 párů, 1 236 virtuálních síť-dní), `--counterfactual`, `tools/soak_ab.py`. Všech 6 ramen doběhlo bez panik, `ERROR` a `WARN`. V logu `s4-20261104.log` je asi na 1 MB úsek 1 011 nulových bajtů (pravděpodobně po obnovení běhu), závěrečný řádek i výstupy ramene jsou úplné.
+
+| metrika | bez grafu | s grafem | změna | 95% CI |
+|---|---:|---:|---:|---|
+| zobrazené FP na síť-den | 14,2 | 14,8 | +3,7 % | +2,0 až +6,2 % |
+| z toho `pivot_chain` | 0,0 | 0,5 | | |
+| kontrafaktuální zobrazená detekce, apt_chain (n = 70) | 95,7 % | 97,1 % | +1,4 p. b. | +0,0 až +4,7 |
+| totéž, fleet_beacon (n = 44) | 68,2 % | 75,0 % | +6,8 p. b. | +0,0 až +15,4 |
+| totéž, lateral_movement (n = 190) | 75,3 % | 76,3 % | +1,1 p. b. | +0,0 až +3,0 |
+| totéž, c2_beacon (n = 215) | 89,3 % | 88,8 % | −0,5 p. b. | −1,3 až +0,0 |
+| detekce nad pozadím placeba, c2_beacon (n = 134) | | | −4,5 p. b. | −9,2 až −0,8 |
+
+Ostatní rodiny beze změny. Čistě graf přidá čistě 5 kontrafaktuálně detekovaných útoků z celkem 2 480 (+0,2 p. b. souhrnně), všechny v rodinách pod n = 100 nebo s dolní mezí 0, a zvýší FP s intervalem vylučujícím nulu. Orientačně proti `s2` z kroku 3 (starší binárka): `s4` / `s2` = 1,047 s grafem, 1,010 bez něj.
+
+**Rozhodnutí:** graf (`pivot_chain`) se z `V3Features::recommended()` vypouští a zůstává volitelný. Rameno `s4` slepého testu je tedy preset bez grafu a bez peer baseline.
+
 ## B) Předregistrace (zamčeno commitem před slepým testem)
 
 Tato sekce se po spuštění slepého testu nemění. Výsledky se zapisují do sekce C a vyhodnocují přesně podle těchto pravidel.
