@@ -17,7 +17,7 @@ Ramena (stejný harness, stejný svět včetně neškodných vzorů 1×, párov�
 
 1. **Odchozí rodiny jsou poprvé vidět.** Kontrafaktuální zobrazená detekce `s2` → `s3`: c2_beacon 2,3 → 92,6 % (+90,2 p. b., 95% CI +84,5 až +95,1, n = 215), exfiltration 0,0 → 90,3 % (+90,3, +82,8 až +97,1, n = 103), cryptomining 2,2 → 91,0 % (+88,8, +81,5 až +95,8, n = 89), fleet_beacon 56,8 → 75,0 % (+18,2, +7,4 až +31,2, n = 44). Žádná rodina neklesla (všechny ostatní ±0 až +2,9 p. b.); lateral_movement 75,3 → 76,3 %, dns_tunnel 96,8 % beze změny, rogue_device 94,5 % beze změny. Správný typ u c2, exfiltrace a cryptominingu se zvedl stejně (typ = nález vrstvy).
 2. **Cena jsou falešné poplachy: +12,3 %** zobrazených FP na síť-den (14,1 → 15,8, 95% CI +9,3 až +16,8 %), zobrazené položky +9,6 % (63,8 → 69,9). Nové FP jsou `beacon_periodic` 0,8, `pivot_chain` 0,5 a `egress_volume_anomaly` 0,4 na síť-den; staré typy se nezměnily. Proti legacy je `s3` pořád −97,8 % FP (734,3 → 15,8, CI −98,2 až −97,2 %).
-3. **Neškodné pravidelné vzory vrstva většinou neukáže.** Při šumu 1× vznikne na vzorech 241 nálezů vrstvy na síť-den (většinou `beacon_periodic` na NTP, cronu, VPN, CI/CD a agentech), zobrazí se 1,1 (paměť nálezů a žebřík). Celkem zobrazené FP na vzorech 4,7 → 5,8 na síť-den, z toho 4,7 vydávají detektory kroku 1 a 2 (hlavně `unexpected_traffic` na NTP k bráně a monitoring). Při 10× a 50× viz D.
+3. **Neškodné pravidelné vzory vrstva většinou neukáže.** Při šumu 1× vznikne na vzorech 241 nálezů vrstvy na síť-den (většinou `beacon_periodic` na NTP, cronu, VPN, CI/CD a agentech), zobrazí se 1,1 (paměť nálezů a žebřík). Celkem zobrazené FP na vzorech 4,7 → 5,8 na síť-den, z toho 4,7 vydávají detektory kroku 1 a 2 (hlavně `unexpected_traffic` na NTP k bráně a monitoring). Při 10× a 50× šumu ale FP vrstvy na vzorech rostou skoro lineárně (16 sítí: 8,7 → 34,1 → 96,7 zobrazených na síť-den proti 6,4 → 14,1 → 10,8 u kroku 2); viz D. **Vrstva v současném nastavení neunese síť s hustým pravidelným provozem.**
 4. **Automaticky vyřešené odlišné stavy 0,7 → 0,8 %** (`s2` 0,6 → `s3` 0,7 stavu na síť-den, +19,0 %, CI +4,4 až +33,4 %). Celý zisk dělá profil hostu (ablace: +22,0 %, CI +10,4 až +34,9 %). Absolutně je to dál malé.
 5. **Zavřeno omylem (sjednocená kontrafaktuální definice, C1): 0,38 % → 0,50 %** (8/2 112 → 13/2 609; 95% CI 0,19 až 0,75 % a 0,29 až 0,85 %), pod mezí 2 %. Všechna omylná uzavření jsou vyvrácení žebříkem (kontext 0/535). Přesnost potvrzení žebříku ale klesla z 96,5 % (95,5 až 97,2) na 91,9 % (90,7 až 93,0).
 6. **XXXL** (8 000 až 10 000 zařízení): paměť do 556 MiB na síť, p99 cyklu 1,2 až 1,9 s u dvou ze tří sítí. **Třetí síť má p99 12 s** kvůli jednomu cyklu plošného autorizovaného skenu (detekce v3 7,7 s), stejně v legacy (8,8 s); vrstva kroku 3 k tomu přidává do 0,2 s.
@@ -166,7 +166,21 @@ Omylná vyvrácení v `s3` jsou hlavně `packet_rate_spike` u ransomwaru (6) a `
 
 ### D. Falešné poplachy na neškodných protějšcích pravidelného provozu
 
-<!-- NOISE -->
+Šum 1× je z A/B seedu 20261102 (40 sítí, s kontrafaktuálem), 10× ze samostatných běhů stejného seedu (40 sítí, bez kontrafaktuálu; zobrazení a FP na něm nezávisí). 50× je kvůli výpočetní ceně jen na prvních 16 sítích, proto mají 1× a 10× pro srovnání i řádek se stejnými 16 sítěmi (jsou mezi nimi tři velké sítě, takže čísla na síť-den jsou vyšší než u 40 sítí). FP na vzorech = nepřipsaný nález, jehož host a protistrana tvoří dvojici neškodného vzoru v tomto cyklu (`reports/noise-fp.md`).
+
+| šum | sítí | toky vzorů / síť-den | FP na vzorech zobrazené, `s2` → `s3` | zobrazené FP celkem, `s2` → `s3` | největší zobrazené v `s3` (vzor\|typ, na síť-den) |
+|---|---:|---:|---|---|---|
+| 1× | 40 | 108 180 | 3,7 → 4,8 | 9,6 → 11,7 | ntp_sync\|unexpected_traffic 1,1, monitoring_poll\|source_volume_outlier 1,0 (oba z kroku 2) |
+| 10× | 40 | 997 685 | 11,2 → 20,3 | 18,9 → 29,9 | ntp_sync\|unexpected_traffic 4,9 (krok 2), cdn_streaming\|egress_volume_anomaly 2,9, ntp_sync\|beacon_periodic 1,8 |
+| 1× | 16 | 251 083 | 6,4 → 8,7 | 18,4 → 22,9 | monitoring_poll (krok 2), cdn_streaming\|egress_volume_anomaly 0,8 |
+| 10× | 16 | 2 128 580 | 14,1 → 34,1 | 30,0 → 54,7 | cdn_streaming\|egress_volume_anomaly 7,4, ntp_sync\|beacon_periodic 3,7 |
+| 50× | 16 | 6 558 158 | 10,8 → **96,7** | 37,6 → **135,2** | cdn_streaming\|egress_volume_anomaly 25,3, ntp_sync\|beacon_periodic 18,7, script_polling\|beacon_periodic 16,0, vpn_keepalive\|beacon_periodic 10,0 |
+
+Čtení:
+- **Při 1× vrstva přidá na vzorech jen ~1 zobrazený FP na síť-den.** Detektory kroku 2 dávají na stejných vzorech víc (NTP klientů na bránu bez inventarizované služby a monitoring jako `source_volume_outlier`).
+- **Neúspěch: vrstva se šumem neškáluje.** Krok 2 drží zobrazené FP na vzorech při 50× zhruba na úrovni 10× (10,8 proti 14,1 na 16 sítích), protože jeho objemové baseline se pravidelnému provozu přizpůsobí. U kroku 3 rostou FP na vzorech zhruba lineárně s počtem instancí (8,7 → 34,1 → 96,7), protože každá nová dvojice zdroj-cíl je pro `beacon_periodic` a profil nová. Ochrany beaconu přes rozšířenost cíle (flotila) zaberou jen u společného cíle (agent, aktualizace), ne u NTP poolu, skriptu, VPN protějšku ani u streamování, kde má každá instance vlastní cíl.
+- Nejhorší jednotlivý zdroj je `egress_volume_anomaly` na `cdn_streaming`. Detektor počítá jen nahrané bajty (`orig_bytes`), takže ho nespouští stahování videa, ale nejspíš videohovory přes TURN: jsou symetrické a hodinový hovor nahraje stovky MB až jednotky GB, což je pro host bez historie skok. Jako neškodný důkaz chybí znalost konferenčních služeb (reputace cíle, port 3478). Tohle je první kandidát na opravu v dalším kroku.
+- Tyto parametry detektorů jsem v tomto kroku záměrně neladil, protože A/B měří stav detektorů z `2ef75f8`. Jinak by se ladilo na stejných vzorech, na kterých se měří.
 
 ### E. Čas cyklu a paměť
 
@@ -179,6 +193,7 @@ Na směsi sítí (120 sítí, 12 vláken, s kontrafaktuálem) je medián p99 cyk
 - **Přesnost potvrzení žebříku klesla z 96,5 % na 91,9 %.** Nové podezřelé důkazy (`profile:malicious` = nový cíl zralého profilu, pivot přes nálezy vrstvy) potvrzují i neškodné případy. Učení LR to mělo časem stáhnout, ale v epizodách délky 1 až 60 dní se to nestihne.
 - **XXXL: jedna ze tří sítí má p99 cyklu 12 s** (bod 3), příčina mimo vrstvu kroku 3 zůstává nenalezená.
 - **Kotva CTU-13** je pro detektory s historií nepoužitelná (vyřezy 1 až 6 oken), IoT-23 má malé vzorky. Testovací část se nespouštěla.
+- **FP vrstvy při 10× a 50× šumu neškodných vzorů rostou s jeho objemem** (bod D). Hlavní je `egress_volume_anomaly` na videohovorech přes TURN (symetrický velký upload) a `beacon_periodic` na NTP, cronu a VPN s vlastním cílem.
 - **Automatické vyřešení zůstává pod 1 % stavů.**
 - Výchozí stav: krok 3 je ve `V3Features::recommended()` zapnutý, `engine.mode` zůstává `legacy`. O nasazení grafu rozhodne další krok.
 
