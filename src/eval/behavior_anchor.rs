@@ -102,8 +102,70 @@ pub fn scenarios(part: Part, unlock: bool) -> Result<&'static [&'static str]> {
     }
 }
 
-/// Načte scénář `ctu13/<dir>` nebo `iot23/<dir>` z `repo_root/labs/datasets`.
+/// Krok 5 (`docs/diplomka/eval/impl-krok5.md`, A9): výřezy CIC-IDS2017 (verze Engelen
+/// a kol.) a UNSW-NB15 mimo repo, rozdělené po skupinách štítků (CIC) a po čase (UNSW).
+/// Testovací část je zamčená stejně jako u kotvy kroku 3.
+pub const ANCHOR_K5_DEV: &[&str] = &[
+    "cicids2017/tue-ftp-patator",
+    "cicids2017/wed-dos-slow",
+    "cicids2017/fri-botnet",
+    "cicids2017/mon-benign-am",
+    "unsw-nb15/unsw-h0",
+];
+
+pub const ANCHOR_K5_TEST: &[&str] = &[
+    "cicids2017/tue-ssh-patator",
+    "cicids2017/wed-dos-hulk-goldeneye",
+    "cicids2017/thu-web",
+    "cicids2017/thu-infiltration",
+    "cicids2017/fri-portscan",
+    "cicids2017/fri-ddos",
+    "cicids2017/mon-benign-pm",
+    "unsw-nb15/unsw-h2",
+];
+
+pub const ANCHOR_K5_TEST_SHA256: &str =
+    "b1dbb1ca6e5ce05fed0ada39604724fd57813801a31e9ed8487669e590706d3b";
+
+/// Scénáře kotvy kroku 5 (zamčení jako `scenarios`).
+pub fn scenarios_k5(part: Part, unlock: bool) -> Result<&'static [&'static str]> {
+    match part {
+        Part::Dev => Ok(ANCHOR_K5_DEV),
+        Part::Test if !unlock => Err(BakulaError::Processing(
+            "testovaci cast kotvy kroku 5 je zamcena (jen zaverecne mereni)".into(),
+        )),
+        Part::Test if list_sha256(ANCHOR_K5_TEST) != ANCHOR_K5_TEST_SHA256 => Err(
+            BakulaError::Processing("seznam testovaci casti kotvy k5 nesouhlasi s otiskem".into()),
+        ),
+        Part::Test => Ok(ANCHOR_K5_TEST),
+    }
+}
+
+/// Kořen externích datasetů (mimo git): `BAKULA_EXTERNAL_DATASETS`, jinak `F:/bakula-datasets`.
+pub fn external_root() -> std::path::PathBuf {
+    std::env::var_os("BAKULA_EXTERNAL_DATASETS")
+        .map(Into::into)
+        .unwrap_or_else(|| "F:/bakula-datasets".into())
+}
+
+/// Načte scénář `ctu13/<dir>` nebo `iot23/<dir>` z `repo_root/labs/datasets`,
+/// `cicids2017/<vyrez>` a `unsw-nb15/<vyrez>` z `external_root()`.
 pub(crate) fn load(repo_root: &Path, scenario: &str) -> Result<Option<LabeledDataset>> {
+    if scenario.starts_with("cicids2017/") || scenario.starts_with("unsw-nb15/") {
+        let file = external_root().join(scenario).join("flows.csv");
+        if !file.is_file() {
+            return Ok(None);
+        }
+        return if scenario.starts_with("cicids2017/") {
+            crate::eval::sources::cicids2017::CicIds2017Source
+                .load(&file)
+                .map(Some)
+        } else {
+            crate::eval::sources::unsw_nb15::UnswNb15Source
+                .load(&file)
+                .map(Some)
+        };
+    }
     let base = repo_root.join("labs/datasets").join(scenario);
     if !base.is_dir() {
         return Ok(None);
@@ -131,12 +193,56 @@ pub(crate) fn load(repo_root: &Path, scenario: &str) -> Result<Option<LabeledDat
 
 /// Vnitřní rozsah scénáře (CTU-13: síť univerzity 147.32.0.0/16; IoT-23: 192.168.0.0/16).
 pub fn scope_for(scenario: &str) -> Vec<IpNet> {
-    let net = if scenario.starts_with("ctu13/") {
-        "147.32.0.0/16"
+    let nets: &[&str] = if scenario.starts_with("ctu13/") {
+        &["147.32.0.0/16"]
+    } else if scenario.starts_with("cicids2017/") {
+        // obet sit testbedu; utocnik (205.174.165.73, za NAT 172.16.0.1) je venku
+        &["192.168.10.0/24"]
+    } else if scenario.starts_with("unsw-nb15/") {
+        // klienti a servery testbedu; utocnici (175.45.176.0/24) jsou venku
+        &["59.166.0.0/24", "149.171.126.0/24"]
     } else {
-        "192.168.0.0/16"
+        &["192.168.0.0/16"]
     };
-    vec![net.parse().expect("platny CIDR")]
+    nets.iter()
+        .map(|n| n.parse().expect("platny CIDR"))
+        .collect()
+}
+
+/// Krok 5: řádek kotvy pro veřejné datasety. Behaviorální vrstva (úroveň vnitřního
+/// hostu, jako G6) a navíc pasivní detektory (ablace D, úroveň cílové služby), protože
+/// útoky zvenku (hádání hesel, DoS, web) behaviorální vrstva na vnitřních hostech nevidí.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct K5AnchorRow {
+    pub behavior: BehaviorAnchorRow,
+    pub malicious_flows: usize,
+    pub labels: BTreeMap<String, usize>,
+    /// (TP, FP, FN, TN) na klíčích (cíl, protokol, port).
+    pub service_keys: (usize, usize, usize, usize),
+}
+
+pub(crate) fn run_k5(scenario: &str, dataset: &LabeledDataset) -> K5AnchorRow {
+    let mut labels = BTreeMap::new();
+    for label in dataset.labels.iter().filter(|l| l.is_malicious()) {
+        *labels.entry(label.detailed_label.clone()).or_insert(0) += 1;
+    }
+    let ablation = crate::eval::dataset_replay::run_ablation(
+        dataset,
+        300,
+        crate::eval::dataset_replay::AblationVariant::D,
+    );
+    let c = &ablation.confusion;
+    K5AnchorRow {
+        behavior: run_behavior(scenario, dataset),
+        malicious_flows: ablation.malicious_flow_count,
+        labels,
+        service_keys: (
+            c.true_positive,
+            c.false_positive,
+            c.false_negative,
+            c.true_negative,
+        ),
+    }
 }
 
 /// Výsledek behaviorálních detektorů na jednom scénáři (úroveň hostu).
@@ -375,6 +481,65 @@ mod tests {
                     "{name} neni v zadne casti"
                 );
             }
+        }
+    }
+
+    /// Krok 5: kotva veřejných datasetů je disjunktní, zamčená a souhlasí se souborem.
+    #[test]
+    fn k5_split_is_disjoint_locked_and_matches_committed_list() {
+        let dev: HashSet<&str> = ANCHOR_K5_DEV.iter().copied().collect();
+        assert!(ANCHOR_K5_TEST.iter().all(|s| !dev.contains(s)));
+        assert!(scenarios_k5(Part::Test, false).is_err());
+        assert_eq!(list_sha256(ANCHOR_K5_TEST), ANCHOR_K5_TEST_SHA256);
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let file = std::fs::read_to_string(root.join("docs/diplomka/eval/anchor-split.txt"))
+            .expect("seznam v repu");
+        let section = |name: &str| -> Vec<String> {
+            file.lines()
+                .skip_while(|l| l.trim() != name)
+                .skip(1)
+                .take_while(|l| !l.trim().is_empty() && !l.starts_with('['))
+                .filter(|l| !l.starts_with('#'))
+                .map(|l| l.trim().to_string())
+                .collect()
+        };
+        assert_eq!(section("[dev-k5]"), ANCHOR_K5_DEV);
+        assert_eq!(section("[test-k5]"), ANCHOR_K5_TEST);
+        assert!(file.contains(ANCHOR_K5_TEST_SHA256));
+        assert_eq!(scope_for("unsw-nb15/x").len(), 2);
+        assert_eq!(
+            scope_for("cicids2017/x"),
+            vec!["192.168.10.0/24".parse::<IpNet>().unwrap()]
+        );
+    }
+
+    /// Krok 5, vývojová část veřejných datasetů: `cargo test --release --lib
+    /// behavior_anchor_k5_dev -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn behavior_anchor_k5_dev() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        for scenario in scenarios_k5(Part::Dev, false).unwrap() {
+            let Some(dataset) = load(root, scenario).unwrap() else {
+                println!("{scenario}: chybi data");
+                continue;
+            };
+            println!("K5 {scenario} {:?}", run_k5(scenario, &dataset));
+        }
+    }
+
+    /// Krok 5, ZAMČENÁ testovací část veřejných datasetů, jednou v části G:
+    /// `cargo test --release --lib behavior_anchor_k5_test_once -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn behavior_anchor_k5_test_once() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        for scenario in scenarios_k5(Part::Test, true).unwrap() {
+            let Some(dataset) = load(root, scenario).unwrap() else {
+                println!("{scenario}: chybi data");
+                continue;
+            };
+            println!("K5 {scenario} {:?}", run_k5(scenario, &dataset));
         }
     }
 

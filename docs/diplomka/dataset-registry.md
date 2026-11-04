@@ -145,8 +145,66 @@ curl -s -r 0-200 "$URL44" | head -1 > h.tmp; curl -s -r 475000000-506457279 "$UR
 curl -s -r 0-200 "$URL45" | head -1 > h.tmp; curl -s -r 58000000-89457279 "$URL45" | tail -n +2 > b.tmp; cat h.tmp b.tmp > labs/datasets/ctu13/Botnet-45/capture20110815.binetflow.excerpt.csv
 ```
 
+## Vlna 1 (krok 5, 2026-11-04): CIC-IDS2017 a UNSW-NB15
+
+Obě sady jsou mimo git v `F:\bakula-datasets\` (proměnná `BAKULA_EXTERNAL_DATASETS`). Do repa jde jen kód zdroje, skripty výřezu (`tools/datasets/`) a hashe níže. Rozdělení na vývojovou a zamčenou testovací část je v `docs/diplomka/eval/anchor-split.txt` (`[dev-k5]`, `[test-k5]`, SHA-256 testovací části `b1dbb1ca…`), pravidla jsou v `impl-krok5.md`, A9.
+
+### CIC-IDS2017 (přegenerovaná verze Engelen a kol.)
+
+| Pole | Hodnota |
+|---|---|
+| `dataset_id` | `cicids2017` |
+| `source` | Canadian Institute for Cybersecurity (UNB), záznam 3. až 7. 7. 2017; toky a štítky přegenerovali Engelen, Rimmer, Joosen (KU Leuven, WTMC 2021) opraveným CICFlowMeterem |
+| `url` | https://www.unb.ca/cic/datasets/ids-2017.html (originál), https://intrusion-detection.distrinet-research.be/WTMC2021/ (použitá verze, `Dataset/dataset.zip`, 333 841 436 B, ověřeno HTTP Range 2026-11-04) |
+| `license` | Ani originál, ani přegenerovaná verze nemají výslovnou licenci. Obě stránky žádají citaci: Sharafaldin, Lashkari, Ghorbani, ICISSP 2018, a Engelen a kol., IEEE SPW/WTMC 2021. Ověřeno na oficiálních stránkách 2026-11-04. |
+| proč ne originál | Stažení z UNB vyžaduje formulář se jménem, e-mailem a organizací. Pravidla práce zakazují posílat osobní údaje externím službám, proto je použita veřejně stažitelná přegenerovaná verze téhož záznamu. Opravuje i známé chyby originálu: konstrukci toků, ignorované RST, chybné příznaky a přes 20 % přeznačených toků. |
+| `modalities` | Toky CICFlowMeteru. Výřez má jen sloupce Src/Dst IP a port, Protocol, Timestamp, Flow Duration (µs), počty paketů a délky payloadu v obou směrech, FIN/SYN/RST a Label. |
+| `label_schema` | `BENIGN` nebo název útoku, u pokusů bez payloadu přípona `- Attempted`. Obojí se počítá jako Malicious. |
+| osobní údaje | Testbed, provoz 25 simulovaných uživatelů (B-Profile). Žádní skuteční uživatelé. |
+| `known_leakage_risks` | Toky nemají Zeek `conn_state`: zdroj ho odvozuje přibližně (bez paketů zpět = S0, RST = RSTO, jinak SF). Časy jsou o +5 h posunuté proti místnímu času testbedu (přegenerovaná verze), relativní pořadí sedí. Útočník je za NAT jako 172.16.0.1, mimo rozsah 192.168.10.0/24. |
+| `wave` | 1 |
+
+Staženo po dnech přes HTTP Range ze `dataset.zip` (komprimovaně: pondělí 64,8 MB, úterý 54,9 MB, středa 87,0 MB, čtvrtek 53,1 MB, pátek 74,0 MB). Plná data se neukládala. Výřezy podle A9 jsou okno [první tok skupiny štítků − 30 min, poslední + 30 min], nejvýš 3 h. Neškodné pondělní výřezy jsou hodina 1 až 2 a 5 až 6 od začátku dne.
+
+| Výřez | Část | Okno (čas souboru) | Toků | Škodlivých | Velikost | SHA-256 |
+|---|---|---|---:|---:|---:|---|
+| `tue-ftp-patator` | dev | 04.07. 13:47:52 až 15:50:13 | 102 995 | 3 984 | 10 137 032 B | `5b95badc02325b80166d4f904421c447727fee9b5abe8dda7aea7fd7b7c5a628` |
+| `wed-dos-slow` | dev | 05.07. 13:31:00 až 15:40:36 | 95 251 | 10 843 | 9 470 140 B | `df91914427c2be10f5d6d2cace59819faf2377154fa2d69283b091f890e25212` |
+| `fri-botnet` | dev | 07.07. 14:04:13 až 17:04:13 | 135 702 | 1 509 | 13 309 039 B | `31e515f92154af22a9cb3db1b2b98be5c2e98a3580bd1e46eece4e08c4d88b22` |
+| `mon-benign-am` | dev | 03.07. 14:55:58 až 15:55:58 | 59 849 | 0 | 5 905 339 B | `b3d1993cc6cc4489cc986d4dcc7c7c772b667e67b19660b5c9d75a2bc42d9dab` |
+| `tue-ssh-patator` | test | 04.07. 18:39:01 až 21:34:15 | 122 372 | 2 988 | 12 053 674 B | `36db1cdcd235e7383c2d714d27f13ae6d536668b707d2043c7a859240a1976d3` |
+| `wed-dos-hulk-goldeneye` | test | 05.07. 15:40:36 až 16:49:49 | 211 284 | 166 709 | 21 103 295 B | `e1631a242d09aaed6ad8e7ebd49d93c1063a75687c87b35270450ec9b92d2ad6` |
+| `thu-web` | test | 06.07. 13:45:54 až 16:12:50 | 86 752 | 2 056 | 8 564 709 B | `5e822969eb69ab17c30fa0e255a66c9bdb5a5743cc25811d62ab98913b16efa6` |
+| `thu-infiltration` | test | 06.07. 18:49:02 až 21:14:24 | 174 824 | 48 | 16 691 017 B | `7f83aeceeed6569c75bc93f636b9abe36705cc411133dd7e953e26b49b833cde` |
+| `fri-portscan` | test | 07.07. 17:07:57 až 20:07:57 | 225 719 | 139 741 | 21 286 911 B | `e091f5127881d036807bce0ab17eb4c83be637308ad9b72e0b548f70fe7d5e03` |
+| `fri-ddos` | test | 07.07. 20:26:31 až 21:46:10 | 143 780 | 95 123 | 13 919 184 B | `9740f79b940e5a329f8053160bfa8cb41dc16e8e10ba39e5eefcddc5ff6ef993` |
+| `mon-benign-pm` | test | 03.07. 18:55:58 až 19:55:58 | 35 878 | 0 | 3 517 788 B | `046f23600c4900f4ecf268954b6dcd1fc54427f9db9df4a63b4e35cb089119a3` |
+
+Odchylka od A9, zjištěná před během jakéhokoli detektoru: okna `wed-dos-slow` a `wed-dos-hulk-goldeneye` se podle pravidla překrývala (15:13 až 16:07), takže vývojová a testovací část by sdílely toky. Hranice je proto v polovině mezery mezi posledním tokem pomalé skupiny (15:37:49) a prvním tokem Hulk (15:43:23), tedy 15:40:36 (`tools/datasets/cic_recut_wed.py`). Heartbleed (11 toků, večer) není v žádném výřezu. Ve výřezu `fri-portscan` jsou i pozdní pokusy botnetu (`Bot - Attempted` do 17:59).
+
+### UNSW-NB15
+
+| Pole | Hodnota |
+|---|---|
+| `dataset_id` | `unsw-nb15` |
+| `source` | UNSW Canberra, Cyber Range Lab, nástroj IXIA PerfectStorm (Moustafa a Slay, MilCIS 2015) |
+| `url` | https://research.unsw.edu.au/projects/unsw-nb15-dataset (oficiální sdílená složka UNSW; anonymní odkaz z oficiální stránky, bez přihlášení) |
+| `license` | „Free use of the UNSW-NB15 dataset for academic research purposes is hereby granted in perpetuity. Use for commercial purposes should be agreed by the authors.“ Citovat pět článků z oficiální stránky. Ověřeno 2026-11-04. |
+| `modalities` | Argus a Bro toky, `UNSW-NB15_4.csv` (97 588 754 B, 440 044 řádků, 49 sloupců podle `NUSW-NB15_features.csv`). Výřez má `stime, srcip, sport, dstip, dsport, proto, state, dur, sbytes, dbytes, spkts, dpkts, attack_cat, label`. |
+| `label_schema` | `label` 0/1, `attack_cat` ∈ {Fuzzers, Analysis, Backdoor, DoS, Exploits, Generic, Reconnaissance, Shellcode, Worms} |
+| osobní údaje | Syntetický provoz testbedu, žádní skuteční uživatelé |
+| `known_leakage_risks` | Argus stavy jsou převedené přibližně (INT/REQ = S0, RST = RSTO, FIN/CON/CLO/ACC = SF). Útočníci 175.45.176.0/24 jsou mimo rozsah 59.166.0.0/24 + 149.171.126.0/24. „Generic“ tvoří dvě třetiny škodlivých toků. |
+| `wave` | 1 |
+
+| Výřez | Část | Okno (Unix čas) | Toků | Škodlivých | Velikost | SHA-256 |
+|---|---|---|---:|---:|---:|---|
+| `unsw-h0` | dev | 1424249984 až +3600 s | 138 993 | 30 525 | 11 469 722 B | `58489ca79c3c32e0958678d7c5e35d7a1366972e399d4c05404ca2d3f1ed2123` |
+| `unsw-h2` | test | 1424257184 až +3600 s | 132 138 | 29 411 | 10 921 712 B | `335d8b55900afb4393056f251ea57661a61ecf834226270aee6feb46218c2f42` |
+
+Odchylka od A9: kategorie útoků se v UNSW-NB15 v čase prolínají, takže rozdělení „Reconnaissance a Exploits do vývojové části“ by šlo provést jen vyřazením toků z provozu. Místo něj se dělí po čase: první hodina souboru je vývojová, třetí hodina testovací a mezi nimi je hodina odstupu. Rozhodnuto před během jakéhokoli detektoru. Obě části mají všech 9 kategorií.
+
 ## Budoucí vlny (naplánováno, ne implementováno)
 
-- **Vlna 1 (zbytek):** CICIDS2017/2018, CICIoT2023, UNSW-NB15 — každý jako nová `ScenarioSource` implementace v `src/eval/sources/`, jiné schéma/parser než CTU-13's binetflow.
+- **Vlna 1 (zbytek):** CSE-CIC-IDS2018, CICIoT2023 — každý jako nová `ScenarioSource` implementace v `src/eval/sources/`. CIC sady vyžadují registrační formulář s osobními údaji, takže jen přes veřejné přegenerované verze (Engelen a kol., CNS 2022), nebo po rozhodnutí uživatele.
 - **Vlna 2:** threat intel enrichment (NVD/KEV/EPSS, URLhaus, ThreatFox, OTX).
 - **Vlna 3:** Mininet/Containerlab generátor syntetických scénářů — zdroj prakticky neomezeného objemu kontrolovaných scénářů (DHCP/NAT churn, vlastní firewall/DNS/IPS politiky), včetně identity-churn scénářů, které IoT-23 ani CTU-13 nepokrývají.

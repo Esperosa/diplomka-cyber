@@ -30,3 +30,24 @@ iot23/CTU-Honeypot-Capture-7-1-Somfy-01
 iot23/CTU-IoT-Malware-Capture-8-1
 iot23/CTU-IoT-Malware-Capture-21-1
 iot23/CTU-IoT-Malware-Capture-44-1
+
+# Krok 5 (impl-krok5.md, A9): verejne datasety mimo repo (BAKULA_EXTERNAL_DATASETS),
+# CIC-IDS2017 po skupinach stitku, UNSW-NB15 po case. Testovaci cast je zamcena.
+# SHA-256 testovaci casti k5: b1dbb1ca6e5ce05fed0ada39604724fd57813801a31e9ed8487669e590706d3b
+
+[dev-k5]
+cicids2017/tue-ftp-patator
+cicids2017/wed-dos-slow
+cicids2017/fri-botnet
+cicids2017/mon-benign-am
+unsw-nb15/unsw-h0
+
+[test-k5]
+cicids2017/tue-ssh-patator
+cicids2017/wed-dos-hulk-goldeneye
+cicids2017/thu-web
+cicids2017/thu-infiltration
+cicids2017/fri-portscan
+cicids2017/fri-ddos
+cicids2017/mon-benign-pm
+unsw-nb15/unsw-h2
