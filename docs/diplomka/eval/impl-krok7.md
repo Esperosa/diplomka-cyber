@@ -267,6 +267,10 @@ Všechna ramena kromě `v3k6` mají `protect`. Chráněná automatická zavřen�
 
 **Vybraná sestava `v3k7` = `--v3-on protect,graph,graph_incident,fanout2`** (preset kroku 6 + A1 + B2 + B3b).
 
+### D2. Kontrola sestavy (seedy 20261401 a 20261501, binárka `997d81f`)
+
+Plný výstup je v `k7/check.md`. `v3k7` proti `v3k6`: detekce 78,8 → 81,0 %, párově +2,1 p. b. (+1,5 až +2,8). Zobrazené FP 14,7 → 16,3 na síť-den, poměr 1,106 (1,063 až 1,187). Zavřeno omylem 29 / 2 083 → 12 / 962 (1,4 → 1,2 %). Útoků s omylem zavřeným nálezem je 16 místo 27. Kritéria B4 (detekce ≥ 0, FP ≤ 1,15, omyly počtem ≤ `v3k6`) jsou splněná, sestava jde do drženého běhu beze změny. Varování před drženým během: všech zobrazených položek je o 25,8 % víc (1,175 až 1,327), protože chráněné nálezy se zobrazují hned a graf přidává incidenty. Předregistrovaný práh L1 (≤ 1,15) proto pravděpodobně nesplní. Sestava se kvůli tomu neupravuje, B4 o zátěži analytika nerozhoduje.
+
 ## E) Registr slepých míst a tvrzení
 
 (doplní se)
