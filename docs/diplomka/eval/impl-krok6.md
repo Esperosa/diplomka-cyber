@@ -232,3 +232,52 @@ Na otázku, zda už nejsou žádná slepá místa: nejsou opravená. Dvě jsem o
 ## Commity kroku 6
 
 `3054301` předregistrace, `4a461c1` kandidáti v enginu, `b5a913c` měření v soaku, `fecbe66` nástroj, `bf16fc3` třída provoz v produkční cestě, `22d62af` úprava novosti, `8828834` úprava třídy provoz, `f6afbe1` ladicí výsledky, `eb0fb1f` preset, a commit této sekce.
+
+## Review kola 1 (sol-loop)
+
+Nezávislé review kódu kroku 6 (GPT-6.1 Sol, kolo 1, jen čtení) našlo 3 blokery a 3 menší nálezy. Všechny jsou opravené nejmenší změnou. Ke každému je regresní test, který bez opravy selže. Ověřil jsem to tak, že jsem opravy dočasně vrátil: 6 z 6 testů selhalo a po obnovení prošly. Výchozí režim zůstává `legacy` a předregistrace (B) ani výběr sestavy se nemění.
+
+| # | závažnost | nález | oprava | regresní test | změřený dopad (ladicí seedy, párově) |
+|---|---|---|---|---|---|
+| S1 | blocker | Značka třídy provoz (TTL 24 h) obešla pojistky: nový jednozdrojový útok se stejným `finding_id` dostal starý důvod provozu. | Značka nese otisk důkazu (klíč služby, seřazené dominantní zdroje). Bez čerstvého důkazu ji zneplatní jediný dominantní zdroj, zdroj mimo otisk, jiná služba nebo eskalace v paměti nálezu. Starý stav `ops_marks` se načte, značky bez otisku se zahodí (fail closed). | `ops_evidence::mark_is_invalidated_by_contradicting_evidence`, `legacy_ops_marks_state_loads_and_fails_closed` | jen rameno s `ops_class`: zobrazené ve frontě provoz 3 702 → 3 595 (−2,9 %), zobrazené FP ve frontě podezření 29 061 → 29 107 (+0,16 %), útoky zobrazené jen ve frontě provoz 20 → 19, K3 laděné 66,0 → 66,1 % |
+| S2 | blocker | Brána kontextu nevylučovala typy novosti: záznam, který je výslovně pokrývá, by je zavřel nebo dodal žebříku neškodný důkaz. | `explain()` i `supporting_context()` odmítnou `novel_persistent_peer` a `novel_fanout` (společný seznam `behavior::novelty::NOVELTY_TYPES`). | `context_gate::novelty_types_are_never_explained_nor_supported_even_if_covered` | 0 (simulovaný kalendář novost nepokrývá, výchozí `covers` druhů ji neobsahuje). Jde o produkční pojistku. |
+| S3 | blocker | Kontrola Profile vyvracela novost zvykem flotily (zvyk 14 dní proti novosti 7 dní, LR 0,35 a s peers 0,25 prior asi 0,015). | Pro oba typy novosti dává zvyk hostu i flotily výsledek „nezjištěno“ (žádný neškodný LR). Plán kontrol se nemění. | `verify_ladder::profile_habit_is_not_benign_evidence_for_novelty` (kontrola: `beacon_periodic` neškodný důkaz dál dostane) | 4 výsledky `profile:benign` → `undetermined` (všechny u neškodné pravdy), 2 sítě ze 120. Rozhodnutí žebříku, zobrazení ani zavření se nezměnila. |
+| S4 | should | Každá IPv4 končící .255 se brala jako broadcast. | Směrovaný broadcast se počítá podle skutečného prefixu podsítě z rozsahu (nejdelší shoda, jen prefix ≤ 30). Bez známé podsítě se neuznává. Omezený broadcast a multicast platí vždy. | `ops_evidence::directed_broadcast_follows_real_subnet_prefix` | v soaku 0 (rozsah sítí je /24, takže .255 je skutečný broadcast). V produkci s /16 rozsahem 10.0.3.255 už do fronty provoz nejde. |
+| S5 | should | Se zapnutým `novel_fanout` neměl vektor nových vazeb na hostitele strop. | `fanout_cap` (výchozí 256, nejméně `fanout_min`): další vazby v okně se nepřidají, pořadí je deterministické (BTreeSet), poplach při překročení prahu zůstává. | `behavior::novelty::fanout_relations_per_host_are_capped_deterministically` | 0 (`novel_fanout` je ve výchozích prazích vypnuté) |
+| S6 | nit | Důvod na úrovni hostu bral první shodnou službu z náhodně uspořádané HashMap. | Služby se procházejí seřazeně, vyhrává nejmenší klíč. | `ops_evidence::host_level_reason_is_deterministic` | v rameni s `ops_class` je zahrnuté v S1 (samostatně neměřeno) |
+
+**Měření dopadu.** Binárka před opravou `8828834` (ladicí výstupy z C) a po opravě `29dfabb`. Ladicí seedy 20261611 až 20261613, 3 × 40 sítí, stejné volby jako v C. Ramena: `v3k6` (`--v3-on sensor_strict,novelty`) a `v3k6 + ops_class`. Běželo se 2 ramena současně po 3 vláknech, s prioritou Idle, vedle dvou 72h běhů (zatížení stroje 38 až 51 %). Párová srovnání jsou v `k6/r1-tuning-k6set.md` a `k6/r1-tuning-k6set-ops.md`.
+
+| rameno | detekce (cf, fronta podezření) | zobrazené FP / síť-den | zavřeno omylem (G3) | sítí se změnou |
+|---|---|---|---|---|
+| `v3k6` před → po | 79,9 % → 79,9 %, párově +0,0 p. b. (+0,0 až +0,0), 0 z 3 759 útoků jinak | 22,1 → 22,1 (29 279 = 29 279) | 33 / 2 518 → 33 / 2 518 (1,3 %, 0,9 až 1,8 %) | 2 ze 120 (jen výsledky kontroly Profile) |
+| `v3k6 + ops_class` před → po | 79,7 % → 79,7 %, párově +0,0 p. b., 0 z 3 759 útoků jinak | 22,1 → 22,1; ve frontě podezření 21,93 → 21,97 | 33 / 2 518 → 33 / 2 518 | 25 ze 120 |
+
+Opravy uzavírají cesty, které by v produkci mohly zavřít nebo odklonit útok. V simulaci se po nich detekce, FP i zavřeno omylem nezměnily. Výsledky kroku 6 (C, D a E) proto platí beze změny. Kandidát 2 (`ops_class`) zůstává zamítnutý. Po S1 klasifikuje do fronty provoz o 2,9 % méně položek, takže je ještě o něco slabší.
+
+**Ostatní kontroly.** Výchozí i ladicí svět (`legacy`, seed 20261611, 4 sítě) dávají s binárkou po opravách stejný `networks.jsonl` jako binárka `8828834` (bajtově, po odečtení `wall_s` a `cycle_p99_s`). `soak verify` s konečnou binárkou `0ab8c55` nad výstupy po opravě (`v3k6` i `+ops_class`, seed 20261611) dal 2 ze 2 bloků bit po bitu shodné. Diagnostika paměti proto výsledky nemění. Golden snapshot, engine_v3, case_memory_learning, incremental_ingest a verification_execution jsou zelené. `cargo test --lib`: 494 testů prošlo, 5 selhalo, všechny `broker::tests` (známá výjimka, chybí Redis). `cargo clippy --all-targets`: lib 89, lib test 97, bin 3, e2e 1, tedy stejně jako HEAD `51a4f7b`. `cargo fmt --check` je čisté. Zpětná kompatibilita: starý stav `ops_marks` (`[čas, důvod]`), behaviorální stav bez `novelty` a prahy novosti bez `fanout_cap` se načtou (testy výše a `behavior::novelty::old_behavior_state_and_thresholds_load`). Formát paměti nálezů ani `engine-state` se jinak nemění.
+
+### Paměť: stropy stavu novosti a třídy provoz a příčina 4+ GiB haldy
+
+Stropy v kódu: `NoveltyState.pairs` ≤ 200 000 (nečinnost 3 dny), `fanout` ≤ 50 000 hostitelů a nově ≤ 256 vazeb na hostitele (S5), `Clientele` ≤ 100 000 služeb × 64 klientů (okno 7 dní), `OpsMarks` ≤ 200 000 (TTL 24 h). Všechny struktury mají strop i stáří.
+
+Měření: diagnostika `BAKULA_SOAK_STATE_TRACE=1` (commit `0ab8c55`) vypisuje každých 48 cyklů velikost složek stavu v3 jako bajty serializovaného JSON. Je to přibližná míra, ne přesná halda. Jedna síť XXXL (9 350 zařízení, seed 20261611), 96 h, šum 10×, `--engine v3 --v3-on sensor_strict,novelty,ops_class`, 1 vlákno:
+
+| cyklus | živá halda procesu | SQLite stav | profil hostů | detektor | beacon | inventář | egress | klientela | novost | ops_marks |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 47 | 813 MiB | 0,9 MB | 11,3 MB | 6,8 MB | 5,9 MB | 6,2 MB | 0,9 MB | 1,7 MB | 0 | 0 |
+| 95 | 876 MiB | 1,2 MB | 16,3 MB | 9,7 MB | 8,8 MB | 6,3 MB | 1,3 MB | 2,1 MB | 0 | 0 |
+| 143 | 921 MiB | 77,7 MB | 20,5 MB | 10,8 MB | 11,6 MB | 6,3 MB | 1,6 MB | 2,4 MB | 0,43 MB | 0 |
+| 191 | 924 MiB | 77,9 MB | 23,1 MB | 11,5 MB | 10,3 MB | 6,2 MB | 1,7 MB | 2,5 MB | 0,61 MB | 0 |
+
+Peak haldy této sítě je 1 054 MiB, stejná síť v `legacy` má 475 MiB. Po skončení sítě klesne živá halda na 0,2 MiB, takže mezi sítěmi nic nezůstává. Stav novosti a třídy provoz je malý (dohromady pod 3,2 MB JSON po 4 dnech na největší síti). Největší složky stavu v3 jsou SQLite (historie toků L0 po prvním zápisu, dál skoro neroste), profil hostů, detektor a beacon. Profil roste s dny pozorování a má vlastní strop a stáří (`profile.rs`). Zbytek haldy, zhruba 0,5 GiB i v `legacy`, tvoří simulace sítě a toky cyklu. Je úměrný velikosti sítě a šumu, ne délce běhu.
+
+Příčina 4+ GiB u druhého 72h běhu (`run-v3-72h-b`, PID 45080): ten běh používá binárku kroku 4 (`b3a6dd0`), která novost ani třídu provoz vůbec neobsahuje. Běží s 12 vlákny, tedy až 12 sítí současně, se směsí šumu až 50× a s 1,5 % sítí XXXL. Peak 4 692 MiB je součet souběžných sítí. Živá halda kolísá mezi 1,1 a 4,1 GiB a regrese v `status.md` trend neukazuje (−64 MiB/h, R² 0,24, u druhého běhu +26 MiB/h, R² 0,06). Únik to není a nové stropy nejsou potřeba. Pro běh s pevnou pamětí stačí snížit `--threads` nebo podíl XXXL a šumu 50×.
+
+### Co zůstává otevřené po kole 1
+
+- Další kolo review (kolo 2) je na hlavní konverzaci.
+- S2 a S4 jsou produkční pojistky, které simulace neprověří. Kalendář soaku novost nepokrývá a rozsah je vždy /24. Ověřují je jen jednotkové testy.
+- Diagnostika paměti měří JSON, ne skutečnou haldu po složkách. Přesný rozpad (dhat) by vyžadoval novou závislost, a tu jsem nepřidával.
+
+Commity kola 1: `65b2e0c` (S2), `3cf2ecd` (S3), `a571a15` (fmt), `1744631` (S5), `c563b9b` (S1, S4, S6), `29dfabb` (test zpětné kompatibility), `6bcfd8a` (clippy v testu), `0ab8c55` (diagnostika paměti) a commit této sekce.
