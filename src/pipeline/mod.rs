@@ -484,6 +484,24 @@ fn resort_and_recompute_lane_summary(report: &mut RunReport) {
         .count();
 }
 
+/// Krok 7 (C5): čas běhu při chronologickém přehrávání veřejného datasetu celou
+/// produkční cestou (`tools/replay_public.py`). Jen pro evaluaci: proměnná
+/// `BAKULA_REPLAY_NOW` (RFC 3339) nastaví začátek běhu na začátek přehrávaného okna,
+/// aby profil, novost a paměť nálezů běžely v čase dat. Bez proměnné nástěnné hodiny.
+fn replay_clock() -> Option<chrono::DateTime<Utc>> {
+    let value = std::env::var("BAKULA_REPLAY_NOW").ok()?;
+    match chrono::DateTime::parse_from_rfc3339(value.trim()) {
+        Ok(at) => {
+            tracing::warn!(%value, "cas behu z BAKULA_REPLAY_NOW (prehravani datasetu)");
+            Some(at.with_timezone(&Utc))
+        }
+        Err(error) => {
+            tracing::warn!(%value, %error, "neplatne BAKULA_REPLAY_NOW, pouzit aktualni cas");
+            None
+        }
+    }
+}
+
 pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     let args = prepare_pipeline_args(args)?;
     fs::create_dir_all(&args.workspace)?;
@@ -501,7 +519,7 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
         );
     }
 
-    let start = Utc::now();
+    let start = replay_clock().unwrap_or_else(Utc::now);
     if args.hloubkove_overeni {
         let _ = automation::update_runtime_phase(
             &args.workspace,
