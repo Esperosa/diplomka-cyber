@@ -202,3 +202,108 @@ fn v3_behavior_layer_reports_outbound_ids_alert_and_persists_state() {
         "legacy odchozi alert nevidi"
     );
 }
+
+/// Krok 7 (A3): jedno produkční automatické zavření kontextem projde vzorkem pro
+/// člověka, verdiktem „omyl“ (API zapisuje do append-only tabulky), trvalým vypnutím
+/// druhu kontextu a restartem procesu (vypnutí platí dál, druh už nezavírá). Report
+/// nese stav auditu a degradaci pokrytí (A4).
+#[test]
+fn v3_closure_audit_samples_review_disables_kind_and_survives_restart() {
+    let temp = TempDir::new().unwrap();
+    let scenarios = temp.path().join("simulace");
+    generate(&scenarios);
+    let workspace = temp.path().join("ws-v3");
+    fs::create_dir_all(&workspace).unwrap();
+    fs::write(workspace.join("bakula.toml"), "[engine]\nmode = \"v3\"\n").unwrap();
+    fs::write(
+        workspace.join("closure-audit.json"),
+        r#"{"sample_rate": 1.0, "min_samples": 1}"#,
+    )
+    .unwrap();
+    let now = chrono::Utc::now();
+    let hosts: Vec<String> = (1..255).map(|i| format!("192.168.56.{i}")).collect();
+    let entry = serde_json::json!([{
+        "kind": "maintenance",
+        "hosts": hosts,
+        "sources": [],
+        "start": (now - chrono::Duration::days(2)).to_rfc3339(),
+        "end": (now + chrono::Duration::days(2)).to_rfc3339(),
+        "covers": [
+            "connection_timeout_burst", "service_unreachable", "inductive_volume_anomaly",
+            "packet_rate_spike", "unexpected_traffic", "unmapped_passive_event",
+            "service_overload_risk", "external_flow_observed", "multi_target_pattern"
+        ],
+        "approved_by": "spravce",
+        "expires": (now + chrono::Duration::days(3)).to_rfc3339()
+    }]);
+    fs::write(workspace.join("context-calendar.json"), entry.to_string()).unwrap();
+    run(&workspace, &scenarios, "prvni");
+    let runs = reports(&workspace);
+    let first = dispositions(&runs[0]);
+    assert!(
+        first.iter().any(|d| d == "auto_resolved"),
+        "ocekavano automaticke zavreni kontextem: {first:?}"
+    );
+    assert!(
+        runs[0]["coverageStatus"]["reasons"].is_array(),
+        "A4 pole v reportu"
+    );
+    let pending = runs[0]["closureAudit"]["pending"].as_u64().unwrap();
+    assert!(
+        pending >= 1,
+        "zavreni je ve vzorku: {}",
+        runs[0]["closureAudit"]
+    );
+
+    // clovek oznaci prvni vzorek jako omyl (cesta API)
+    let db = workspace.join("engine-state.sqlite");
+    {
+        let store = bakula_program::engine_state::EngineStateStore::open(&db).unwrap();
+        let audit: bakula_program::closure_audit::ClosureAudit =
+            store.load("closure_audit").unwrap().unwrap();
+        let sample = &audit.samples[0];
+        assert_eq!(sample.kind, "maintenance");
+        bakula_program::closure_audit::submit_review(
+            store.conn(),
+            sample.id,
+            true,
+            "analytik",
+            "skryty utok",
+            chrono::Utc::now(),
+        )
+        .unwrap();
+    }
+    run(&workspace, &scenarios, "druhy");
+    run(&workspace, &scenarios, "treti");
+    let runs = reports(&workspace);
+    for report in &runs[1..] {
+        let disabled = report["closureAudit"]["disabled"].as_array().unwrap();
+        assert!(
+            disabled.iter().any(|k| k == "maintenance"),
+            "vypnuti druhu prezije restart: {}",
+            report["closureAudit"]
+        );
+        assert!(
+            report["findingLifecycle"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|r| r["disposition"] != "auto_resolved"),
+            "vypnuty druh uz nezavira"
+        );
+    }
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    let actions: Vec<String> = conn
+        .prepare("SELECT action FROM finding_audit")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    for needed in ["audit_sample", "audit_review", "audit_disable"] {
+        assert!(
+            actions.iter().any(|a| a == needed),
+            "{needed} v auditu: {actions:?}"
+        );
+    }
+}

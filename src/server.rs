@@ -128,6 +128,13 @@ pub async fn serve_with_config(addr: SocketAddr, config: AppConfig) -> Result<()
             "/runs/{run_id}/findings/{finding_id}/verdict",
             post(post_finding_verdict),
         )
+        .route("/closure-audit", get(get_closure_audit))
+        .route("/closure-audit/{id}/review", post(post_closure_review))
+        .route(
+            "/closure-audit/kinds/{kind}/enable",
+            post(post_closure_enable),
+        )
+        .route("/novelty/consent", post(post_novelty_consent))
         .route("/platform/cluster", get(get_platform_cluster))
         .route("/platform/jobs", get(get_platform_jobs))
         .route("/platform/users", get(get_platform_users))
@@ -1122,6 +1129,168 @@ async fn post_finding_verdict(
             Json(serde_json::json!({ "recorded": status, "estimate": estimate })).into_response()
         }
         Ok(None) => error_response(StatusCode::NOT_FOUND, "Nalez v tomto behu neexistuje."),
+        Err(response) => response,
+    }
+}
+
+/// Krok 7 (A3): stav provozního auditu automatických uzavření a čekající vzorky.
+async fn get_closure_audit(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if let Err(error) = authorize_for(&headers, &state, &["runs.read"]) {
+        return pair_to_response(error);
+    }
+    let root = state.workspace_root.clone();
+    match run_blocking(move || {
+        let store = crate::engine_state::EngineStateStore::open(&root.join("engine-state.sqlite"))?;
+        let audit: crate::closure_audit::ClosureAudit =
+            store.load("closure_audit")?.unwrap_or_default();
+        let policy = crate::closure_audit::AuditPolicy::load(&root)?;
+        let now = Utc::now();
+        Ok(serde_json::json!({
+            "status": audit.status(&policy, now),
+            "policy": policy,
+            "samples": audit.samples,
+            "note": "Vypnuti druhu znamena dolni mez Wilsonova intervalu omylu nad cilem; nevypnuty druh nema prokazanou chybovost pod cilem.",
+        }))
+    })
+    .await
+    {
+        Ok(value) => Json(value).into_response(),
+        Err(response) => response,
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ClosureReviewBody {
+    wrong: bool,
+    #[serde(default)]
+    note: String,
+}
+
+/// Krok 7 (A3): ověřený verdikt člověka ke vzorku zavření (započte se při dalším běhu).
+async fn post_closure_review(
+    State(state): State<AppState>,
+    Path(id): Path<u64>,
+    headers: HeaderMap,
+    Json(body): Json<ClosureReviewBody>,
+) -> Response {
+    let auth = match authorize_for(&headers, &state, &["findings.write"]) {
+        Ok(auth) => auth,
+        Err(error) => return pair_to_response(error),
+    };
+    if let Err(error) = ensure_csrf_guard_header(&auth, &headers) {
+        return pair_to_response(error);
+    }
+    let root = state.workspace_root.clone();
+    let actor = auth.subject.clone();
+    match run_blocking(move || {
+        let store = crate::engine_state::EngineStateStore::open(&root.join("engine-state.sqlite"))?;
+        let audit: crate::closure_audit::ClosureAudit =
+            store.load("closure_audit")?.unwrap_or_default();
+        if !audit.samples.iter().any(|s| s.id == id) {
+            return Ok(None);
+        }
+        crate::closure_audit::submit_review(
+            store.conn(),
+            id,
+            body.wrong,
+            &actor,
+            &body.note,
+            Utc::now(),
+        )
+        .map(Some)
+    })
+    .await
+    {
+        Ok(Some(row)) => Json(serde_json::json!({ "recorded": row })).into_response(),
+        Ok(None) => error_response(
+            StatusCode::NOT_FOUND,
+            "Vzorek neexistuje nebo uz byl posouzen.",
+        ),
+        Err(response) => response,
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct NoteBody {
+    #[serde(default)]
+    note: String,
+}
+
+/// Krok 7 (A3): člověk vrací trvale vypnutý druh automatického zavírání do provozu.
+async fn post_closure_enable(
+    State(state): State<AppState>,
+    Path(kind): Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<NoteBody>,
+) -> Response {
+    let auth = match authorize_for(&headers, &state, &["findings.write"]) {
+        Ok(auth) => auth,
+        Err(error) => return pair_to_response(error),
+    };
+    if let Err(error) = ensure_csrf_guard_header(&auth, &headers) {
+        return pair_to_response(error);
+    }
+    if kind != crate::closure_audit::LADDER_KIND
+        && crate::context_gate::ContextKind::from_label(&kind).is_none()
+    {
+        return error_response(StatusCode::UNPROCESSABLE_ENTITY, "Neznamy druh zavirani.");
+    }
+    let root = state.workspace_root.clone();
+    let actor = auth.subject.clone();
+    match run_blocking(move || {
+        let store = crate::engine_state::EngineStateStore::open(&root.join("engine-state.sqlite"))?;
+        crate::closure_audit::submit_enable(store.conn(), &kind, &actor, &body.note, Utc::now())
+    })
+    .await
+    {
+        Ok(row) => Json(serde_json::json!({ "recorded": row })).into_response(),
+        Err(response) => response,
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ConsentBody {
+    host: String,
+    peer: String,
+    proto: String,
+    port: u16,
+    days: i64,
+    #[serde(default)]
+    note: String,
+}
+
+/// Krok 7 (B5): úzký expirující souhlas s novou vazbou ven (nejvýš 30 dní).
+async fn post_novelty_consent(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<ConsentBody>,
+) -> Response {
+    let auth = match authorize_for(&headers, &state, &["findings.write"]) {
+        Ok(auth) => auth,
+        Err(error) => return pair_to_response(error),
+    };
+    if let Err(error) = ensure_csrf_guard_header(&auth, &headers) {
+        return pair_to_response(error);
+    }
+    let root = state.workspace_root.clone();
+    let actor = auth.subject.clone();
+    match run_blocking(move || {
+        let store = crate::engine_state::EngineStateStore::open(&root.join("engine-state.sqlite"))?;
+        crate::novelty_consent::grant(
+            store.conn(),
+            &body.host,
+            &body.peer,
+            &body.proto,
+            body.port,
+            body.days,
+            &actor,
+            &body.note,
+            Utc::now(),
+        )
+    })
+    .await
+    {
+        Ok(expires) => Json(serde_json::json!({ "expires": expires })).into_response(),
         Err(response) => response,
     }
 }

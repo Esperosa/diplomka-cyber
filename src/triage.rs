@@ -290,6 +290,8 @@ mod tests {
             diff: None,
             finding_lifecycle: Vec::new(),
             verification_decisions: Vec::new(),
+            closure_audit: None,
+            coverage_status: None,
         }
     }
 

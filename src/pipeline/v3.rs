@@ -322,6 +322,19 @@ impl V3Session {
         };
         let mut behavior_signal: std::collections::HashMap<String, (u32, Vec<String>)> =
             Default::default();
+        let mut consented_pairs: Vec<(String, Vec<String>)> = Vec::new();
+        // krok 7 (B1, B4): klientela sluzeb a dukazy okna (pred ucenim z tohoto okna)
+        let ops_policy = crate::ops_evidence::OpsPolicy::default();
+        let mut clientele: crate::ops_evidence::Clientele = if self.engine.ops_evidence() {
+            self.store.load("clientele")?.unwrap_or_default()
+        } else {
+            Default::default()
+        };
+        let ops_window = self
+            .behavior_flows
+            .as_ref()
+            .filter(|_| self.engine.ops_evidence())
+            .map(|flows| clientele.evidence(&flows.to_scope, now.timestamp(), &ops_policy));
         if let Some(flows) = self.behavior_flows.as_ref() {
             let out = crate::behavior::run_window(
                 &mut behavior_state,
@@ -342,7 +355,23 @@ impl V3Session {
                     "odchozi toky vzorkovany po dvojici"
                 );
             }
+            // krok 7 (B5): souhlas cloveka s presnou dvojici potlaci jen novy poplach
+            // novosti; dvojice zustava pro uceni profilu zmrazena (zadne uceni z trvani)
+            let consents: std::collections::HashSet<String> = if self.engine.saas_group() {
+                crate::novelty_consent::active(self.store.conn(), now)?
+                    .iter()
+                    .map(crate::novelty_consent::Consent::pair_key)
+                    .collect()
+            } else {
+                Default::default()
+            };
             for item in out.findings {
+                if let Some(pair) = crate::novelty_consent::finding_pair(&item.finding)
+                    && consents.contains(&pair)
+                {
+                    consented_pairs.push((item.actor.clone(), item.sources.clone()));
+                    continue;
+                }
                 behavior_signal.insert(item.finding.finding_id.clone(), (item.count, item.sources));
                 report.findings.push(item.finding);
             }
@@ -353,7 +382,23 @@ impl V3Session {
                 .findings
                 .dedup_by(|l, r| l.finding_id == r.finding_id);
         }
+        // krok 7 (B4): agregace pres zdroje (jen podezreni, chraneny typ)
+        if self.engine.cross_source()
+            && let Some(window) = ops_window.as_ref()
+        {
+            for (finding, count, top, _) in crate::ops_evidence::distributed_findings(window) {
+                behavior_signal.insert(finding.finding_id.clone(), (count, top));
+                report.findings.push(finding);
+            }
+            report
+                .findings
+                .sort_by(|l, r| l.finding_id.cmp(&r.finding_id));
+            report
+                .findings
+                .dedup_by(|l, r| l.finding_id == r.finding_id);
+        }
         if !self.engine.memory() {
+            report.coverage_status = Some(self.coverage(report, &behavior_state, false, now));
             if self.engine.behavior() {
                 self.store.save("behavior", &behavior_state)?;
             }
@@ -369,6 +414,59 @@ impl V3Session {
         }
         let mut gate = ContextGate::new(GatePolicy::for_engine(&self.engine));
         let mut memory = FindingMemory::load(self.store.conn(), self.engine.memory_config())?;
+        // krok 7 (A3): provozni audit uzavreni (vzorky, verdikty cloveka, trvale vypnuti,
+        // fail-safe po terminu nebo pri backlogu)
+        let audit_policy = crate::closure_audit::AuditPolicy::load(workspace)?;
+        let mut audit: crate::closure_audit::ClosureAudit =
+            self.store.load("closure_audit")?.unwrap_or_default();
+        audit.ensure_secret();
+        for event in audit.apply_reviews(self.store.conn(), &audit_policy)? {
+            use crate::closure_audit::AuditEvent;
+            match event {
+                AuditEvent::Reviewed {
+                    sample,
+                    wrong,
+                    actor,
+                } => memory.record(
+                    now,
+                    &actor,
+                    "audit_review",
+                    &sample.key,
+                    &format!("vzorek {} ({}): omyl={wrong}", sample.id, sample.kind),
+                ),
+                AuditEvent::Disabled { kind, n, wrong } => {
+                    tracing::warn!(%kind, n, wrong, "druh automatickeho zavirani trvale vypnut");
+                    memory.record(
+                        now,
+                        "engine",
+                        "audit_disable",
+                        &crate::finding_memory::FindingKey::new("-", &kind, "-"),
+                        &format!("{wrong} omylu z {n} recenzi, dolni mez Wilsona nad cilem"),
+                    );
+                }
+                AuditEvent::Enabled { kind, actor } => memory.record(
+                    now,
+                    &actor,
+                    "audit_enable",
+                    &crate::finding_memory::FindingKey::new("-", &kind, "-"),
+                    "druh obnoven clovekem",
+                ),
+            }
+        }
+        let auto_allowed = audit.auto_close_allowed(&audit_policy, now);
+        if !auto_allowed {
+            tracing::warn!(
+                pending = audit.samples.len(),
+                overdue = audit.overdue(now),
+                "fail-safe: automaticke zavirani zastaveno (recenze po terminu nebo backlog)"
+            );
+        }
+        for kind in crate::context_gate::ContextKind::ALL {
+            if !auto_allowed || audit.is_disabled(kind.label()) {
+                gate.disable(kind);
+            }
+        }
+        let ladder_closes = auto_allowed && !audit.is_disabled(crate::closure_audit::LADDER_KIND);
         let services: std::collections::HashMap<&str, &crate::model::ServiceReport> = report
             .hosts
             .iter()
@@ -506,6 +604,25 @@ impl V3Session {
                 disposition,
                 crate::finding_memory::Disposition::AutoResolved(_)
             );
+            if let (crate::finding_memory::Disposition::AutoResolved(reason), Some(kind)) =
+                (&disposition, explanation.as_ref().map(|e| e.kind))
+                && let Some(sample) = audit.maybe_sample(
+                    &audit_policy,
+                    kind.label(),
+                    &key,
+                    &finding.finding_id,
+                    reason,
+                    now,
+                )
+            {
+                memory.record(
+                    now,
+                    "engine",
+                    "audit_sample",
+                    &key,
+                    &format!("vzorek {} do {}", sample.id, sample.deadline),
+                );
+            }
             if ladder_on && behavioral && !auto_closed {
                 if disposition.displayed() {
                     let service_key_full = finding.service_key.as_deref().unwrap_or("-");
@@ -615,8 +732,34 @@ impl V3Session {
             for decision in &decisions {
                 use crate::verify_ladder::Status;
                 match decision.status {
+                    Status::Refuted if !ladder_closes => {
+                        // krok 7 (A3): fail-safe nebo vypnuty druh, rozhodnuti jde cloveku
+                        memory.note(
+                            &decision.key,
+                            "verify_escalate",
+                            &format!("audit uzavreni: vyvraceni pozastaveno; {}", decision.reason),
+                            now,
+                        );
+                    }
                     Status::Refuted => {
-                        memory.refute(&decision.key, &decision.reason, now);
+                        if memory.refute(&decision.key, &decision.reason, now)
+                            && let Some(sample) = audit.maybe_sample(
+                                &audit_policy,
+                                crate::closure_audit::LADDER_KIND,
+                                &decision.key,
+                                &decision.finding_id,
+                                &decision.reason,
+                                now,
+                            )
+                        {
+                            memory.record(
+                                now,
+                                "engine",
+                                "audit_sample",
+                                &decision.key,
+                                &format!("vzorek {} do {}", sample.id, sample.deadline),
+                            );
+                        }
                     }
                     Status::Confirmed => {
                         memory.confirm(&decision.key, "verify_ladder", now);
@@ -629,7 +772,13 @@ impl V3Session {
             }
             report.verification_decisions = decisions
                 .iter()
-                .map(crate::verify_ladder::DecisionRecord::from)
+                .map(|d| {
+                    let mut record = crate::verify_ladder::DecisionRecord::from(d);
+                    if record.status == crate::verify_ladder::Status::Refuted && !ladder_closes {
+                        record.status = crate::verify_ladder::Status::Escalated;
+                    }
+                    record
+                })
                 .collect();
             self.store.save("ladder", &ladder)?;
             // L0: zapsat okno do historie; klice s alarmem v tomto behu se neuci
@@ -663,7 +812,13 @@ impl V3Session {
                         .iter()
                         .zip(&signal_sources)
                         .filter(|(f, _)| !crate::finding_kinds::is_static_exposure(&f.finding_type))
-                        .filter_map(|(f, s)| f.host_key.as_deref().map(|h| (h, s.as_slice()))),
+                        .filter_map(|(f, s)| f.host_key.as_deref().map(|h| (h, s.as_slice())))
+                        // krok 7 (B5): souhlasena dvojice se z trvani nenauci
+                        .chain(
+                            consented_pairs
+                                .iter()
+                                .map(|(h, s)| (h.as_str(), s.as_slice())),
+                        ),
                 );
                 crate::behavior::learn_profile(
                     &mut behavior_state,
@@ -681,16 +836,11 @@ impl V3Session {
         }
         // krok 6 (kandidat 2): zobrazeny nalez s dukazem provozni priciny jde do fronty
         // provoz (zaznam v zivotnim cyklu), nic se nezavira
-        if self.engine.ops_class()
-            && let Some(flows) = self.behavior_flows.as_ref()
-        {
-            let policy = crate::ops_evidence::OpsPolicy::default();
-            let mut clientele: crate::ops_evidence::Clientele =
-                self.store.load("clientele")?.unwrap_or_default();
+        if let (Some(flows), Some(window)) = (self.behavior_flows.as_ref(), ops_window.as_ref()) {
+            let policy = ops_policy.clone();
             let mut marks: crate::ops_evidence::OpsMarks =
                 self.store.load("ops_marks")?.unwrap_or_default();
             let at = now.timestamp();
-            let window = clientele.evidence(&flows.to_scope, at, &policy);
             let mut frozen = std::collections::HashSet::new();
             for ((finding, record), sources) in report
                 .findings
@@ -705,7 +855,7 @@ impl V3Session {
                 let (_, key_ip) = split_service_key(service_key.unwrap_or("-"));
                 let host_ip = finding.host_key.as_deref().unwrap_or(key_ip);
                 let fresh = crate::ops_evidence::classify(
-                    &window,
+                    window,
                     &finding.finding_type,
                     service_key,
                     host_ip,
@@ -723,8 +873,12 @@ impl V3Session {
                     sources,
                     escalated,
                 );
-                if record.displayed {
+                // krok 7 (A1): chraneny nalez fronta provoz neodkloni; (B1) anotace
+                if record.displayed && self.engine.ops_class() && record.protection.is_none() {
                     record.ops_reason = reason.map(str::to_string);
+                }
+                if record.displayed && self.engine.ops_annotate() {
+                    record.ops_note = reason.map(str::to_string);
                 }
             }
             marks.sweep(at);
@@ -734,7 +888,65 @@ impl V3Session {
         }
         memory.sweep(now);
         memory.flush(self.store.conn_mut())?;
+        self.store.save("closure_audit", &audit)?;
+        report.closure_audit = Some(audit.status(&audit_policy, now));
+        report.coverage_status = Some(self.coverage(report, &behavior_state, sensor_gap, now));
         report.finding_lifecycle = lifecycle;
         Ok(())
+    }
+
+    /// Krok 7 (A4): degradace pokrytí z dat běhu.
+    fn coverage(
+        &self,
+        report: &RunReport,
+        behavior: &crate::behavior::BehaviorState,
+        sensor_gap: bool,
+        now: DateTime<Utc>,
+    ) -> crate::coverage_status::CoverageStatus {
+        use crate::coverage_status::{CoverageInput, ICS_PORTS, assess};
+        let mut hosts: std::collections::BTreeSet<&str> = Default::default();
+        let mut flows_in_window = 0usize;
+        let mut ics_flows = 0usize;
+        if let Some(flows) = self.behavior_flows.as_ref() {
+            for flow in flows.outbound.iter().chain(flows.internal.iter()) {
+                flows_in_window += 1;
+                if let Some(src) = flow.src_ip.as_deref() {
+                    hosts.insert(src);
+                }
+            }
+            for flow in flows.internal.iter().chain(flows.to_scope.iter()) {
+                if flow.dst_port.is_some_and(|p| ICS_PORTS.contains(&p)) {
+                    ics_flows += 1;
+                }
+            }
+            flows_in_window = flows_in_window.max(flows.to_scope.len());
+        }
+        let immature_hosts = hosts
+            .iter()
+            .filter(|h| {
+                behavior.profile.host_first(h).is_none_or(|first| {
+                    now.timestamp() - first < crate::protection::PROFILE_MATURE_S
+                })
+            })
+            .count();
+        let ics_devices = report
+            .hosts
+            .iter()
+            .filter(|h| h.services.iter().any(|s| ICS_PORTS.contains(&s.port)))
+            .count();
+        assess(&CoverageInput {
+            ids_configured: report.run.sources.suricata_eve.is_some(),
+            sensor_gap,
+            flows_in_window,
+            observed_hosts: hosts.len(),
+            immature_hosts: if self.engine.profile() {
+                immature_hosts
+            } else {
+                0
+            },
+            ics_devices,
+            ics_flows,
+            protect: self.engine.protect(),
+        })
     }
 }

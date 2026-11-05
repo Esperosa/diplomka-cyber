@@ -136,6 +136,21 @@ pub struct RunReport {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub verification_decisions: Vec<crate::verify_ladder::DecisionRecord>,
+    /// Krok 7 (A3): stav provozního auditu automatických uzavření (vzorky, vypnuté
+    /// druhy, fail-safe). Jen v3 s pamětí nálezů.
+    #[serde(
+        default,
+        rename = "closureAudit",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub closure_audit: Option<crate::closure_audit::AuditStatus>,
+    /// Krok 7 (A4): degradace pokrytí a blokační příznak nasazení. Jen v3.
+    #[serde(
+        default,
+        rename = "coverageStatus",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub coverage_status: Option<crate::coverage_status::CoverageStatus>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

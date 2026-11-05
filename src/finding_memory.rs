@@ -958,6 +958,9 @@ pub struct LifecycleRecord {
     /// ambiguous): nález se nikdy automaticky nezavře a vždy se zobrazí.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protection: Option<String>,
+    /// Krok 7 (B1): provozní příčina jen jako anotace (nález zůstává podezřením).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ops_note: Option<String>,
 }
 
 impl LifecycleRecord {
@@ -987,6 +990,7 @@ impl LifecycleRecord {
             occurrences: entry.map(|e| e.occurrences).unwrap_or(1),
             ops_reason: None,
             protection: None,
+            ops_note: None,
         }
     }
 }
