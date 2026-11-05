@@ -483,6 +483,18 @@ mod tests {
         assert_eq!(state.fanout["10.0.0.5"].recent.len(), 8);
     }
 
+    /// Zpetna kompatibilita: behavioralni stav pred krokem 6 (bez `novelty`) a prahy
+    /// bez `fanout_cap` se nactou s vychozimi hodnotami.
+    #[test]
+    fn old_behavior_state_and_thresholds_load() {
+        let mut value = serde_json::to_value(crate::behavior::BehaviorState::default()).unwrap();
+        value.as_object_mut().unwrap().remove("novelty");
+        let old: crate::behavior::BehaviorState = serde_json::from_value(value).unwrap();
+        assert!(old.novelty.pairs.is_empty() && old.novelty.fanout.is_empty());
+        let t: NoveltyThresholds = serde_json::from_str(r#"{"fanout_min":8}"#).unwrap();
+        assert_eq!((t.fanout_min, t.fanout_cap), (8, 256));
+    }
+
     #[test]
     fn state_is_capped_and_serializable() {
         let profile = mature_profile("10.0.0.5");
