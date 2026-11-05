@@ -216,8 +216,10 @@ pub fn detect(
         let host = state.fanout.entry(src.clone()).or_default();
         host.last = now;
         host.recent.retain(|(at, _)| now - at < t.fanout_span_s);
-        // deterministicky strop (vztahy jdou serazene z BTreeSet), prah zustava dosazitelny
+        // deterministicky strop (vztahy jdou serazene z BTreeSet), prah zustava dosazitelny;
+        // obnoveny vektor nad stropem se nejdriv orizne (review kola 2, S5)
         let cap = t.fanout_cap.max(t.fanout_min);
+        host.recent.truncate(cap);
         for relation in relations {
             if host.recent.len() >= cap {
                 break;
@@ -268,9 +270,13 @@ pub fn detect(
         });
     }
     state.pairs.retain(|_, p| now - p.last <= t.idle_s);
-    state
-        .fanout
-        .retain(|_, h| now - h.last <= t.fanout_span_s.max(t.idle_s));
+    // strop i na existujicich vektorech (obnoveny stav, snizeny strop, neaktivni hoste):
+    // ponechat nejstarsi vlozene vazby, deterministicky (review kola 2, S5)
+    let cap = t.fanout_cap.max(t.fanout_min);
+    state.fanout.retain(|_, h| {
+        h.recent.truncate(cap);
+        now - h.last <= t.fanout_span_s.max(t.idle_s)
+    });
     state.evicted += evict_oldest(&mut state.pairs, t.max_pairs, |p| p.last) as u64;
     state.evicted += evict_oldest(&mut state.fanout, t.max_hosts, |h| h.last) as u64;
     out
@@ -481,6 +487,62 @@ mod tests {
         let found = detect(&mut state, &profile, &prevalence, &low, &[], &flood, now);
         assert_eq!(found.len(), 1);
         assert_eq!(state.fanout["10.0.0.5"].recent.len(), 8);
+    }
+
+    /// Review kola 2 (S5): strop plati i pro obnoveny vektor nad stropem a pro
+    /// neaktivniho hostitele, ktery v okne nema zadnou novou vazbu.
+    #[test]
+    fn restored_and_idle_fanout_vectors_are_trimmed() {
+        let profile = mature_profile("10.0.0.5");
+        let prevalence = Prevalence::default();
+        let now = T0 + 3 * 86_400;
+        let big = || Fanout {
+            last: now - 1800,
+            recent: (0..1000)
+                .map(|k| (now - 1800, format!("10.2.{}.{}|tcp/445", k / 250, k % 250)))
+                .collect(),
+        };
+        let mut state = NoveltyState::default();
+        state.fanout.insert("10.0.0.5".into(), big());
+        state.fanout.insert("10.0.0.6".into(), big());
+        // obnova ze serializovaneho stavu
+        let mut state: NoveltyState =
+            serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+        let t = NoveltyThresholds {
+            fanout_min: 8,
+            fanout_cap: 64,
+            ..Default::default()
+        };
+        // aktivni host 10.0.0.5 s jednou novou vazbou, 10.0.0.6 bez provozu
+        let flows = [conn("10.0.0.5", "10.3.0.1", 445, now)];
+        detect(&mut state, &profile, &prevalence, &t, &[], &flows, now);
+        for host in ["10.0.0.5", "10.0.0.6"] {
+            let recent = &state.fanout[host].recent;
+            assert_eq!(recent.len(), 64, "{host}");
+            assert_eq!(
+                recent[0].1, "10.2.0.0|tcp/445",
+                "{host}: nejstarsi zustavaji"
+            );
+        }
+        // i s vypnutym novel_fanout (vychozi prahy) se obnoveny vektor orizne
+        let mut off: NoveltyState = serde_json::from_str(
+            &serde_json::to_string(&NoveltyState {
+                fanout: [("10.0.0.7".to_string(), big())].into(),
+                ..Default::default()
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        detect(
+            &mut off,
+            &profile,
+            &prevalence,
+            &NoveltyThresholds::default(),
+            &[],
+            &[],
+            now,
+        );
+        assert_eq!(off.fanout["10.0.0.7"].recent.len(), 256);
     }
 
     /// Zpetna kompatibilita: behavioralni stav pred krokem 6 (bez `novelty`) a prahy
