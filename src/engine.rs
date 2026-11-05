@@ -161,17 +161,26 @@ impl V3Features {
     /// grafu nových hran (`pivot_chain`), který v A/B kroku 4 na ladicích seedech
     /// přidal +3,7 % zobrazených FP při zisku detekce jen u malých rodin
     /// (impl-krok4.md, A). Graf zůstává volitelný.
-    /// Změny kroku 6 jsou mimo preset, dokud je nevybere předregistrované A/B
-    /// (impl-krok6.md, B5).
+    /// Krok 6 (impl-krok6.md, C a D): do presetu patří vybraná sestava předregistrovaného
+    /// A/B, přísný výpadek senzoru a novost vztahů (bez `novel_fanout`). Na držených
+    /// seedech zavřeno omylem 6,7 → 2,5 %, detekce +0,5 p. b., FP × 1,06. Třída provoz,
+    /// kontext jen se zdrojem a graf zůstávají volitelné (neprošly B5).
     pub fn recommended() -> Self {
         Self {
             peers: false,
             graph: false,
-            sensor_strict: false,
             ops_class: false,
-            novelty: false,
             context_guard: false,
             ..Self::all()
+        }
+    }
+
+    /// Preset po kroku 5 (bez změn kroku 6), pro párové srovnání.
+    pub fn step5() -> Self {
+        Self {
+            sensor_strict: false,
+            novelty: false,
+            ..Self::recommended()
         }
     }
 
@@ -208,7 +217,7 @@ impl V3Features {
             interactive: false,
             graph: false,
             profile: false,
-            ..Self::recommended()
+            ..Self::step5()
         }
     }
 
@@ -472,8 +481,13 @@ mod tests {
         };
         assert!(k6.sensor_strict() && k6.ops_class() && k6.novelty() && k6.context_guard());
         let preset = EngineConfig::v3();
-        assert!(!preset.sensor_strict() && !preset.ops_class() && !preset.novelty());
-        assert!(!preset.context_guard());
+        assert!(preset.sensor_strict() && preset.novelty());
+        assert!(!preset.ops_class() && !preset.context_guard());
+        let step5 = EngineConfig {
+            mode: EngineMode::V3,
+            v3: V3Features::step5(),
+        };
+        assert!(!step5.sensor_strict() && !step5.novelty());
         let no_profile = EngineConfig {
             mode: EngineMode::V3,
             v3: V3Features::recommended()
