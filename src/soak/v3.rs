@@ -162,7 +162,7 @@ impl V3Runtime {
         self.store.save("identity", &self.identity)?;
         self.store.save("ladder", &self.ladder)?;
         self.store.save("behavior", &self.behavior)?;
-        if self.engine.ops_class() {
+        if self.engine.ops_evidence() {
             self.store.save("clientele", &self.clientele)?;
             self.store.save("ops_marks", &self.ops_marks)?;
         }
@@ -188,7 +188,7 @@ impl V3Runtime {
         self.ladder.calibrator = calibrator;
         self.history = crate::flow_history::FlowHistory::load(self.store.conn())?;
         self.behavior = self.store.load("behavior")?.unwrap_or_default();
-        if self.engine.ops_class() {
+        if self.engine.ops_evidence() {
             self.clientele = self.store.load("clientele")?.unwrap_or_default();
             self.ops_marks = self.store.load("ops_marks")?.unwrap_or_default();
         }

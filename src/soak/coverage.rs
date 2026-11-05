@@ -33,6 +33,8 @@ pub enum CoverageMode {
     Tuning,
     /// Drzeny svet: vse vcetne drzenych urovni, poruch a kampani.
     Full,
+    /// Krok 7: `Full` + nove drzene parametricke varianty (impl-krok7.md, B1).
+    K7,
 }
 
 impl CoverageMode {
@@ -48,8 +50,9 @@ impl std::str::FromStr for CoverageMode {
             "off" => Ok(CoverageMode::Off),
             "tuning" => Ok(CoverageMode::Tuning),
             "full" => Ok(CoverageMode::Full),
+            "k7" => Ok(CoverageMode::K7),
             other => Err(format!(
-                "neznamy svet pokryti {other} (off | tuning | full)"
+                "neznamy svet pokryti {other} (off | tuning | full | k7)"
             )),
         }
     }
@@ -125,6 +128,8 @@ pub struct TruthCoverage {
     pub acc: f64,
     /// Pocitadlo toku utocnika pro rozdeleni po rade mezi zdroje.
     pub split: u64,
+    /// Krok 7: drzena varianta poruchy sveta `k7`.
+    pub variant: Option<&'static str>,
 }
 
 /// Sablony kampani (A2): rodiny v poradi, drzena = obsahuje drzenou rodinu.
@@ -293,7 +298,9 @@ pub fn plan_coverage(
     if !mode.on() {
         return;
     }
-    let full = mode == CoverageMode::Full;
+    // k7 obsahuje cely drzeny svet `full` a k nemu nove urovne (vlastni vetev vyberu)
+    let k7 = mode == CoverageMode::K7;
+    let full = mode == CoverageMode::Full || k7;
     let mut rng = Rng::new(derive(model.seed, 0xC0E5_5005));
     let cycles = hours * 2;
     let days = hours as f64 / 24.0;
@@ -330,17 +337,37 @@ pub fn plan_coverage(
         let top = (clients.len() / 5).max(1).min(clients.len());
         clients.into_iter().take(top).map(|(_, d)| d).collect()
     };
-    let tempos: &[f64] = if full {
+    let tempos: &[f64] = if k7 {
+        &[0.125, 0.25, 0.5, 2.0, 4.0, 8.0, 16.0]
+    } else if full {
         &[0.25, 0.5, 2.0, 4.0, 8.0]
     } else {
         &[0.5, 2.0, 4.0]
     };
-    let jitters: &[f64] = if full {
+    let jitters: &[f64] = if k7 {
+        &[0.15, 0.3, 0.5, 0.7]
+    } else if full {
         &[0.15, 0.3, 0.5]
     } else {
         &[0.15, 0.3]
     };
-    let sources: &[u8] = if full { &[3, 10] } else { &[3] };
+    let sources: &[u8] = if k7 {
+        &[3, 10, 30]
+    } else if full {
+        &[3, 10]
+    } else {
+        &[3]
+    };
+    let durations: &[f64] = if k7 {
+        &[0.25, 0.5, 2.0, 4.0, 8.0]
+    } else {
+        &[0.5, 2.0, 4.0]
+    };
+    let volumes: &[f64] = if k7 {
+        &[0.125, 0.25, 0.5, 2.0, 4.0]
+    } else {
+        &[0.25, 0.5, 2.0]
+    };
     let mut blended_starts: Vec<u32> = Vec::new();
     for truth in truths.iter_mut() {
         let Kind::Attack(family) = truth.kind else {
@@ -351,12 +378,14 @@ pub fn plan_coverage(
             tempo: pick_level(&mut rng, 1.0, tempos),
             jitter: pick_level(&mut rng, 0.0, jitters),
             sources: pick_level(&mut rng, 1, sources),
-            duration: pick_level(&mut rng, 1.0, &[0.5, 2.0, 4.0]),
-            volume: pick_level(&mut rng, 1.0, &[0.25, 0.5, 2.0]),
+            duration: pick_level(&mut rng, 1.0, durations),
+            volume: pick_level(&mut rng, 1.0, volumes),
             off_hours: rng.chance(0.3) && !stage,
             blend: rng.chance(0.3),
         };
-        let intensity = if full {
+        let intensity = if k7 {
+            rng.range_f(0.02, 1.0)
+        } else if full {
             rng.range_f(0.05, 1.0)
         } else {
             rng.range_f(0.10, 1.0)
@@ -426,7 +455,7 @@ pub fn plan_coverage(
     let faults = rng.poisson(0.9 * days * size_scale.sqrt());
     for _ in 0..faults {
         let which = *rng.pick(&kinds);
-        build_fault(model, &pools, truths, &mut rng, cycles, which, None);
+        build_fault(model, &pools, truths, &mut rng, cycles, which, None, k7);
     }
 
     // --- soubehy utoku s provozni poruchou (vcetne slepoty senzoru) ---
@@ -456,7 +485,16 @@ pub fn plan_coverage(
             *rng.pick(&other)
         };
         if Lookalike::COVERAGE.contains(&which) {
-            build_fault(model, &pools, truths, &mut rng, cycles, which, Some(start));
+            build_fault(
+                model,
+                &pools,
+                truths,
+                &mut rng,
+                cycles,
+                which,
+                Some(start),
+                k7,
+            );
         } else {
             build_benign(
                 model,
@@ -589,7 +627,8 @@ fn plan_campaign(
     }
 }
 
-/// Naplanuje jednu novou provozni poruchu kroku 5.
+/// Naplanuje jednu novou provozni poruchu kroku 5 (`k7`: drzene varianty kroku 7).
+#[allow(clippy::too_many_arguments)]
 fn build_fault(
     model: &NetworkModel,
     pools: &Pools,
@@ -598,6 +637,7 @@ fn build_fault(
     cycles: u32,
     which: Lookalike,
     forced_start: Option<u32>,
+    k7: bool,
 ) {
     let start =
         forced_start.unwrap_or_else(|| rng.range(0, cycles.saturating_sub(1) as u64) as u32);
@@ -620,7 +660,11 @@ fn build_fault(
         Kind::Benign(which),
         start,
         end,
-        rng.range_f(0.4, 1.0),
+        if k7 {
+            rng.range_f(0.05, 1.0)
+        } else {
+            rng.range_f(0.4, 1.0)
+        },
     );
     let non_core = |d: &u32| !matches!(model.devices[*d as usize].role, Role::Gateway | Role::Dns);
     match which {
@@ -670,6 +714,10 @@ fn build_fault(
                 return;
             }
             truth.victim_devices = vec![*rng.pick(&pool)];
+            if k7 && rng.chance(0.5) {
+                truth.cov.param = 8443;
+                truth.cov.variant = Some("cert_8443");
+            }
         }
         Lookalike::SegmentPowerLoss => {
             let subnet = rng.range(0, model.prefixes.len() as u64 - 1) as usize;
@@ -735,6 +783,17 @@ fn build_fault(
             }
             truth.victim_devices = vec![*rng.pick(&pools.clients)];
             truth.target_external = Some(public_ip(rng));
+            if k7 && rng.chance(0.5) {
+                // drzena varianta: 2 az 5 klientu zacne pouzivat tutez sluzbu
+                let extra = rng.range(1, 4) as usize;
+                for pick in rng.sample_distinct(pools.clients.len(), extra.min(pools.clients.len()))
+                {
+                    truth.victim_devices.push(pools.clients[pick]);
+                }
+                truth.victim_devices.sort_unstable();
+                truth.victim_devices.dedup();
+                truth.cov.variant = Some("saas_group");
+            }
         }
         _ => return,
     }
@@ -769,6 +828,42 @@ pub struct AttackRecord {
     /// Krok 6: nektery pripsany nalez se zobrazil ve fronte provoz.
     #[serde(default)]
     pub ops_shown: bool,
+    /// Krok 7: tiche potlaceni, latence, omylem zavrene nalezy (jen v3 s pameti).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub k7: Option<AttackK7>,
+}
+
+/// Krok 7 (A2, C2): viditelnost utoku a pocty po utoku.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AttackK7 {
+    /// Cykly utoku po prvnim zobrazeni s otevrenym zobrazenym klicem.
+    pub vis_cycles: u32,
+    /// Cykly utoku od prvniho zobrazeni do konce utoku.
+    pub post_cycles: u32,
+    /// Prvni pricina ztraty viditelnosti (`ladder`, `context`, `quiet`, `evicted`).
+    pub silenced: Option<String>,
+    pub silenced_cycles: u32,
+    /// Dvojice utoku se behem utoku stala zavedenym zvykem profilu.
+    pub habituated: bool,
+    /// Kontrafaktualne omylem zavrene pripsane nalezy (pocet).
+    pub wrong_closed: u32,
+    /// Cykly od zacatku utoku do prvni kontrafaktualni zobrazene detekce.
+    pub latency: Option<u32>,
+    /// Pripsany nalez nesl provozni anotaci (B1).
+    pub ops_annotated: bool,
+}
+
+/// Krok 7: varianta poruchy (svet k7) a polozky ve fronte podezreni.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FaultK7 {
+    pub intensity: f64,
+    /// Drzena varianta sveta `k7` (`saas_group`, `cert_8443`), jinak `None`.
+    pub variant: Option<String>,
+    pub ops_annotated: bool,
+    /// Zobrazene pripsane polozky ve fronte podezreni (soucet pres cykly).
+    pub suspect_items: u32,
 }
 
 /// Zaznam o jedne neskodne udalosti ve svete pokryti.
@@ -788,6 +883,8 @@ pub struct FaultRecord {
     /// Krok 6: typy nalezu zobrazenych ve fronte podezreni (diagnostika).
     #[serde(default)]
     pub fp_types: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub k7: Option<FaultK7>,
 }
 
 /// Prekryvaji se okna dvou pravd (vcetne latence atribuce).
@@ -979,7 +1076,16 @@ mod tests {
             for which in Lookalike::COVERAGE {
                 let mut truths = Vec::new();
                 let mut rng = Rng::new(derive(id, which as u64));
-                build_fault(&model, &pools, &mut truths, &mut rng, 96, which, Some(10));
+                build_fault(
+                    &model,
+                    &pools,
+                    &mut truths,
+                    &mut rng,
+                    96,
+                    which,
+                    Some(10),
+                    false,
+                );
                 let Some(truth) = truths.first_mut() else {
                     continue;
                 };

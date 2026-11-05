@@ -109,6 +109,10 @@ struct SoakRunArgs {
     /// Zapnout zmeny v3 mimo preset (ablace), napr. `graph`.
     #[arg(long, default_value = "")]
     v3_on: String,
+    /// Krok 7 (C3): typy nalezu skutecne vypnute v enginu (LOFO ablace), napr.
+    /// `beacon_periodic,suricata_alert,egress_ids_alert`.
+    #[arg(long, default_value = "")]
+    v3_mask: String,
     /// Parove A/B: zasahy enginu nezpetnuji generator provozu (stejny provoz v ramenech).
     #[arg(long, default_value_t = false)]
     no_feedback: bool,
@@ -965,11 +969,14 @@ fn main() -> anyhow::Result<()> {
             cfg.cf_loo = args.cf_loo;
             cfg.calibration = args.calibration.clone();
             cfg.world.noise = args.noise.max(0.0);
-            cfg.world.xxxl = match args.size.as_str() {
-                "mix" => false,
-                "xxxl" => true,
-                other => anyhow::bail!("neznama velikost {other} (mix | xxxl)"),
+            (cfg.world.xxxl, cfg.world.industrial) = match args.size.as_str() {
+                "mix" => (false, false),
+                "xxxl" => (true, false),
+                "industrial" => (false, true),
+                other => anyhow::bail!("neznama velikost {other} (mix | xxxl | industrial)"),
             };
+            cfg.world.type_mask = bakula_program::soak::episode::parse_type_mask(&args.v3_mask)
+                .map_err(anyhow::Error::msg)?;
             cfg.world.families = args.families.parse().map_err(anyhow::Error::msg)?;
             cfg.world.coverage = args.coverage.parse().map_err(anyhow::Error::msg)?;
             if let Some(text) = &args.noise_mix {

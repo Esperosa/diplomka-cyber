@@ -2996,6 +2996,12 @@ fn emit_truth(
                 .filter(|d| !d.role.is_server() && d.up)
                 .map(|d| d.id)
                 .collect();
+            // krok 7 (k7): drzena varianta na jinem portu (8443)
+            let port = if truth.cov.param > 0 {
+                truth.cov.param as u16
+            } else {
+                443
+            };
             for pick in rng.sample_distinct(clients.len(), clients.len().min(100)) {
                 for _ in 0..rng.range(1, 4) {
                     let rb = rng.range(0, 200);
@@ -3004,7 +3010,7 @@ fn emit_truth(
                         &ips[clients[pick] as usize],
                         &dst,
                         "tcp",
-                        443,
+                        port,
                         0.05,
                         517,
                         rb,
@@ -3015,7 +3021,7 @@ fn emit_truth(
             for _ in 0..rng.range(20, 200) {
                 let client = public_ip(rng);
                 let rb = rng.range(0, 200);
-                flow!(at(rng), &client, &dst, "tcp", 443, 0.05, 517, rb, "RSTO");
+                flow!(at(rng), &client, &dst, "tcp", port, 0.05, 517, rb, "RSTO");
             }
         }
         Kind::Benign(Lookalike::SegmentPowerLoss) => {
@@ -3118,30 +3124,30 @@ fn emit_truth(
             }
         }
         Kind::Benign(Lookalike::SaasAdoption) => {
-            // jeden klient, nova vnejsi sluzba, nepravidelne (ne v kazdem cyklu)
-            let (Some(&client), Some(service)) =
-                (truth.victim_devices.first(), truth.target_external.as_ref())
-            else {
+            // jeden klient (k7: 2 az 5 klientu), nova vnejsi sluzba, nepravidelne
+            let Some(service) = truth.target_external.as_ref() else {
                 return;
             };
-            if !model.devices[client as usize].up || !rng.chance(0.7) {
-                return;
-            }
-            let src = ips[client as usize].clone();
-            for _ in 0..rng.range(1, 4) {
-                let ob = rng.lognormal(3000.0, 1.0) as u64;
-                let rb = rng.lognormal(40000.0, 1.2) as u64;
-                flow!(
-                    at(rng),
-                    &src,
-                    service,
-                    "tcp",
-                    443,
-                    rng.range_f(0.2, 120.0),
-                    ob,
-                    rb,
-                    "SF"
-                );
+            for &client in &truth.victim_devices {
+                if !model.devices[client as usize].up || !rng.chance(0.7) {
+                    continue;
+                }
+                let src = ips[client as usize].clone();
+                for _ in 0..rng.range(1, 4) {
+                    let ob = rng.lognormal(3000.0, 1.0) as u64;
+                    let rb = rng.lognormal(40000.0, 1.2) as u64;
+                    flow!(
+                        at(rng),
+                        &src,
+                        service,
+                        "tcp",
+                        443,
+                        rng.range_f(0.2, 120.0),
+                        ob,
+                        rb,
+                        "SF"
+                    );
+                }
             }
         }
     }

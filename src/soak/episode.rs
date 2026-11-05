@@ -88,6 +88,41 @@ pub struct EpisodeConfig {
     pub world: WorldOptions,
 }
 
+/// Krok 7 (C3): typy, ktere jde v soaku skutecne vypnout (LOFO ablace kroku 5, A5).
+pub const MASKABLE_TYPES: [&str; 10] = [
+    "beacon_periodic",
+    "egress_volume_anomaly",
+    "long_lived_tunnel",
+    "source_volume_outlier",
+    "connection_timeout_burst",
+    "scan_attempts",
+    "multi_target_pattern",
+    "pivot_chain",
+    "suricata_alert",
+    "egress_ids_alert",
+];
+
+/// Maska typu ze seznamu oddeleneho carkami (`--v3-mask`).
+pub fn parse_type_mask(list: &str) -> std::result::Result<u32, String> {
+    let mut mask = 0u32;
+    for name in list.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+        let bit = MASKABLE_TYPES
+            .iter()
+            .position(|t| *t == name)
+            .ok_or_else(|| format!("typ {name} nejde maskovat ({})", MASKABLE_TYPES.join(", ")))?;
+        mask |= 1 << bit;
+    }
+    Ok(mask)
+}
+
+fn type_masked(mask: u32, kind: &str) -> bool {
+    mask != 0
+        && MASKABLE_TYPES
+            .iter()
+            .position(|t| *t == kind)
+            .is_some_and(|bit| mask & (1 << bit) != 0)
+}
+
 /// Volby generovaneho sveta (stejne ve vsech ramenech A/B).
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
@@ -96,6 +131,13 @@ pub struct WorldOptions {
     pub noise: f64,
     /// Vynucena trida XXXL (8 000 az 10 000 zarizeni, `--size xxxl`).
     pub xxxl: bool,
+    /// Krok 7 (C4): vynuceny archetyp Industrial (`--size industrial`).
+    #[serde(default)]
+    pub industrial: bool,
+    /// Krok 7 (C3): bity `MASKABLE_TYPES`, jejichz nalezy se odstrani z vystupu detekce
+    /// driv, nez vstoupi do pameti, kontextu, zebriku a uceni (`--v3-mask`, ablace).
+    #[serde(default)]
+    pub type_mask: u32,
     /// Rodiny utoku ve svete (`--families`); ostatni utoky se z planu vyradi, svet
     /// zbylych utoku a pozadi je beze zmeny (kazda udalost ma vlastni proud).
     pub families: crate::soak::traffic::FamilySet,
@@ -108,6 +150,8 @@ impl Default for WorldOptions {
         Self {
             noise: 1.0,
             xxxl: false,
+            industrial: false,
+            type_mask: 0,
             families: Default::default(),
             coverage: Default::default(),
         }
@@ -251,6 +295,19 @@ struct Ledger {
     auto_closed_first: bool,
     /// Krok 6: pripsany nalez se zobrazil ve fronte provoz (ne jako podezreni).
     ops_shown: bool,
+    /// Krok 7 (A2): klice pripsanych nalezu zobrazenych ve fronte podezreni.
+    vis_keys: BTreeSet<FindingKey>,
+    vis_cycles: u32,
+    post_cycles: u32,
+    silenced: Option<&'static str>,
+    silenced_cycles: u32,
+    habituated: bool,
+    /// Krok 7 (C2): pocet kontrafaktualne omylem zavrenych pripsanych nalezu.
+    wrong_closed: u32,
+    /// Prvni cyklus kontrafaktualni zobrazene detekce.
+    cf_first: Option<u32>,
+    /// Krok 7 (B1): pripsany nalez nese provozni anotaci.
+    ops_annotated: bool,
 }
 
 /// Zobrazeni nalezu v cyklu (legacy: vse, v3: podle pameti a kontextu).
@@ -270,6 +327,12 @@ struct Shown {
     /// zvlast, protoze `reason` pozdeji prepise zebrik (`verifying`, `ladder_*`);
     /// vstup pro zneplatneni znacky tridy provoz (review kola 3, S1).
     memory_contradicted: bool,
+    /// Krok 7 (B1): provozni anotace (nalez zustava ve fronte podezreni).
+    ops_note: bool,
+    /// Krok 7 (A1): chraneny nalez.
+    protected: bool,
+    /// Krok 7 (B1): diagnostika shody klice nalezu s dukazem E1 (jen svet pokryti).
+    ops_diag: Option<String>,
 }
 
 /// Polozka zobrazeni podle dispozice pameti nalezu (pred zasahem zebriku).
@@ -301,6 +364,9 @@ fn shown_for(disposition: &Disposition, memory_on: bool, auto: Option<ContextKin
         ladder_refuted: false,
         ops: false,
         memory_contradicted: crate::ops_evidence::OpsMarks::memory_contradicts(reason),
+        ops_note: false,
+        protected: false,
+        ops_diag: None,
     }
 }
 
@@ -526,7 +592,12 @@ fn run_episode_inner(
     attack_ids: &mut Vec<u32>,
     records: &mut CoverageRecords,
 ) -> Result<()> {
-    let mut model = NetworkModel::generate_with(cfg.run_seed, cfg.network_id, cfg.world.xxxl);
+    let mut model = NetworkModel::generate_opts(
+        cfg.run_seed,
+        cfg.network_id,
+        cfg.world.xxxl,
+        cfg.world.industrial,
+    );
     *agg.archetypes
         .entry(format!("{:?}", model.archetype))
         .or_default() += 1;
@@ -707,8 +778,20 @@ fn run_episode_inner(
             auto_closed: false,
             auto_closed_first: false,
             ops_shown: false,
+            vis_keys: BTreeSet::new(),
+            vis_cycles: 0,
+            post_cycles: 0,
+            silenced: None,
+            silenced_cycles: 0,
+            habituated: false,
+            wrong_closed: 0,
+            cf_first: None,
+            ops_annotated: false,
         })
         .collect();
+    // krok 7: polozky ve fronte podezreni a provozni anotace po poruchach
+    let mut fault_items: HashMap<usize, u32> = HashMap::new();
+    let mut fault_ops: HashSet<usize> = HashSet::new();
     // krok 5: zobrazene FP neskodnych udalosti a prvni vyskyty (typ, entita)
     let coverage_on = cfg.world.coverage.on();
     let mut lookalike_displayed: HashSet<usize> = HashSet::new();
@@ -1264,6 +1347,34 @@ fn run_episode_inner(
             }
         }
 
+        // krok 7 (C3): skutecna ablace, maskovane typy pro zbytek enginu neexistuji
+        if cfg.world.type_mask != 0 {
+            let before = run_report.findings.len();
+            run_report
+                .findings
+                .retain(|f| !type_masked(cfg.world.type_mask, &f.finding_type));
+            agg.output.k7_add(
+                "masked_findings",
+                (before - run_report.findings.len()) as u64,
+            );
+        }
+        // krok 7 (B4): agregace pres zdroje (pred pameti, aby nalez prosel celou cestou)
+        if let Some(runtime) = v3.as_mut().filter(|_| cfg.engine.cross_source()) {
+            let window = runtime
+                .clientele
+                .evidence(&in_scope_obs, t0, &runtime.ops_policy);
+            for (finding, count, top, targets) in crate::ops_evidence::distributed_findings(&window)
+            {
+                behavior_signal.insert(finding.finding_id.clone(), (count, top, targets));
+                run_report.findings.push(finding);
+            }
+            run_report
+                .findings
+                .sort_by(|l, r| l.finding_id.cmp(&r.finding_id));
+            run_report
+                .findings
+                .dedup_by(|l, r| l.finding_id == r.finding_id);
+        }
         // --- 3b. pamet nalezu a kontextove vylouceni (v3) ---
         let report_services: HashMap<&str, &crate::model::ServiceReport> = run_report
             .hosts
@@ -1273,6 +1384,7 @@ fn run_episode_inner(
             .collect();
         let memory_started = Instant::now();
         let mut lc = LadderCycle::default();
+        let mut promoted_pairs: Vec<(String, String)> = Vec::new();
         // odhady prioru z Case Memory jednou za cyklus (odhad prochazi vsechny zaznamy)
         let mut prior_cache: HashMap<String, f64> = HashMap::new();
         let mut shown: Vec<Shown> = match v3.as_mut() {
@@ -1288,6 +1400,9 @@ fn run_episode_inner(
                     ladder_refuted: false,
                     ops: false,
                     memory_contradicted: false,
+                    ops_note: false,
+                    protected: false,
+                    ops_diag: None,
                 })
                 .collect(),
             Some(runtime) => {
@@ -1409,6 +1524,10 @@ fn run_episode_inner(
                         memory_on,
                         explanation.as_ref().map(|e| e.kind),
                     );
+                    shown_item.protected = protection.is_some();
+                    if protection.is_some() && shown_item.displayed {
+                        agg.output.k7_add("protected_displayed", 1);
+                    }
                     if auto_closed && let Some((_, _, targets)) = behavior_item {
                         shown_item.targets = targets.clone();
                         shown_item.sources = sources.clone();
@@ -1590,6 +1709,9 @@ fn run_episode_inner(
                                             ladder_refuted: false,
                                             ops: false,
                                             memory_contradicted: false,
+                                            ops_note: false,
+                                            protected: false,
+                                            ops_diag: None,
                                         },
                                     ));
                                 }
@@ -1604,6 +1726,7 @@ fn run_episode_inner(
                     && let Some(split) = behavior_split.as_ref()
                 {
                     let started = Instant::now();
+                    let promotions_before = runtime.behavior.profile.promotions;
                     let frozen = crate::behavior::profile::frozen_pairs(
                         run_report
                             .findings
@@ -1623,6 +1746,13 @@ fn run_episode_inner(
                         &frozen,
                         &runtime.profile_policy,
                     );
+                    // krok 7 (A2): nove zavedene zvyky tohoto okna (habituace)
+                    let fresh = (runtime.behavior.profile.promotions - promotions_before) as usize;
+                    let audit = &runtime.behavior.profile.audit;
+                    promoted_pairs.extend(audit.iter().rev().take(fresh).map(|a| {
+                        let peer = a.habit.split('|').next().unwrap_or("").to_string();
+                        (a.host.clone(), peer)
+                    }));
                     agg.perf_record("profile_learn", started.elapsed().as_secs_f64());
                 }
                 out
@@ -1637,7 +1767,7 @@ fn run_episode_inner(
         }
         // krok 6 (kandidat 2): trida provozni problem; zobrazeny nalez s pozitivnim
         // dukazem provozni priciny jde do fronty provoz (nezavira se)
-        if let Some(runtime) = v3.as_mut().filter(|_| cfg.engine.ops_class()) {
+        if let Some(runtime) = v3.as_mut().filter(|_| cfg.engine.ops_evidence()) {
             let started = Instant::now();
             let now = t0;
             let window = runtime
@@ -1674,9 +1804,25 @@ fn run_episode_inner(
                     service_key,
                     sources,
                 );
-                if show.displayed && valid {
+                // krok 7 (A1): chraneny nalez fronta provoz nikdy neodkloni
+                let shielded = cfg.engine.protect() && show.protected;
+                if show.displayed && valid && cfg.engine.ops_class() && !shielded {
                     show.ops = true;
                     agg.output.ops_class_displayed += 1;
+                }
+                // krok 7 (B1): provozni znacka jen jako anotace, nalez zustava podezrenim
+                if show.displayed && valid && cfg.engine.ops_annotate() {
+                    show.ops_note = true;
+                    agg.output.k7_add("ops_annotated", 1);
+                }
+                if coverage_on && show.displayed && cfg.engine.ops_annotate() {
+                    show.ops_diag = Some(crate::ops_evidence::diagnose(
+                        &window,
+                        &finding.finding_type,
+                        service_key,
+                        host_ip,
+                        sources,
+                    ));
                 }
             }
             runtime.ops_marks.sweep(now);
@@ -1895,9 +2041,13 @@ fn run_episode_inner(
                                 .contains(&finding.finding_type.as_str());
                             ledger.typed |= typed;
                             ledger.ops_shown |= show.displayed && show.ops;
+                            ledger.ops_annotated |= show.displayed && show.ops_note;
                             if suspect {
                                 ledger.displayed_detect.get_or_insert(cycle);
                                 ledger.typed_displayed |= typed;
+                                if let Some(Some(key)) = lc.keys.get(finding_index) {
+                                    ledger.vis_keys.insert(key.clone());
+                                }
                             }
                             if coverage_on
                                 && closed
@@ -1907,6 +2057,7 @@ fn run_episode_inner(
                             {
                                 ledger.auto_closed = true;
                                 ledger.auto_closed_first |= first_key;
+                                ledger.wrong_closed += 1;
                             }
                             if let Some(cf) = cf.as_deref() {
                                 // pripsat jen nalez, ktery ve svete bez utoku chybi;
@@ -1918,6 +2069,7 @@ fn run_episode_inner(
                                 ledger.cf_detect_strict |= new_strict;
                                 ledger.cf_typed |= new && typed;
                                 if suspect && !shown_cf {
+                                    ledger.cf_first.get_or_insert(cycle);
                                     ledger.cf_displayed = true;
                                     ledger.cf_typed_displayed |= typed;
                                     ledger.cf_types.insert(finding.finding_type.clone());
@@ -1942,6 +2094,16 @@ fn run_episode_inner(
                             }
                             if coverage_on && suspect {
                                 lookalike_suspect.insert(index);
+                                *fault_items.entry(index).or_default() += 1;
+                                if show.ops_note {
+                                    fault_ops.insert(index);
+                                }
+                                if let (Kind::Benign(look), Some(diag)) =
+                                    (truth.kind, &show.ops_diag)
+                                {
+                                    agg.output
+                                        .k7_add(&format!("ops_diag|{}|{diag}", look.label()), 1);
+                                }
                                 lookalike_types
                                     .entry(index)
                                     .or_default()
@@ -1965,6 +2127,18 @@ fn run_episode_inner(
                                 }
                                 if coverage_on && suspect {
                                     lookalike_suspect.insert(index);
+                                    *fault_items.entry(index).or_default() += 1;
+                                    if show.ops_note {
+                                        fault_ops.insert(index);
+                                    }
+                                    if let (Kind::Benign(look), Some(diag)) =
+                                        (truth.kind, &show.ops_diag)
+                                    {
+                                        agg.output.k7_add(
+                                            &format!("ops_diag|{}|{diag}", look.label()),
+                                            1,
+                                        );
+                                    }
                                     lookalike_types
                                         .entry(index)
                                         .or_default()
@@ -2150,6 +2324,57 @@ fn run_episode_inner(
             );
         }
         agg.perf_record("scoring.findings", findings_started.elapsed().as_secs_f64());
+        // krok 7 (A2): viditelnost utoku po prvnim zobrazeni (otevreny zobrazeny klic)
+        if let Some(memory) = v3.as_ref().and_then(|r| r.memory.as_ref()) {
+            for &index in &relevant_truths {
+                let truth = &truths[index];
+                if !matches!(truth.kind, Kind::Attack(_))
+                    || cycle < truth.start_cycle
+                    || cycle > truth.end_cycle
+                {
+                    continue;
+                }
+                let keys_ip = &truth_keys[index];
+                let ledger = &mut ledgers[index];
+                if promoted_pairs
+                    .iter()
+                    .any(|(host, peer)| keys_ip.contains(host) && keys_ip.contains(peer))
+                {
+                    ledger.habituated = true;
+                }
+                if ledger.vis_keys.is_empty() {
+                    continue;
+                }
+                ledger.post_cycles += 1;
+                let mut cause: Option<&'static str> = None;
+                let mut visible = false;
+                for key in &ledger.vis_keys {
+                    match memory.get(key).map(|e| e.state) {
+                        Some(
+                            FindingState::New
+                            | FindingState::Open
+                            | FindingState::Reopened
+                            | FindingState::Confirmed,
+                        ) => {
+                            visible = true;
+                            break;
+                        }
+                        Some(FindingState::Refuted) => cause = Some("ladder"),
+                        Some(FindingState::AutoResolved) => {
+                            cause = cause.or(Some("context"));
+                        }
+                        Some(FindingState::Closed) => cause = cause.or(Some("quiet")),
+                        None => cause = cause.or(Some("evicted")),
+                    }
+                }
+                if visible {
+                    ledger.vis_cycles += 1;
+                } else {
+                    ledger.silenced_cycles += 1;
+                    ledger.silenced.get_or_insert(cause.unwrap_or("evicted"));
+                }
+            }
+        }
         let ladder_started = Instant::now();
         agg.behavioral_tp += attributed_to_attack as u64;
         for decision in &lc.decisions {
@@ -2872,6 +3097,20 @@ fn run_episode_inner(
                         auto_closed: ledger.auto_closed,
                         auto_closed_first: ledger.auto_closed_first,
                         ops_shown: ledger.ops_shown,
+                        k7: v3.as_ref().filter(|r| r.memory.is_some()).map(|_| {
+                            crate::soak::coverage::AttackK7 {
+                                vis_cycles: ledger.vis_cycles,
+                                post_cycles: ledger.post_cycles,
+                                silenced: ledger.silenced.map(str::to_string),
+                                silenced_cycles: ledger.silenced_cycles,
+                                habituated: ledger.habituated,
+                                wrong_closed: ledger.wrong_closed,
+                                latency: ledger
+                                    .cf_first
+                                    .map(|c| c.saturating_sub(truth.start_cycle)),
+                                ops_annotated: ledger.ops_annotated,
+                            }
+                        }),
                     });
                 }
                 Kind::Benign(look) => records.faults.push(FaultRecord {
@@ -2888,6 +3127,14 @@ fn run_episode_inner(
                         .get(&index)
                         .map(|types| types.iter().cloned().collect())
                         .unwrap_or_default(),
+                    k7: v3.as_ref().filter(|r| r.memory.is_some()).map(|_| {
+                        crate::soak::coverage::FaultK7 {
+                            intensity: truth.intensity,
+                            variant: truth.cov.variant.map(str::to_string),
+                            ops_annotated: fault_ops.contains(&index),
+                            suspect_items: fault_items.get(&index).copied().unwrap_or(0),
+                        }
+                    }),
                 }),
             }
         }

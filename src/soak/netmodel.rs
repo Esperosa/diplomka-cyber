@@ -698,10 +698,19 @@ impl NetworkModel {
     /// `xxxl` = vynucená třída XXXL (krok 3): velká organizace s 8 000 až 10 000
     /// zařízeními a 150 až 240 podsítěmi (/24). Jinak stejné jako `generate`.
     pub fn generate_with(run_seed: u64, id: u64, xxxl: bool) -> Self {
+        Self::generate_opts(run_seed, id, xxxl, false)
+    }
+
+    /// Krok 7 (C4): `industrial` = vynucený archetyp Industrial (cílený běh ICS), losy
+    /// generátoru se jinak nemění (archetyp se losuje dál, jen se přepíše).
+    pub fn generate_opts(run_seed: u64, id: u64, xxxl: bool, industrial: bool) -> Self {
         let seed = derive(run_seed, id);
         let mut rng = Rng::new(derive(seed, 0xA11CE));
         let weights: Vec<f64> = Archetype::ALL.iter().map(|a| profile(*a).weight).collect();
         let mut archetype = Archetype::ALL[rng.weighted(&weights)];
+        if industrial && !xxxl {
+            archetype = Archetype::Industrial;
+        }
         if xxxl {
             archetype = if rng.chance(0.5) {
                 Archetype::Metro
