@@ -148,6 +148,7 @@ impl LadderEvidence for SoakEvidence<'_> {
                     sources: &case.sources,
                     severity: Severity::Medium,
                     at: self.at,
+                    protected: case.protected,
                 },
             )
             .map(|(_, reason)| reason)

@@ -58,6 +58,22 @@ impl ContextKind {
         )
     }
 
+    pub const ALL: [ContextKind; 9] = [
+        ContextKind::Maintenance,
+        ContextKind::Backup,
+        ContextKind::BatchJob,
+        ContextKind::PatchWindow,
+        ContextKind::AuthorizedScanner,
+        ContextKind::ServiceOutage,
+        ContextKind::SensorOutage,
+        ContextKind::DeviceOnboarding,
+        ContextKind::DeviceDecommission,
+    ];
+
+    pub fn from_label(label: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.label() == label)
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             ContextKind::Maintenance => "maintenance",
@@ -230,21 +246,42 @@ pub struct GatePolicy {
     /// identifikovaným dominantním zdrojem; výjimka je objem v okně zálohy a dávky.
     #[serde(default)]
     pub require_identified_source: bool,
+    /// Krok 7 (A1): chráněné nálezy kontext nevysvětlí ani nepodpoří; nález vysoké
+    /// závažnosti nebo bez identifikovaného zdroje zavře jen shoda dvou různých druhů
+    /// kontextu (P6), jinak je nejednoznačný (P5).
+    #[serde(default)]
+    pub protect: bool,
 }
 
 impl GatePolicy {
-    /// Mantinely podle konfigurace jádra (krok 6).
+    /// Mantinely podle konfigurace jádra (krok 6 a 7).
     pub fn for_engine(engine: &crate::engine::EngineConfig) -> Self {
         Self {
             sensor_strict: engine.sensor_strict(),
             require_identified_source: engine.context_guard(),
+            protect: engine.protect(),
             ..Self::default()
         }
+    }
+
+    /// Chráněný vstup (typ P1 až P3, nebo signál P4 a P5 od volajícího).
+    fn shields(&self, input: &GateInput<'_>) -> bool {
+        self.protect
+            && (input.protected || crate::protection::is_protected_type(input.finding_type))
+    }
+
+    /// P6: vyžaduje zavření dva nezávislé druhy kontextu?
+    fn needs_corroboration(&self, input: &GateInput<'_>) -> bool {
+        self.protect && (input.severity == Severity::High || input.sources.is_empty())
     }
 
     /// Smí záznam vysvětlit nález vzhledem k pravidlům kroku 6?
     fn admits(&self, entry: &ContextEntry, input: &GateInput<'_>) -> bool {
         if self.sensor_strict && entry.kind == ContextKind::SensorOutage {
+            return false;
+        }
+        // P6: vypadek senzoru neni nezavisly druh kontextu (absence dat)
+        if self.protect && entry.kind == ContextKind::SensorOutage {
             return false;
         }
         if self.require_identified_source
@@ -285,6 +322,7 @@ impl Default for GatePolicy {
             audit_min_samples: 30,
             sensor_strict: false,
             require_identified_source: false,
+            protect: false,
         }
     }
 }
@@ -298,6 +336,8 @@ pub struct GateInput<'a> {
     pub sources: &'a [String],
     pub severity: Severity,
     pub at: DateTime<Utc>,
+    /// Krok 7: volající zjistil ochranu P4 nebo P5 (degradace, nejednoznačná identita).
+    pub protected: bool,
 }
 
 /// Výsledek: druh kontextu a čitelný důvod pro audit/UI.
@@ -305,6 +345,15 @@ pub struct GateInput<'a> {
 pub struct Explanation {
     pub kind: ContextKind,
     pub reason: String,
+}
+
+/// Rozhodnutí brány včetně nejednoznačnosti (krok 7, P5).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GateDecision {
+    pub explanation: Option<Explanation>,
+    /// Záznam odpovídá hostu a typu, ale zdroj je mimo záznam nebo chybí druhý
+    /// nezávislý druh kontextu (P6). Jen s `protect`.
+    pub ambiguous: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -315,6 +364,11 @@ pub struct GateStats {
     pub refused_disabled: u64,
     pub refused_source: u64,
     pub disabled_kinds: Vec<String>,
+    /// Krok 7: odmítnuto kvůli ochraně (P1 až P5) a kvůli jedinému druhu (P6).
+    #[serde(default)]
+    pub refused_protected: u64,
+    #[serde(default)]
+    pub refused_corroboration: u64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -376,20 +430,61 @@ impl ContextGate {
         self.disabled.contains(&kind)
     }
 
+    /// Vypne druh kontextu (krok 7, A3: trvalé vypnutí z provozního auditu).
+    pub fn disable(&mut self, kind: ContextKind) {
+        if self.disabled.insert(kind) {
+            self.stats.disabled_kinds.push(kind.label().to_string());
+        }
+    }
+
     /// Najde neškodné vysvětlení podle mantinelů; `None` = nezavírat.
     pub fn explain(
         &mut self,
         provider: &dyn ContextProvider,
         input: &GateInput<'_>,
     ) -> Option<Explanation> {
+        self.explain_decision(provider, input).explanation
+    }
+
+    /// Mezera v telemetrii (P4): v čase `at` nebo v předchozím cyklu platí záznam
+    /// výpadku senzoru.
+    pub fn sensor_gap(&self, provider: &dyn ContextProvider, at: DateTime<Utc>) -> bool {
+        let before = at - chrono::Duration::seconds(1800);
+        provider
+            .entries()
+            .iter()
+            .any(|e| e.kind == ContextKind::SensorOutage && (e.active(at) || e.active(before)))
+    }
+
+    /// Jako `explain`, navíc vrací nejednoznačnost kontextu (krok 7, P5 a P6).
+    pub fn explain_decision(
+        &mut self,
+        provider: &dyn ContextProvider,
+        input: &GateInput<'_>,
+    ) -> GateDecision {
         // novost vztahu kontext nikdy nevysvetli (A7, review kola 1 S2)
         if self.policy.never.contains(input.finding_type)
             || crate::behavior::novelty::is_novelty_type(input.finding_type)
             || input.finding_type.starts_with("intel:")
             || input.finding_type.starts_with("active_check:")
         {
-            return None;
+            return GateDecision::default();
         }
+        // krok 7 (A1): chraneny nalez kontext nezavre
+        if self.policy.shields(input) {
+            if provider
+                .entries()
+                .iter()
+                .any(|e| e.active(input.at) && e.covers(input.finding_type))
+            {
+                self.stats.refused_protected += 1;
+            }
+            return GateDecision::default();
+        }
+        let corroborate = self.policy.needs_corroboration(input);
+        let mut kinds: BTreeSet<ContextKind> = BTreeSet::new();
+        let mut first: Option<&ContextEntry> = None;
+        let mut ambiguous = false;
         let severe = self.policy.most_severe.contains(input.finding_type);
         let mut refused_severe = false;
         let mut refused_disabled = false;
@@ -421,6 +516,7 @@ impl ContextGate {
                     .any(|s| !entry.hosts.contains(s) && !entry.sources.contains(s))
             {
                 refused_source = true; // neocekavany dominantni zdroj v okne kontextu
+                ambiguous |= self.policy.protect;
                 continue;
             }
             if (severe || input.severity == Severity::High)
@@ -433,22 +529,16 @@ impl ContextGate {
                 refused_disabled = true;
                 continue;
             }
-            if self.closures_this_cycle >= self.policy.max_closures_per_cycle {
-                self.stats.refused_cap += 1;
-                return None;
+            if corroborate {
+                // P6: sbirat druhy, zavrit az pri dvou nezavislych
+                kinds.insert(entry.kind);
+                first.get_or_insert(entry);
+                continue;
             }
-            self.closures_this_cycle += 1;
-            self.stats.explained += 1;
-            return Some(Explanation {
-                kind: entry.kind,
-                reason: format!(
-                    "{} ({} az {}, schvalil {})",
-                    entry.kind.label(),
-                    entry.start.format("%Y-%m-%d %H:%M"),
-                    entry.end.format("%Y-%m-%d %H:%M"),
-                    entry.approved_by
-                ),
-            });
+            return GateDecision {
+                explanation: self.close(entry, None),
+                ambiguous: false,
+            };
         }
         if refused_severe {
             self.stats.refused_severe += 1;
@@ -459,7 +549,45 @@ impl ContextGate {
         if refused_source {
             self.stats.refused_source += 1;
         }
-        None
+        if corroborate && let Some(entry) = first {
+            if kinds.len() >= 2 {
+                let all: Vec<&str> = kinds.iter().map(|k| k.label()).collect();
+                return GateDecision {
+                    explanation: self.close(entry, Some(all.join("+"))),
+                    ambiguous: false,
+                };
+            }
+            self.stats.refused_corroboration += 1;
+            ambiguous = true;
+        }
+        GateDecision {
+            explanation: None,
+            ambiguous,
+        }
+    }
+
+    /// Zavření jedním záznamem (strop za cyklus); `joint` = seznam druhů u P6.
+    fn close(&mut self, entry: &ContextEntry, joint: Option<String>) -> Option<Explanation> {
+        if self.closures_this_cycle >= self.policy.max_closures_per_cycle {
+            self.stats.refused_cap += 1;
+            return None;
+        }
+        self.closures_this_cycle += 1;
+        self.stats.explained += 1;
+        let base = format!(
+            "{} ({} az {}, schvalil {})",
+            entry.kind.label(),
+            entry.start.format("%Y-%m-%d %H:%M"),
+            entry.end.format("%Y-%m-%d %H:%M"),
+            entry.approved_by
+        );
+        Some(Explanation {
+            kind: entry.kind,
+            reason: match joint {
+                Some(kinds) => format!("{base}; potvrzeno druhy {kinds}"),
+                None => base,
+            },
+        })
     }
 
     /// Podpůrný (ne zavírající) kontext pro žebřík ověřování L1 (krok 2B): shoda okna,
@@ -473,10 +601,12 @@ impl ContextGate {
     ) -> Option<(ContextKind, String)> {
         if self.policy.never.contains(input.finding_type)
             || crate::behavior::novelty::is_novelty_type(input.finding_type)
+            || self.policy.shields(input)
         {
             return None;
         }
-        provider.entries().iter().find_map(|entry| {
+        let corroborate = self.policy.needs_corroboration(input);
+        let mut matching = provider.entries().iter().filter_map(|entry| {
             let host_match = if entry.hosts.is_empty() {
                 entry.kind == ContextKind::SensorOutage || !entry.sources.is_empty()
             } else {
@@ -501,7 +631,14 @@ impl ContextGate {
                     format!("{} (schvalil {})", entry.kind.label(), entry.approved_by),
                 )
             })
-        })
+        });
+        if !corroborate {
+            return matching.next();
+        }
+        // P6: podpurny dukaz jen pri dvou nezavislych druzich
+        let all: Vec<(ContextKind, String)> = matching.collect();
+        let kinds: BTreeSet<ContextKind> = all.iter().map(|(k, _)| *k).collect();
+        (kinds.len() >= 2).then(|| all.into_iter().next()).flatten()
     }
 
     /// Výsledek auditu jednoho vzorku zavřeného nálezu (člověk: byl to omyl?).
@@ -556,7 +693,94 @@ mod tests {
             sources,
             severity,
             at: at(hour),
+            protected: false,
         }
+    }
+
+    fn protect_policy() -> GatePolicy {
+        GatePolicy {
+            protect: true,
+            sensor_strict: true,
+            ..GatePolicy::default()
+        }
+    }
+
+    /// Krok 7 (A1): chráněný typ ani signál volajícího kontext nezavře ani nepodpoří.
+    #[test]
+    fn protected_findings_are_never_explained_nor_supported() {
+        let mut maintenance = entry(ContextKind::Maintenance, "10.0.0.5", 0, 10);
+        maintenance.covers = vec![
+            "pivot_chain".to_string(),
+            "suricata_alert".to_string(),
+            "connection_timeout_burst".to_string(),
+        ];
+        maintenance.hosts.push("10.0.0.9".to_string());
+        let calendar = StaticCalendar::new(vec![maintenance]);
+        let host = vec!["10.0.0.5".to_string()];
+        let src = vec!["10.0.0.9".to_string()];
+        let mut gate = ContextGate::new(protect_policy());
+        for kind in ["pivot_chain", "suricata_alert"] {
+            let case = input(kind, &host, &src, 1, Severity::Medium);
+            assert!(gate.explain(&calendar, &case).is_none(), "{kind}");
+            assert!(gate.supporting_context(&calendar, &case).is_none());
+        }
+        let mut degraded = input("connection_timeout_burst", &host, &src, 1, Severity::Medium);
+        degraded.protected = true;
+        assert!(gate.explain(&calendar, &degraded).is_none());
+        assert!(gate.supporting_context(&calendar, &degraded).is_none());
+        degraded.protected = false;
+        assert!(gate.explain(&calendar, &degraded).is_some());
+        assert_eq!(gate.stats.refused_protected, 3);
+        // bez protect se chovani nemeni
+        let mut loose = ContextGate::new(GatePolicy::default());
+        let ids = input("suricata_alert", &host, &src, 1, Severity::Medium);
+        assert!(loose.explain(&calendar, &ids).is_some());
+    }
+
+    /// Krok 7 (P6): bez zdroje nebo s vysokou závažností zavřou až dva druhy kontextu,
+    /// jeden druh = nejednoznačné (P5) a bez podpůrného důkazu.
+    #[test]
+    fn sourceless_or_high_needs_two_independent_kinds() {
+        let one = StaticCalendar::new(vec![entry(ContextKind::PatchWindow, "10.0.0.5", 0, 10)]);
+        let mut two_entries = vec![
+            entry(ContextKind::PatchWindow, "10.0.0.5", 0, 10),
+            entry(ContextKind::ServiceOutage, "10.0.0.5", 0, 10),
+        ];
+        let two = StaticCalendar::new(two_entries.clone());
+        let host = vec!["10.0.0.5".to_string()];
+        let mut gate = ContextGate::new(protect_policy());
+        let sourceless = input("connection_timeout_burst", &host, &[], 1, Severity::Medium);
+        let decision = gate.explain_decision(&one, &sourceless);
+        assert!(decision.explanation.is_none() && decision.ambiguous);
+        assert!(gate.supporting_context(&one, &sourceless).is_none());
+        let decision = gate.explain_decision(&two, &sourceless);
+        let closed = decision.explanation.expect("dva druhy");
+        assert!(closed.reason.contains("patch_window+service_outage"));
+        assert!(gate.supporting_context(&two, &sourceless).is_some());
+        // vypadek senzoru neni druhym druhem
+        two_entries[1] = ContextEntry {
+            hosts: Vec::new(),
+            ..entry(ContextKind::SensorOutage, "-", 0, 10)
+        };
+        let with_outage = StaticCalendar::new(two_entries);
+        assert!(gate.explain(&with_outage, &sourceless).is_none());
+        // se zdrojem a stredni zavaznosti staci jeden druh
+        let own = vec!["10.0.0.5".to_string()];
+        let sourced = input("connection_timeout_burst", &host, &own, 1, Severity::Medium);
+        assert!(gate.explain(&one, &sourced).is_some());
+        assert_eq!(gate.stats.refused_corroboration, 2);
+        // zdroj mimo zaznam = nejednoznacne
+        let stranger = vec!["10.9.9.9".to_string()];
+        let odd = input(
+            "connection_timeout_burst",
+            &host,
+            &stranger,
+            1,
+            Severity::Medium,
+        );
+        assert!(gate.explain_decision(&one, &odd).ambiguous);
+        assert!(gate.sensor_gap(&with_outage, at(3)));
+        assert!(!gate.sensor_gap(&one, at(3)));
     }
 
     #[test]

@@ -46,6 +46,11 @@ pub struct ProfilePolicy {
     pub fleet_min: u32,
     pub fleet_share: f64,
     pub audit_cap: usize,
+    /// Krok 7 (A2): poznamenaná dvojice (poplach) se drží až `forget_s` a ze stropu
+    /// zvyků hostu se vyřazuje až po nepoznamenaných kandidátech, takže nevyřešená
+    /// novost nebo graf se nestane zvykem ani po zapomenutí poznámky.
+    #[serde(default)]
+    pub keep_tainted: bool,
 }
 
 impl Default for ProfilePolicy {
@@ -64,6 +69,7 @@ impl Default for ProfilePolicy {
             fleet_min: 3,
             fleet_share: 0.3,
             audit_cap: 2_000,
+            keep_tainted: false,
         }
     }
 }
@@ -162,7 +168,13 @@ impl HostProfiles {
             host.last = now;
             let key = habit_key(&flow.dst_ip, &flow.proto, port);
             if frozen.contains(&pair) {
-                // dvojice s poplachem: poznamenat, nikdy nepovysit
+                // dvojice s poplachem: poznamenat, nikdy nepovysit; krok 7 (A2): poznamka
+                // se s opakovanym poplachem obnovuje (nezapomene se behem poplachu)
+                if policy.keep_tainted
+                    && let Some(habit) = host.habits.get_mut(&key)
+                {
+                    habit.last = now;
+                }
                 if let Some(habit) = host.habits.get_mut(&key)
                     && !habit.tainted
                 {
@@ -245,6 +257,9 @@ impl HostProfiles {
             host.habits.retain(|key, habit| {
                 let keep = match habit.established {
                     Some(_) => now - habit.last <= policy.forget_s,
+                    None if policy.keep_tainted && habit.tainted => {
+                        now - habit.last <= policy.forget_s
+                    }
                     None => now - habit.last <= policy.candidate_forget_s,
                 };
                 if !keep && habit.established.is_some() {
@@ -253,14 +268,22 @@ impl HostProfiles {
                 keep
             });
             if host.habits.len() > policy.max_habits_per_host {
-                let mut order: Vec<(bool, i64, String)> = host
+                let keep_tainted = policy.keep_tainted;
+                let mut order: Vec<(bool, bool, i64, String)> = host
                     .habits
                     .iter()
-                    .map(|(k, h)| (h.established.is_some(), h.last, k.clone()))
+                    .map(|(k, h)| {
+                        (
+                            keep_tainted && h.tainted,
+                            h.established.is_some(),
+                            h.last,
+                            k.clone(),
+                        )
+                    })
                     .collect();
                 order.sort();
                 let remove = host.habits.len() - policy.max_habits_per_host;
-                for (established, _, key) in order.into_iter().take(remove) {
+                for (_, established, _, key) in order.into_iter().take(remove) {
                     host.habits.remove(&key);
                     if established {
                         decrement(index, &key);
@@ -469,6 +492,69 @@ mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
 
+    /// Krok 7 (A2): dvojice s poplachem (novost, graf) se nestane zvykem ani přes strop
+    /// zvyků, zametání a serializaci; poznámka vydrží `forget_s` od posledního výskytu.
+    #[test]
+    fn property_tainted_pairs_never_become_habits() {
+        let policy = ProfilePolicy {
+            keep_tainted: true,
+            max_habits_per_host: 10,
+            ..ProfilePolicy::default()
+        };
+        for seed in 1..=20u64 {
+            let mut state = seed.wrapping_mul(0x2545_F491_4F6C_DD1D) | 1;
+            let mut next = move || {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                state
+            };
+            let mut p = HostProfiles::default();
+            let mut tainted: HashMap<String, i64> = HashMap::new();
+            let t0 = 1_700_006_400;
+            for w in 0..(12 * 48) {
+                let at = t0 + w * 1800;
+                let flows: Vec<ConnectionObservation> = (0..6)
+                    .map(|i| {
+                        let peer = format!("198.51.100.{}", (next() % 24) + i);
+                        conn("10.0.0.5", &peer, 443, at)
+                    })
+                    .collect();
+                let mut frozen = HashSet::new();
+                for flow in &flows {
+                    // poplach jen u peti dvojic (pod stropem), ostatni tlaci na strop
+                    let index: u64 = flow.dst_ip.rsplit('.').next().unwrap().parse().unwrap();
+                    if index < 5 && next() % 4 == 0 {
+                        frozen.insert(format!("10.0.0.5|{}", flow.dst_ip));
+                        tainted.insert(flow.dst_ip.clone(), at);
+                    }
+                }
+                for flow in &flows {
+                    if tainted.contains_key(&flow.dst_ip) {
+                        tainted.insert(flow.dst_ip.clone(), at);
+                    }
+                }
+                p.learn(flows.iter(), &frozen, at, &policy);
+                if next() % 7 == 0 {
+                    p = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+                }
+                for (peer, last) in &tainted {
+                    let verdict = p.verdict("10.0.0.5", peer, "tcp", 443, None, at, &policy);
+                    assert!(
+                        !matches!(verdict, ProfileVerdict::Established { .. }),
+                        "seed {seed}: {peer} se stal zvykem"
+                    );
+                    if at - last <= policy.forget_s {
+                        assert!(
+                            p.knows("10.0.0.5", peer, "tcp", 443),
+                            "seed {seed}: poznamka {peer} ztracena"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     fn conn(src: &str, dst: &str, port: u16, at: i64) -> ConnectionObservation {
         ConnectionObservation {
             timestamp: Utc.timestamp_opt(at, 0).unwrap(),
@@ -603,6 +689,7 @@ mod tests {
             history_key: None,
             high_impact: false,
             prior: 0.15,
+            protected: false,
         };
         assert_eq!(
             case_verdict(&p, &policy, &case(&[], 443), None, now),

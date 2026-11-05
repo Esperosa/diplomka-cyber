@@ -222,10 +222,20 @@ pub struct OutputStats {
     pub regular_flows: u64,
     pub regular_fp: BTreeMap<String, u64>,
     pub regular_fp_displayed: BTreeMap<String, u64>,
+    /// Krok 7: počítadla (chráněná automatická zavření, zobrazené chráněné, anotace
+    /// třídy provoz, tiché potlačení); prázdné se nezapisuje (výstup kroku 6 beze změny).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub k7: BTreeMap<String, u64>,
 }
 
 impl OutputStats {
+    /// Krok 7: přičte počítadlo.
+    pub fn k7_add(&mut self, name: &str, value: u64) {
+        *self.k7.entry(name.to_string()).or_default() += value;
+    }
+
     fn merge(&mut self, o: &OutputStats) {
+        merge_map(&mut self.k7, &o.k7);
         self.displayed += o.displayed;
         self.displayed_behavioral += o.displayed_behavioral;
         self.displayed_fp += o.displayed_fp;

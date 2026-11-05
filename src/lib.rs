@@ -44,6 +44,7 @@ pub mod paths;
 pub mod pentest;
 pub mod pipeline;
 pub mod platform;
+pub mod protection;
 pub mod readiness;
 pub mod report;
 pub mod scope_policy;

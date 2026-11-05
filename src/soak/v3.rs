@@ -84,6 +84,7 @@ impl V3Runtime {
             ladder: crate::verify_ladder::Ladder::new(
                 crate::verify_ladder::LadderPolicy {
                     profile: engine.profile(),
+                    protect: engine.protect(),
                     ..Default::default()
                 },
                 secret,
@@ -91,7 +92,10 @@ impl V3Runtime {
             case_findings: Default::default(),
             behavior: Default::default(),
             behavior_thresholds: Default::default(),
-            profile_policy: Default::default(),
+            profile_policy: crate::behavior::profile::ProfilePolicy {
+                keep_tainted: engine.protect(),
+                ..Default::default()
+            },
             egress_policy: Default::default(),
             clientele: Default::default(),
             ops_policy: Default::default(),

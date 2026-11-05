@@ -79,6 +79,7 @@ impl crate::verify_ladder::LadderEvidence for ProdEvidence<'_> {
                     sources: &case.sources,
                     severity: crate::model::Severity::Medium,
                     at: self.now,
+                    protected: case.protected,
                 },
             )
             .map(|(_, reason)| reason)
@@ -404,7 +405,19 @@ impl V3Session {
         }
         // profil je dukaz zebriku jen ve v3 s profilem (plati i pro ulozeny zebrik)
         ladder.policy.profile = self.engine.profile();
-        let profile_policy = crate::behavior::profile::ProfilePolicy::default();
+        // krok 7 (A1): chranene pripady se nevyvraci (plati i pro ulozeny zebrik)
+        ladder.policy.protect = self.engine.protect();
+        if self.engine.protect() {
+            let reset = ladder.reset_forbidden_novelty_evidence();
+            if reset > 0 {
+                tracing::warn!(reset, "chranene pripady s neskodnym dukazem resetovany");
+            }
+        }
+        let sensor_gap = self.engine.protect() && gate.sensor_gap(&calendar, now);
+        let profile_policy = crate::behavior::profile::ProfilePolicy {
+            keep_tainted: self.engine.protect(),
+            ..Default::default()
+        };
         let cycle = (now.timestamp() / 1800).max(0) as u64;
         let severe = GatePolicy::default().most_severe;
         let mut keys: Vec<crate::finding_memory::FindingKey> = Vec::new();
@@ -436,8 +449,26 @@ impl V3Session {
                 ),
             };
             let key = key_for_finding(finding, &entity_host, &sources);
+            // krok 7 (A1): P4 degradace (mezera v telemetrii, nezraly profil aktera) a
+            // P5 nejednoznacna identita
+            let protect = self.engine.protect();
+            let degraded = protect
+                && (sensor_gap
+                    || (self.engine.profile()
+                        && crate::protection::immature_actor(
+                            &behavior_state.profile,
+                            &finding.finding_type,
+                            &host_ip,
+                            now.timestamp(),
+                        )));
+            let ambiguous_identity = protect
+                && finding
+                    .host_key
+                    .as_ref()
+                    .and_then(|k| identity.get(k))
+                    .is_some_and(|m| matches!(m, IdentityMatch::Ambiguous { .. }));
             let ids = [host_ip, entity_host];
-            let explanation = gate.explain(
+            let decision = gate.explain_decision(
                 &calendar,
                 &GateInput {
                     finding_type: &finding.finding_type,
@@ -445,8 +476,17 @@ impl V3Session {
                     sources: &sources,
                     severity: finding.severity,
                     at: now,
+                    protected: degraded || ambiguous_identity,
                 },
             );
+            let signals = crate::protection::Signals {
+                degraded,
+                ambiguous: ambiguous_identity || decision.ambiguous,
+            };
+            let protection = protect
+                .then(|| crate::protection::protection(&finding.finding_type, signals))
+                .flatten();
+            let explanation = decision.explanation;
             let disposition = memory.observe(
                 &Observation {
                     key: key.clone(),
@@ -457,6 +497,7 @@ impl V3Session {
                     volume_explained: explanation
                         .as_ref()
                         .is_some_and(|e| e.kind.explains_volume()),
+                    protected: protection.is_some(),
                 },
                 explanation.as_ref().map(|e| e.reason.as_str()),
             );
@@ -488,6 +529,7 @@ impl V3Session {
                             high_impact: finding.severity == crate::model::Severity::High
                                 || severe.contains(&finding.finding_type),
                             prior: crate::verify_ladder::DEFAULT_PRIOR,
+                            protected: protection.is_some(),
                         },
                         cycle,
                     );
@@ -495,12 +537,10 @@ impl V3Session {
                     ladder.observe(&key, &sources, cycle);
                 }
             }
-            lifecycle.push(LifecycleRecord::new(
-                &finding.finding_id,
-                &disposition,
-                memory.get(&key),
-                now,
-            ));
+            let mut record =
+                LifecycleRecord::new(&finding.finding_id, &disposition, memory.get(&key), now);
+            record.protection = protection.map(|p| p.label().to_string());
+            lifecycle.push(record);
             keys.push(key);
             signal_sources.push(sources);
         }

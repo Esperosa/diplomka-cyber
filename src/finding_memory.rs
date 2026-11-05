@@ -66,6 +66,11 @@ pub struct MemoryConfig {
     /// schoval pod otevřený nález bez zdrojů).
     #[serde(default)]
     pub escalate_first_source: bool,
+    /// Krok 7 (A1): chráněný nález (typ z `protection` nebo `Observation::protected`)
+    /// se nikdy nepřevede do `AutoResolved` ani `Refuted`; uložený zakázaný stav se při
+    /// načtení převede na `Closed` (další výskyt ho znovu otevře a zobrazí).
+    #[serde(default)]
+    pub protect: bool,
 }
 
 impl Default for MemoryConfig {
@@ -80,6 +85,7 @@ impl Default for MemoryConfig {
             min_escalation_count: 20,
             persist_last_seen_every_s: 90 * 60,
             escalate_first_source: false,
+            protect: false,
         }
     }
 }
@@ -218,6 +224,8 @@ pub struct Observation<'a> {
     /// Vysvětlení počítá s nárůstem objemu (záloha, dávka): eskalace objemu se v jeho
     /// okně nezobrazí. U ostatních druhů (výpadek, patch) se objem zobrazí vždy.
     pub volume_explained: bool,
+    /// Krok 7: pozorování je chráněné signálem cyklu (P4 degradace, P5 nejednoznačnost).
+    pub protected: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -291,6 +299,11 @@ pub struct MemoryStats {
     pub purged: u64,
     pub evicted: u64,
     pub peak_entries: u64,
+    /// Krok 7: chráněné položky převedené ze zakázaného stavu a odmítnutá vyvrácení.
+    #[serde(default)]
+    pub protect_reset: u64,
+    #[serde(default)]
+    pub protect_refused: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -401,6 +414,62 @@ impl FindingMemory {
         &self.cfg
     }
 
+    /// Chráněný klíč (krok 7, A1): typ z `protection` nebo signál pozorování.
+    pub fn shielded(&self, key: &FindingKey, signal: bool) -> bool {
+        self.cfg.protect && (signal || crate::protection::is_protected_type(&key.finding_type))
+    }
+
+    /// Uložené chráněné položky v zakázaném stavu (`AutoResolved`, `Refuted`) převede na
+    /// `Closed` s auditem. Vrací počet převedených.
+    pub fn reset_protected(&mut self, at: Option<DateTime<Utc>>) -> usize {
+        if !self.cfg.protect {
+            return 0;
+        }
+        let mut keys: Vec<FindingKey> = self
+            .entries
+            .iter()
+            .filter(|(key, entry)| {
+                crate::protection::is_protected_type(&key.finding_type)
+                    && matches!(
+                        entry.state,
+                        FindingState::AutoResolved | FindingState::Refuted
+                    )
+            })
+            .map(|(key, _)| key.clone())
+            .collect();
+        keys.sort();
+        for key in &keys {
+            if let Some(entry) = self.entries.get_mut(key) {
+                let previous = entry.state;
+                let when = at.unwrap_or(entry.last_seen);
+                entry.state = FindingState::Closed;
+                entry.auto_reason = None;
+                entry.dirty = true;
+                self.log(
+                    when,
+                    "engine",
+                    "protect_reset",
+                    key,
+                    format!("z {} (nacteni)", previous.label()),
+                );
+            }
+        }
+        self.stats.protect_reset += keys.len() as u64;
+        keys.len()
+    }
+
+    /// Zápis do auditu za jiný modul (krok 7, A3: provozní audit uzavření).
+    pub fn record(
+        &mut self,
+        at: DateTime<Utc>,
+        actor: &str,
+        action: &str,
+        key: &FindingKey,
+        detail: &str,
+    ) {
+        self.log(at, actor, action, key, clip(detail));
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }
@@ -475,6 +544,7 @@ impl FindingMemory {
             );
         }
         memory.stats.peak_entries = memory.entries.len() as u64;
+        memory.reset_protected(None);
         Ok(memory)
     }
 
@@ -571,6 +641,29 @@ impl FindingMemory {
     pub fn observe(&mut self, obs: &Observation<'_>, explanation: Option<&str>) -> Disposition {
         self.stats.observed += 1;
         let cfg = self.cfg;
+        // krok 7 (A1): chraneny nalez zadne vysvetleni neprijme, zakazany stav se zrusi
+        let shielded = self.shielded(&obs.key, obs.protected);
+        let explanation = if shielded { None } else { explanation };
+        if shielded
+            && let Some(entry) = self.entries.get_mut(&obs.key)
+            && matches!(
+                entry.state,
+                FindingState::AutoResolved | FindingState::Refuted
+            )
+        {
+            let previous = entry.state;
+            entry.state = FindingState::Closed;
+            entry.auto_reason = None;
+            entry.dirty = true;
+            self.stats.protect_reset += 1;
+            self.log(
+                obs.at,
+                "engine",
+                "protect_reset",
+                &obs.key,
+                format!("z {}", previous.label()),
+            );
+        }
         if !self.entries.contains_key(&obs.key) {
             self.ensure_capacity(obs.at);
         }
@@ -797,6 +890,11 @@ impl FindingMemory {
     /// Ověření vyvrátilo hypotézu (žebřík, krok 2B): stav `Refuted` s důvodem v auditu.
     /// Vratné (`reopen`), změna příznaků se zobrazí jako eskalace.
     pub fn refute(&mut self, key: &FindingKey, reason: &str, at: DateTime<Utc>) -> bool {
+        if self.shielded(key, false) {
+            self.stats.protect_refused += 1;
+            self.log(at, "verify_ladder", "protect_refuse", key, clip(reason));
+            return false; // chraneny typ se automaticky nevyvraci (krok 7, A1)
+        }
         let Some(entry) = self.entries.get_mut(key) else {
             return false;
         };
@@ -856,6 +954,10 @@ pub struct LifecycleRecord {
     /// (`ops_evidence`), ne mezi podezřeními na útok; nezavírá se.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ops_reason: Option<String>,
+    /// Krok 7 (A1): třída ochrany (novelty, graph, signature, aggregate, degraded,
+    /// ambiguous): nález se nikdy automaticky nezavře a vždy se zobrazí.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protection: Option<String>,
 }
 
 impl LifecycleRecord {
@@ -884,6 +986,7 @@ impl LifecycleRecord {
             last_seen: entry.map(|e| e.last_seen).unwrap_or(at),
             occurrences: entry.map(|e| e.occurrences).unwrap_or(1),
             ops_reason: None,
+            protection: None,
         }
     }
 }
@@ -939,6 +1042,7 @@ mod tests {
             sources: src,
             at: at(minute),
             volume_explained: true,
+            protected: false,
         }
     }
 

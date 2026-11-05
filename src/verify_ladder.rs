@@ -189,6 +189,17 @@ pub struct CaseInput {
     pub high_impact: bool,
     /// Apriorní pravděpodobnost útoku (Case Memory nebo výchozí).
     pub prior: f64,
+    /// Krok 7 (A1): chráněný případ (P4 degradace, P5 nejednoznačnost; typy P1 až P3
+    /// se poznají podle typu). S `LadderPolicy::protect` se nikdy nevyvrátí.
+    #[serde(default)]
+    pub protected: bool,
+}
+
+impl CaseInput {
+    /// Chráněný případ (typ nebo signál cyklu).
+    pub fn is_protected(&self) -> bool {
+        self.protected || crate::protection::is_protected_type(&self.finding_type)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -254,6 +265,8 @@ pub struct Decision {
     pub budget_escalation: bool,
     /// Vysoký dopad: zobrazeno už při otevření.
     pub high_impact: bool,
+    /// Krok 7: chráněný případ (s protect), zobrazen už při otevření.
+    pub protected: bool,
     /// Provedené kontroly a značka výsledku (pro měření a učení LR, krok 2C).
     pub steps: Vec<(CheckId, &'static str)>,
 }
@@ -410,6 +423,8 @@ pub struct LadderPolicy {
     /// empirické LR v kroku 3 vyšlo 1,03 (bez informace) a nový cíl sám potvrzoval
     /// neškodné případy (přesnost potvrzení 96,5 → 91,9 %); RQ4 Z10: nová hrana je rys.
     pub profile_new_evidence: bool,
+    /// Krok 7 (A1): chráněný případ se nevyvrací (rozhodnutí jde člověku).
+    pub protect: bool,
 }
 
 impl Default for LadderPolicy {
@@ -430,6 +445,7 @@ impl Default for LadderPolicy {
             lr: LrTable::default(),
             profile: false,
             profile_new_evidence: false,
+            protect: false,
         }
     }
 }
@@ -481,6 +497,8 @@ pub struct LadderStats {
     pub escalated_budget: u64,
     pub needs_approval: u64,
     pub cases_capped: u64,
+    /// Krok 7: chráněné případy, které by se vyvrátily, a šly člověku.
+    pub protect_escalated: u64,
 }
 
 fn mix(mut x: u64) -> u64 {
@@ -846,11 +864,14 @@ impl Ladder {
     /// začátek: prior, nový plán, bez kroků. Volá se při načtení stavu i v každém
     /// cyklu (`step`). Vrací počet resetovaných případů.
     pub fn reset_forbidden_novelty_evidence(&mut self) -> usize {
+        let protect = self.policy.protect;
         let mut keys: Vec<FindingKey> = self
             .cases
             .iter()
             .filter(|(_, case)| {
-                crate::behavior::novelty::is_novelty_type(&case.input.finding_type)
+                // krok 7 (A1): totez pro chranene pripady
+                (crate::behavior::novelty::is_novelty_type(&case.input.finding_type)
+                    || (protect && case.input.is_protected()))
                     && case.steps.iter().any(|step| {
                         matches!(step.check, CheckId::Context | CheckId::Profile)
                             && matches!(step.outcome, Outcome::Evidence { lr, .. } if lr < 1.0)
@@ -1066,10 +1087,19 @@ impl Ladder {
         } else {
             self.policy.p_refute
         };
+        let shielded = self.policy.protect && case.input.is_protected();
         let status = if posterior >= self.policy.p_confirm {
             Some(Status::Confirmed)
-        } else if posterior <= refute_at && case.benign_evidence {
+        } else if posterior <= refute_at && case.benign_evidence && !shielded {
             Some(Status::Refuted)
+        } else if posterior <= refute_at && case.benign_evidence {
+            // krok 7 (A1): chraneny pripad se nevyvraci, rozhodnuti jde cloveku
+            self.stats.protect_escalated += 1;
+            let decision = self.finish(key, Status::Escalated, cycle, false);
+            return decision.map(|mut d| {
+                d.reason = format!("chraneny nalez: vyvraceni zakazano; {}", d.reason);
+                d
+            });
         } else if executed >= self.policy.max_checks || case.plan.is_empty() {
             Some(Status::Escalated)
         } else {
@@ -1136,6 +1166,7 @@ impl Ladder {
             checks: case.steps.len(),
             budget_escalation: budget,
             high_impact: case.input.high_impact,
+            protected: self.policy.protect && case.input.is_protected(),
             steps: case
                 .steps
                 .iter()
@@ -1174,6 +1205,10 @@ fn evaluate(
                     Outcome::Undetermined(format!("historie jen {history_days} dny"))
                 }
             }
+        }
+        // krok 7 (A1): chraneny pripad kontext nepodpori ani pri chybe prostredi
+        CheckId::Context if policy.protect && input.is_protected() => {
+            Outcome::Undetermined("chraneny nalez: kontext neni dukaz".into())
         }
         CheckId::Context => match env.context(input) {
             Some(reason) => Outcome::Evidence {
@@ -1311,7 +1346,9 @@ fn evaluate(
             let verdict = env.profile(input);
             // novost: zvyk hostu ani flotily neni neskodny dukaz (profil drzi zvyky 14 dni,
             // novost 7; review kola 1 S3, pojistka A7)
-            if crate::behavior::novelty::is_novelty_type(&input.finding_type)
+            // krok 7 (A1): totez pro chranene pripady (graf, signatura, degradace)
+            if (crate::behavior::novelty::is_novelty_type(&input.finding_type)
+                || (policy.protect && input.is_protected()))
                 && matches!(
                     verdict,
                     ProfileVerdict::Established { .. } | ProfileVerdict::Fleet { .. }
@@ -1632,6 +1669,7 @@ mod tests {
             history_key: Some(format!("{entity}/tcp/80#flows")),
             high_impact: false,
             prior: 0.15,
+            protected: false,
         }
     }
 

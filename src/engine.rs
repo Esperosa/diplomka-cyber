@@ -99,6 +99,28 @@ pub struct V3Features {
     /// identifikovaného zdroje (kromě objemu v okně zálohy a dávky).
     #[serde(default)]
     pub context_guard: bool,
+    /// Krok 7 (A1): chráněné nálezy (novost, graf, signatura, degradace, nejednoznačný
+    /// kontext) se nikdy automaticky nezavřou, nevyvrátí ani neodkloní a zobrazí se hned.
+    #[serde(default)]
+    pub protect: bool,
+    /// Krok 7 (B1): třída provoz jen jako anotace, nález zůstává ve frontě podezření.
+    #[serde(default)]
+    pub ops_annotate: bool,
+    /// Krok 7 (B2): hopy jednoho pivotu a kořene řetězu jsou jeden incident paměti.
+    #[serde(default)]
+    pub graph_incident: bool,
+    /// Krok 7 (B3a): rychlá nová vazba ven (`novel_burst_peer`).
+    #[serde(default)]
+    pub novel_burst: bool,
+    /// Krok 7 (B3b): `novel_fanout` jen s druhým signálem.
+    #[serde(default)]
+    pub fanout2: bool,
+    /// Krok 7 (B4): agregace selhání a nových vazeb přes zdroje (`distributed_sources`).
+    #[serde(default)]
+    pub cross_source: bool,
+    /// Krok 7 (B5): opakovaná upozornění na novou vazbu ven jako jeden incident.
+    #[serde(default)]
+    pub saas_group: bool,
 }
 
 impl Default for V3Features {
@@ -108,7 +130,7 @@ impl Default for V3Features {
 }
 
 impl V3Features {
-    pub const NAMES: [&'static str; 20] = [
+    pub const NAMES: [&'static str; 27] = [
         "memory",
         "rate",
         "volume",
@@ -129,6 +151,13 @@ impl V3Features {
         "ops_class",
         "novelty",
         "context_guard",
+        "protect",
+        "ops_annotate",
+        "graph_incident",
+        "novel_burst",
+        "fanout2",
+        "cross_source",
+        "saas_group",
     ];
 
     pub fn all() -> Self {
@@ -153,6 +182,13 @@ impl V3Features {
             ops_class: true,
             novelty: true,
             context_guard: true,
+            protect: true,
+            ops_annotate: true,
+            graph_incident: true,
+            novel_burst: true,
+            fanout2: true,
+            cross_source: true,
+            saas_group: true,
         }
     }
 
@@ -171,6 +207,13 @@ impl V3Features {
             graph: false,
             ops_class: false,
             context_guard: false,
+            protect: false,
+            ops_annotate: false,
+            graph_incident: false,
+            novel_burst: false,
+            fanout2: false,
+            cross_source: false,
+            saas_group: false,
             ..Self::all()
         }
     }
@@ -206,6 +249,13 @@ impl V3Features {
             ops_class: false,
             novelty: false,
             context_guard: false,
+            protect: false,
+            ops_annotate: false,
+            graph_incident: false,
+            novel_burst: false,
+            fanout2: false,
+            cross_source: false,
+            saas_group: false,
         }
     }
 
@@ -255,6 +305,13 @@ impl V3Features {
             "ops_class" => &mut self.ops_class,
             "novelty" => &mut self.novelty,
             "context_guard" => &mut self.context_guard,
+            "protect" => &mut self.protect,
+            "ops_annotate" => &mut self.ops_annotate,
+            "graph_incident" => &mut self.graph_incident,
+            "novel_burst" => &mut self.novel_burst,
+            "fanout2" => &mut self.fanout2,
+            "cross_source" => &mut self.cross_source,
+            "saas_group" => &mut self.saas_group,
             _ => return None,
         })
     }
@@ -389,6 +446,37 @@ impl EngineConfig {
     pub fn context_guard(&self) -> bool {
         self.on(|f| f.context && f.context_guard)
     }
+    /// Krok 7 (A1): chráněné nálezy.
+    pub fn protect(&self) -> bool {
+        self.on(|f| f.protect)
+    }
+    /// Krok 7 (B1): třída provoz jen jako anotace (s pamětí nálezů).
+    pub fn ops_annotate(&self) -> bool {
+        self.on(|f| f.ops_annotate && f.memory)
+    }
+    /// Třída provoz běží (jako fronta nebo jako anotace).
+    pub fn ops_evidence(&self) -> bool {
+        self.ops_class() || self.ops_annotate() || self.cross_source()
+    }
+    /// Krok 7 (B2): incident grafu (jen s grafem).
+    pub fn graph_incident(&self) -> bool {
+        self.graph() && self.v3.graph_incident
+    }
+    /// Krok 7 (B3): varianty novosti stojí na novosti.
+    pub fn novel_burst(&self) -> bool {
+        self.novelty() && self.v3.novel_burst
+    }
+    pub fn fanout2(&self) -> bool {
+        self.novelty() && self.v3.fanout2
+    }
+    /// Krok 7 (B4): agregace přes zdroje (klientela služeb, s pamětí nálezů).
+    pub fn cross_source(&self) -> bool {
+        self.on(|f| f.cross_source && f.memory)
+    }
+    /// Krok 7 (B5): seskupení nové vazby ven (jen s novostí).
+    pub fn saas_group(&self) -> bool {
+        self.novelty() && self.v3.saas_group
+    }
     /// Běží behaviorální vrstva kroku 3 (aspoň jedna její část)?
     pub fn behavior(&self) -> bool {
         self.egress() || self.graph() || self.profile()
@@ -402,6 +490,7 @@ impl EngineConfig {
     pub fn memory_config(&self) -> crate::finding_memory::MemoryConfig {
         crate::finding_memory::MemoryConfig {
             escalate_first_source: self.recall(),
+            protect: self.protect(),
             ..Default::default()
         }
     }
@@ -443,7 +532,7 @@ mod tests {
         };
         assert_eq!(
             cfg.label(),
-            "v3[memory+unexpected+context+identity+recall+ladder+learning+devices+peers+egress+beacon+interactive+graph+profile+sensor_strict+ops_class+novelty+context_guard]"
+            "v3[memory+unexpected+context+identity+recall+ladder+learning+devices+peers+egress+beacon+interactive+graph+profile+sensor_strict+ops_class+novelty+context_guard+protect+ops_annotate+graph_incident+novel_burst+fanout2+cross_source+saas_group]"
         );
         let step2 = EngineConfig {
             mode: EngineMode::V3,

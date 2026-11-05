@@ -1333,9 +1333,28 @@ fn run_episode_inner(
                     // pokusy (sken) jsou stav ZDROJE: jeden stav na skener, ne na kazdy cil
                     let key = key_for_finding(finding, &entity_host, &sources);
                     let key_copy = key.clone();
-                    let explanation = context.as_ref().and_then(|ctx| {
+                    // krok 7 (A1): P4 degradace a P5 nejednoznacna identita
+                    let protect = cfg.engine.protect();
+                    let degraded = protect
+                        && (context
+                            .as_ref()
+                            .is_some_and(|ctx| runtime.gate.sensor_gap(ctx, at))
+                            || (cfg.engine.profile()
+                                && crate::protection::immature_actor(
+                                    &runtime.behavior.profile,
+                                    &finding.finding_type,
+                                    &host_ip,
+                                    at.timestamp(),
+                                )));
+                    let ambiguous_identity = protect
+                        && finding
+                            .host_key
+                            .as_ref()
+                            .and_then(|k| identity_map.get(k))
+                            .is_some_and(|m| matches!(m, IdentityMatch::Ambiguous { .. }));
+                    let decision = context.as_ref().map(|ctx| {
                         let ids = [host_ip.clone(), entity_host.clone()];
-                        runtime.gate.explain(
+                        runtime.gate.explain_decision(
                             ctx,
                             &GateInput {
                                 finding_type: &finding.finding_type,
@@ -1343,9 +1362,23 @@ fn run_episode_inner(
                                 sources: &sources,
                                 severity: finding.severity,
                                 at,
+                                protected: degraded || ambiguous_identity,
                             },
                         )
                     });
+                    let protection = protect
+                        .then(|| {
+                            crate::protection::protection(
+                                &finding.finding_type,
+                                crate::protection::Signals {
+                                    degraded,
+                                    ambiguous: ambiguous_identity
+                                        || decision.as_ref().is_some_and(|d| d.ambiguous),
+                                },
+                            )
+                        })
+                        .flatten();
+                    let explanation = decision.and_then(|d| d.explanation);
                     let disposition = match runtime.memory.as_mut() {
                         Some(memory) => memory.observe(
                             &Observation {
@@ -1357,6 +1390,7 @@ fn run_episode_inner(
                                 volume_explained: explanation
                                     .as_ref()
                                     .is_some_and(|e| e.kind.explains_volume()),
+                                protected: protection.is_some(),
                             },
                             explanation.as_ref().map(|e| e.reason.as_str()),
                         ),
@@ -1366,6 +1400,9 @@ fn run_episode_inner(
                         },
                     };
                     let auto_closed = matches!(disposition, Disposition::AutoResolved(_));
+                    if auto_closed && protection.is_some() {
+                        agg.output.k7_add("protected_auto_closed", 1);
+                    }
                     let new_state = disposition.displayed();
                     let mut shown_item = shown_for(
                         &disposition,
@@ -1424,6 +1461,7 @@ fn run_episode_inner(
                                 } else {
                                     crate::verify_ladder::DEFAULT_PRIOR
                                 },
+                                protected: protection.is_some(),
                             };
                             if runtime.ladder.open(input, cycle as u64) {
                                 lc.opened.insert(finding_index);
@@ -1431,7 +1469,8 @@ fn run_episode_inner(
                                     .case_findings
                                     .insert(key_copy.clone(), finding.clone());
                             }
-                            if !high {
+                            // krok 7 (A1): chraneny nalez se zobrazi hned, ne po overeni
+                            if !high && protection.is_none() {
                                 shown_item.displayed = false;
                                 shown_item.reason = "verifying";
                             }
@@ -1536,7 +1575,9 @@ fn run_episode_inner(
                                 out[i].displayed = true;
                                 out[i].reason = reason;
                             }
-                            (None, Some(reason)) if !decision.high_impact => {
+                            (None, Some(reason))
+                                if !decision.high_impact && !decision.protected =>
+                            {
                                 if let Some(finding) = finding {
                                     lc.late.push((
                                         finding,
