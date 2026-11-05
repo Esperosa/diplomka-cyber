@@ -46,6 +46,9 @@ pub struct NoveltyThresholds {
     /// Mez nových vnitřních vazeb; 0 = `novel_fanout` vypnuto.
     pub fanout_min: usize,
     pub fanout_span_s: i64,
+    /// Strop nových vnitřních vazeb držených na hostitele (nejméně `fanout_min`, aby
+    /// překročení prahu zůstalo vidět); další vazby v okně se nepřidají.
+    pub fanout_cap: usize,
     pub idle_s: i64,
     pub max_pairs: usize,
     pub max_hosts: usize,
@@ -63,6 +66,7 @@ impl Default for NoveltyThresholds {
             fleet_max: 2,
             fanout_min: 0,
             fanout_span_s: 6 * 3600,
+            fanout_cap: 256,
             idle_s: 3 * 86_400,
             max_pairs: 200_000,
             max_hosts: 50_000,
@@ -212,7 +216,12 @@ pub fn detect(
         let host = state.fanout.entry(src.clone()).or_default();
         host.last = now;
         host.recent.retain(|(at, _)| now - at < t.fanout_span_s);
+        // deterministicky strop (vztahy jdou serazene z BTreeSet), prah zustava dosazitelny
+        let cap = t.fanout_cap.max(t.fanout_min);
         for relation in relations {
+            if host.recent.len() >= cap {
+                break;
+            }
             if !host.recent.iter().any(|(_, r)| *r == relation) {
                 host.recent.push((now, relation));
             }
@@ -425,6 +434,53 @@ mod tests {
         let later = start + 20 * 3600;
         let flows = [conn("10.0.0.5", "10.0.2.1", 445, later)];
         assert!(detect(&mut state, &profile, &prevalence, &t, &[], &flows, later).is_empty());
+    }
+
+    /// Review kola 1 (S5): vektor novych vazeb na hostitele ma strop, poplach zustava.
+    #[test]
+    fn fanout_relations_per_host_are_capped_deterministically() {
+        let profile = mature_profile("10.0.0.5");
+        let prevalence = Prevalence::default();
+        let t = NoveltyThresholds {
+            fanout_min: 8,
+            ..Default::default()
+        };
+        let now = T0 + 3 * 86_400;
+        let flood: Vec<ConnectionObservation> = (0..5000u32)
+            .map(|k| {
+                conn(
+                    "10.0.0.5",
+                    &format!("10.1.{}.{}", k / 250, k % 250 + 1),
+                    445,
+                    now,
+                )
+            })
+            .collect();
+        let run = || {
+            let mut state = NoveltyState::default();
+            let found = detect(&mut state, &profile, &prevalence, &t, &[], &flood, now);
+            (state, found)
+        };
+        let (state, found) = run();
+        let held = state.fanout["10.0.0.5"].recent.len();
+        assert_eq!(held, t.fanout_cap);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].finding.finding_type, "novel_fanout");
+        let (again, _) = run();
+        assert_eq!(
+            state.fanout["10.0.0.5"].recent,
+            again.fanout["10.0.0.5"].recent
+        );
+        // strop nikdy pod prahem
+        let low = NoveltyThresholds {
+            fanout_min: 8,
+            fanout_cap: 3,
+            ..Default::default()
+        };
+        let mut state = NoveltyState::default();
+        let found = detect(&mut state, &profile, &prevalence, &low, &[], &flood, now);
+        assert_eq!(found.len(), 1);
+        assert_eq!(state.fanout["10.0.0.5"].recent.len(), 8);
     }
 
     #[test]
