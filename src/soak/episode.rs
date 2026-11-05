@@ -266,6 +266,65 @@ struct Shown {
     sources: Vec<String>,
     /// Stav nalezu vyvratil zebrik overovani (automaticky vyreseno, krok 2B).
     ladder_refuted: bool,
+    /// Pamet nalezu v tomto cyklu vratila eskalaci nebo znovuotevreni. Uchovava se
+    /// zvlast, protoze `reason` pozdeji prepise zebrik (`verifying`, `ladder_*`);
+    /// vstup pro zneplatneni znacky tridy provoz (review kola 3, S1).
+    memory_contradicted: bool,
+}
+
+/// Polozka zobrazeni podle dispozice pameti nalezu (pred zasahem zebriku).
+fn shown_for(disposition: &Disposition, memory_on: bool, auto: Option<ContextKind>) -> Shown {
+    let (displayed, reason) = match disposition {
+        Disposition::First => (true, if memory_on { "first" } else { "no_memory" }),
+        Disposition::Reopened => (true, "reopened"),
+        Disposition::Escalated(cause) => (
+            true,
+            match cause {
+                Escalation::Severity => "escalated_severity",
+                Escalation::NewSource => "escalated_source",
+                Escalation::Volume => "escalated_volume",
+            },
+        ),
+        Disposition::Suppressed => (false, "suppressed"),
+        Disposition::AutoResolved(_) => (false, "auto_resolved"),
+    };
+    Shown {
+        displayed,
+        reason,
+        auto: if matches!(disposition, Disposition::AutoResolved(_)) {
+            auto
+        } else {
+            None
+        },
+        targets: Vec::new(),
+        sources: Vec::new(),
+        ladder_refuted: false,
+        ops: false,
+        memory_contradicted: crate::ops_evidence::OpsMarks::memory_contradicts(reason),
+    }
+}
+
+/// Krok 6: obnovi nebo zneplatni znacku tridy provoz pro jeden nalez a vrati, zda
+/// plati. Rozpor s pameti se bere z `memory_contradicted`, ne z (prepsaneho) `reason`.
+fn update_ops_mark(
+    marks: &mut crate::ops_evidence::OpsMarks,
+    show: &Shown,
+    finding_id: &str,
+    now: i64,
+    fresh: Option<String>,
+    service_key: Option<&str>,
+    sources: &[String],
+) -> bool {
+    marks
+        .update(
+            finding_id,
+            now,
+            fresh,
+            service_key,
+            sources,
+            show.memory_contradicted,
+        )
+        .is_some()
 }
 
 /// Vystup zebriku v cyklu (krok 2B): klice nalezu, otevrene pripady, rozhodnuti.
@@ -1228,6 +1287,7 @@ fn run_episode_inner(
                     sources: Vec::new(),
                     ladder_refuted: false,
                     ops: false,
+                    memory_contradicted: false,
                 })
                 .collect(),
             Some(runtime) => {
@@ -1307,57 +1367,11 @@ fn run_episode_inner(
                     };
                     let auto_closed = matches!(disposition, Disposition::AutoResolved(_));
                     let new_state = disposition.displayed();
-                    let mut shown_item = match disposition {
-                        Disposition::First => Shown {
-                            displayed: true,
-                            reason: if memory_on { "first" } else { "no_memory" },
-                            auto: None,
-                            targets: Vec::new(),
-                            sources: Vec::new(),
-                            ladder_refuted: false,
-                            ops: false,
-                        },
-                        Disposition::Reopened => Shown {
-                            displayed: true,
-                            reason: "reopened",
-                            auto: None,
-                            targets: Vec::new(),
-                            sources: Vec::new(),
-                            ladder_refuted: false,
-                            ops: false,
-                        },
-                        Disposition::Escalated(cause) => Shown {
-                            displayed: true,
-                            reason: match cause {
-                                Escalation::Severity => "escalated_severity",
-                                Escalation::NewSource => "escalated_source",
-                                Escalation::Volume => "escalated_volume",
-                            },
-                            auto: None,
-                            targets: Vec::new(),
-                            sources: Vec::new(),
-                            ladder_refuted: false,
-                            ops: false,
-                        },
-                        Disposition::Suppressed => Shown {
-                            displayed: false,
-                            reason: "suppressed",
-                            auto: None,
-                            targets: Vec::new(),
-                            sources: Vec::new(),
-                            ladder_refuted: false,
-                            ops: false,
-                        },
-                        Disposition::AutoResolved(_) => Shown {
-                            displayed: false,
-                            reason: "auto_resolved",
-                            auto: explanation.as_ref().map(|e| e.kind),
-                            targets: Vec::new(),
-                            sources: Vec::new(),
-                            ladder_refuted: false,
-                            ops: false,
-                        },
-                    };
+                    let mut shown_item = shown_for(
+                        &disposition,
+                        memory_on,
+                        explanation.as_ref().map(|e| e.kind),
+                    );
                     if auto_closed && let Some((_, _, targets)) = behavior_item {
                         shown_item.targets = targets.clone();
                         shown_item.sources = sources.clone();
@@ -1534,6 +1548,7 @@ fn run_episode_inner(
                                             sources: Vec::new(),
                                             ladder_refuted: false,
                                             ops: false,
+                                            memory_contradicted: false,
                                         },
                                     ));
                                 }
@@ -1608,19 +1623,16 @@ fn run_episode_inner(
                     sources,
                     &scope_nets,
                 );
-                // znacka plati jen pro epizodu sveho dukazu (review kola 1 S1)
-                let escalated = crate::ops_evidence::OpsMarks::memory_contradicts(show.reason);
-                let valid = runtime
-                    .ops_marks
-                    .update(
-                        &finding.finding_id,
-                        now,
-                        fresh,
-                        service_key,
-                        sources,
-                        escalated,
-                    )
-                    .is_some();
+                // znacka plati jen pro epizodu sveho dukazu (review kola 1 a 3, S1)
+                let valid = update_ops_mark(
+                    &mut runtime.ops_marks,
+                    show,
+                    &finding.finding_id,
+                    now,
+                    fresh,
+                    service_key,
+                    sources,
+                );
                 if show.displayed && valid {
                     show.ops = true;
                     agg.output.ops_class_displayed += 1;
@@ -3498,6 +3510,53 @@ mod engine_v3_tests {
                 "{stage:<22} prumer {:.1} ms  p99 {:.1} ms",
                 hist.mean() * 1000.0,
                 hist.percentile(0.99) * 1000.0
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod ops_mark_tests {
+    use super::*;
+
+    /// Review kola 3 (S1): pamet vrati `Reopened` nebo eskalaci, zebrik pak `reason`
+    /// prepise na `verifying` a po rozhodnuti na `ladder_escalated` / `ladder_confirmed`.
+    /// Znacka tridy provoz se stejnou sluzbou a bez zdroju se presto musi zneplatnit.
+    #[test]
+    fn ladder_rewritten_reason_keeps_memory_contradiction() {
+        let svc = Some("10.0.0.9/tcp/443");
+        let contradicting = [
+            Disposition::Reopened,
+            Disposition::Escalated(Escalation::Severity),
+            Disposition::Escalated(Escalation::Volume),
+        ];
+        for disposition in &contradicting {
+            for rewritten in ["verifying", "ladder_escalated", "ladder_confirmed"] {
+                let mut marks = crate::ops_evidence::OpsMarks::default();
+                marks.note("f", 1000, "provoz E1", svc, &[]);
+                let mut show = shown_for(disposition, true, None);
+                // zebrik: nevysoky dopad se skryje do overeni, pak zobrazi rozhodnuti
+                show.displayed = false;
+                show.reason = "verifying";
+                if rewritten != "verifying" {
+                    show.displayed = true;
+                    show.reason = rewritten;
+                }
+                assert!(
+                    !update_ops_mark(&mut marks, &show, "f", 2800, None, svc, &[]),
+                    "{disposition:?} -> {rewritten}: znacka prezila"
+                );
+            }
+        }
+        // bez rozporu s pameti (potlaceno, prvni vyskyt) znacka v okne plati dal
+        for disposition in [Disposition::Suppressed, Disposition::First] {
+            let mut marks = crate::ops_evidence::OpsMarks::default();
+            marks.note("f", 1000, "provoz E1", svc, &[]);
+            let mut show = shown_for(&disposition, true, None);
+            show.reason = "ladder_escalated";
+            assert!(
+                update_ops_mark(&mut marks, &show, "f", 2800, None, svc, &[]),
+                "{disposition:?}"
             );
         }
     }
