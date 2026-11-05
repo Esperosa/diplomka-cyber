@@ -222,7 +222,50 @@ Všechno nové v3 je za přepínači (`--v3-on`, `[engine.v3]`), `V3Features::re
 
 ## D) Měření
 
-(doplní se)
+### D1. Ladicí seedy 20261701 a 20261801 (A2 na konfiguraci kroku 6, kandidáti B)
+
+Binárka `749047d`, svět `--coverage full --families all`, 2 × 40 sítí, 2 224 útoků, 2 ramena současně po 3 vláknech s prioritou Idle vedle dvou 72h běhů (zatížení stroje 34 až 49 %). Párově proti `v3k6`, bootstrap po sítích stratifikovaný po seedech. Plný výstup je v `k7/tuning.md`.
+
+| rameno | detekce | párově (p. b.) | FP/síť-den (poměr) | zobrazeno/síť-den (poměr) | zavřeno omylem (G3) | útoků se ztrátou viditelnosti (ladder / context / quiet) |
+|---|---:|---:|---:|---:|---:|---|
+| `v3k6` | 78,4 % | – | 13,1 | 116,6 | 33 / 1 320 = 2,5 % (1,8 až 3,5) | 9 / 0 / 36 (+1 evicted) |
+| `v3k7A` (protect) | 78,5 % | +0,1 (−0,1 až +0,3) | 13,4 (1,022) | 118,2 (1,014) | 21 / 807 = 2,6 % (1,7 až 3,9) | 6 / 0 / 31 |
+| B1 `ops_annotate` | 78,5 % | +0,1 | 13,4 (1,022) | 118,2 (1,014) | 21 / 807 | 6 / 0 / 31 |
+| B2 `graph,graph_incident` | 80,6 % | **+2,2 (+1,6 až +2,9)** | 14,1 (1,073; 1,036 až 1,125) | 127,7 (1,095) | **14 / 1 031 = 1,4 %** | 4 / 0 / 28 |
+| B3a `novel_burst` | 78,9 % | +0,5 (+0,2 až +0,9) | 14,2 (**1,084**) | 120,5 (1,034) | 31 / 773 = 4,0 % | 4 / 0 / 31 |
+| B3b `fanout2` | 79,8 % | +1,4 (+0,8 až +2,0) | 13,7 (1,041) | 137,0 (1,175) | 33 / 806 = 4,1 % | 4 / 0 / 28 |
+| B4 `cross_source` | 79,8 % | +1,4 (+0,7 až +2,3) | 432,5 (**35,7**) | 743,8 (7,27) | 26 / 332 = 7,8 % | 1 / 0 / 6 |
+| B5 `saas_group` | 78,5 % | +0,1 | 13,4 (1,019) | 118,1 (1,013) | 21 / 820 | 8 / 0 / 30 |
+
+Všechna ramena kromě `v3k6` mají `protect`. Chráněná automatická zavření: 0 ve všech ramenech. Ops-only útoky: 0 ve všech ramenech. Panika ani porušený invariant nenastaly.
+
+**A2: tiché potlačení na konfiguraci kroku 6** (`v3k6`, výstupy kroku 6 zopakované binárkou s metrikou; ostatní pole jsou bajtově stejná). Po prvním zobrazení je útok viditelný v 92,1 % svých cyklů. Ztrátu viditelnosti měl 46 útoků z 2 224 (2,1 %): u 9 nález vyvrátil žebřík, u 36 se klíč 24 h neobjevil a zavřel se (`quiet`), 1 vypadl ze stropu paměti. Ztrátu kontextem nemá žádný útok, protože kontextem zavřený nález se k útoku v soaku nepřipisuje jako zobrazený. U 109 útoků se během útoku stala dvojice z jejich klíčových IP zavedeným zvykem profilu. S `protect` (`v3k7A`) je viditelnost 93,7 %, ztrátu vyvrácením žebříkem mají 6 útoků místo 9 a habituace se nemění (109). Habituace tedy nevzniká na poznamenaných dvojicích (ty se podle property testu zvykem nestanou), ale na dvojicích útoku, které nikdy neměly poplach. To je slepé místo detekce, ne zadržení (registr, bod 12).
+
+**Rozhodnutí podle kill kritérií (B3):**
+
+| kandidát | kritérium | hodnota | výsledek |
+|---|---|---|---|
+| B1 | útoky s provozní značkou ≤ 3 %; přesnost značky ≥ 80 % | 133 / 2 224 = 6,0 %; 221 / (221 + 133) = 62 % | **zamítnut** |
+| B2 | FP ≤ 1,15 × `v3k6`; zavřeno omylem (počet) ≤ `v3k6` | 1,073; 14 ≤ 33 | **přijat** |
+| B3a | FP u `saas_adoption` ≤ +5 p. b.; FP celkem ≤ +5 % | +1,1 p. b.; **+8,4 %** | **zamítnut** |
+| B3b | zisk lateral ≥ 5 p. b.; FP ≤ 1,15 × | +9,6 p. b. (67,0 → 76,6 %); 1,041 | **přijat** |
+| B4 | FP ≤ +5 %; záměna provoz a útok neroste | FP × 35,7 | **zamítnut** |
+| B5 | položky na výskyt `saas_adoption` −30 %; c2 a dns_tunnel bez poklesu > 1 p. b. | 3,41 → 3,41 (0 %) | **zamítnut** |
+| společné | rodina n ≥ 100 bez poklesu > 3 p. b.; chráněná zavření 0 | nejhorší −1,4 p. b. (B4, ssh); 0 | splněno všemi |
+
+Žádný kandidát nevyužil povolenou úpravu parametrů. U zamítnutých kandidátů by úprava nemohla rozhodnout bez ladění na konkrétní poruchu (B1, B5) nebo by vyžadovala jiný návrh (B4).
+
+**B1: proč E1 nezabírá** (diagnostika `diagnose`, zobrazené položky poruch, seed 20261701). Otevřený bod kroku 6 („klíč nálezu proti cíli selhání“) se potvrdil jen zčásti:
+
+- `dns_outage`: nálezy mají přesný klíč služby DNS (`ip/udp/53`), takže klíč sedí. E1 přesto pro službu nevzniká: z 79 položek má shodu E1 jen 3, 17 má shodu E3 a 59 žádnou. Pravděpodobná příčina je práh `max_median_attempts` = 6. Klienti posílají DNS dotazy průběžně a při výpadku selhávají všechny, takže medián pokusů na zdroj práh přesáhne. „Málo pokusů na zdroj“ odlišuje poruchu od hádání hesel u TCP služeb, ale u upovídaných protokolů neplatí. Přímo jsem to neověřil. Nepřímo to podporuje to, že E3 (nárůst nesou dosavadní klienti) u téže služby vzniká, takže klientela i zdroje jsou v pořádku.
+- `cert_expired`: polovina položek jsou objemové typy (`inductive_volume_anomaly`) s přesnou shodou E1 (anotace 19 z 38 výskytů). Zbytek je `unexpected_traffic` a objem s klíčem jen na úrovni hostu, kde E1 hosta chybí. Tady klíč nesedí.
+- Anotace se ale lepí i na útoky: 6 % útoků (rozložené hádání hesel, DDoS, sken na službu s klientelou). Jako značka pro člověka je proto nespolehlivá (přesnost 62 %) a zůstává jen za přepínačem.
+
+**B4** (`distributed_sources`) zachytí rozložené útoky (exploit_attempt 39,5 → 51,1 %, credential_stuffing +4,4 p. b.), ale veřejné služby s mnoha novými vnějšími klienty ho spouštějí trvale: zobrazené FP × 35,7. Je to přesně riziko, které předregistrace jmenovala (podmínka „jen selhání nebo nová vazba“ nerozliší nového klienta webu od útočníka). **B5** seskupení na vnější /24 u `saas_adoption` nic nemění, protože jeden klient a jedna adresa už jsou jeden klíč. Opakované položky na výskyt (3,4) dělají jiné typy nálezů téhož hostu. Souhlas člověka (API) zůstává jako produkční funkce, v soaku ho nikdo neudělí.
+
+**Odchylka D2.** Druhý seed ramene B4 (20261801) jsem zastavil po 38 ze 40 sítí, aby souběžně neběžela tři ramena (limit 2 ramena a 6 vláken). Kill kritérium (FP × 35,7) bylo splněné už na 78 sítích, rozhodnutí to nemění.
+
+**Vybraná sestava `v3k7` = `--v3-on protect,graph,graph_incident,fanout2`** (preset kroku 6 + A1 + B2 + B3b).
 
 ## E) Registr slepých míst a tvrzení
 
