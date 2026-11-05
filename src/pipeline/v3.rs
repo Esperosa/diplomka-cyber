@@ -391,6 +391,14 @@ impl V3Session {
         } else {
             crate::verify_ladder::Ladder::new(Default::default(), 0)
         };
+        // ulozene pripady novosti s drive prijatym zakazanym dukazem (review kola 2)
+        let reset = ladder.reset_forbidden_novelty_evidence();
+        if reset > 0 {
+            tracing::warn!(
+                reset,
+                "pripady novosti s kontextem nebo zvykem profilu resetovany"
+            );
+        }
         if ladder_on && self.engine.learning() && ladder.learner.is_none() {
             ladder.learner = Some(Default::default());
         }

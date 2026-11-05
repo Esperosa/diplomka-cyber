@@ -841,9 +841,41 @@ impl Ladder {
         self.cases.remove(key);
     }
 
+    /// Review kola 2 (S2, S3): případ novosti s dříve přijatým zakázaným neškodným
+    /// důkazem (kontext, zvyk profilu; uložený stav před opravou) se resetuje na
+    /// začátek: prior, nový plán, bez kroků. Volá se při načtení stavu i v každém
+    /// cyklu (`step`). Vrací počet resetovaných případů.
+    pub fn reset_forbidden_novelty_evidence(&mut self) -> usize {
+        let mut keys: Vec<FindingKey> = self
+            .cases
+            .iter()
+            .filter(|(_, case)| {
+                crate::behavior::novelty::is_novelty_type(&case.input.finding_type)
+                    && case.steps.iter().any(|step| {
+                        matches!(step.check, CheckId::Context | CheckId::Profile)
+                            && matches!(step.outcome, Outcome::Evidence { lr, .. } if lr < 1.0)
+                    })
+            })
+            .map(|(key, _)| key.clone())
+            .collect();
+        keys.sort();
+        for key in &keys {
+            if let Some(case) = self.cases.get_mut(key) {
+                case.log_odds = logit(case.input.prior);
+                case.plan = plan_for(&case.input, self.secret, &self.policy);
+                case.steps.clear();
+                case.wait_until = None;
+                case.deferred = 0;
+                case.benign_evidence = false;
+            }
+        }
+        keys.len()
+    }
+
     /// Jeden cyklus: provede kontroly v pořadí EVOI proxy pod rozpočtem a vrátí
     /// rozhodnuté případy (ty se z žebříku odeberou).
     pub fn step(&mut self, cycle: u64, env: &mut dyn LadderEvidence) -> Vec<Decision> {
+        self.reset_forbidden_novelty_evidence();
         let mut decisions = Vec::new();
         let mut budget = self.policy.budget_per_cycle;
         let mut active_left = self.policy.active_per_cycle;
@@ -1525,6 +1557,67 @@ mod tests {
         ladder.open(input("beacon_periodic", "10.0.0.5", &["203.0.113.9"]), 0);
         run_until_decided(&mut ladder, &mut env);
         assert_eq!(ladder.stats.outcomes.get("profile:benign"), Some(&1));
+    }
+
+    /// Review kola 2 (S2, S3): ulozeny pripad novosti s drive prijatym neskodnym
+    /// dukazem Profile (zvyk flotily, LR 0,35) nebo Context se po nacteni ani za behu
+    /// nesmi vyvratit cekajici kontrolou Peers (LR 0,25): 0,15 → 0,0152 by vyvratilo.
+    #[test]
+    fn persisted_forbidden_novelty_evidence_is_reset() {
+        let policy = LadderPolicy {
+            profile: true,
+            ..Default::default()
+        };
+        for forbidden in [CheckId::Profile, CheckId::Context] {
+            // stav pred opravou: prvni kontrola uz prinesla zakazany neskodny dukaz
+            let mut ladder = Ladder::new(policy, 7);
+            let mut case = input("novel_persistent_peer", "10.0.0.5", &["203.0.113.9"]);
+            case.history_key = None;
+            let key = case.key.clone();
+            ladder.open(case, 0);
+            let lr = if forbidden == CheckId::Profile {
+                policy.lr.profile_fleet
+            } else {
+                policy.lr.context
+            };
+            {
+                let case = ladder.cases.get_mut(&key).unwrap();
+                case.plan.retain(|c| *c != forbidden);
+                case.log_odds += lr.ln();
+                case.benign_evidence = true;
+                case.steps.push(Step {
+                    check: forbidden,
+                    cycle: 0,
+                    outcome: Outcome::Evidence {
+                        lr,
+                        detail: "pred opravou".into(),
+                    },
+                    posterior: case.posterior(),
+                });
+            }
+            // migrace: ulozeny a znovu nacteny stav
+            let text = serde_json::to_string(&ladder).unwrap();
+            let mut ladder: Ladder = serde_json::from_str(&text).unwrap();
+            let mut env = Env {
+                profile: Some(crate::behavior::profile::ProfileVerdict::Fleet { hosts: 4 }),
+                peers: Some((5, 6)),
+                ..Env::default()
+            };
+            let decision = run_until_decided(&mut ladder, &mut env);
+            assert_ne!(
+                decision.status,
+                Status::Refuted,
+                "{forbidden:?}: {}",
+                decision.reason
+            );
+            assert!(
+                !decision.reason.contains("pred opravou"),
+                "{forbidden:?}: {}",
+                decision.reason
+            );
+            // nacteni stavu: reset je idempotentni, druhy pruchod nic nenajde
+            assert_eq!(ladder.reset_forbidden_novelty_evidence(), 0);
+        }
     }
 
     fn input(kind: &str, entity: &str, sources: &[&str]) -> CaseInput {
