@@ -631,6 +631,43 @@ impl V3Session {
             }
             self.store.save("behavior", &behavior_state)?;
         }
+        // krok 6 (kandidat 2): zobrazeny nalez s dukazem provozni priciny jde do fronty
+        // provoz (zaznam v zivotnim cyklu), nic se nezavira
+        if self.engine.ops_class()
+            && let Some(flows) = self.behavior_flows.as_ref()
+        {
+            let policy = crate::ops_evidence::OpsPolicy::default();
+            let mut clientele: crate::ops_evidence::Clientele =
+                self.store.load("clientele")?.unwrap_or_default();
+            let at = now.timestamp();
+            let window = clientele.evidence(&flows.to_scope, at, &policy);
+            let mut frozen = std::collections::HashSet::new();
+            for ((finding, record), sources) in report
+                .findings
+                .iter()
+                .zip(lifecycle.iter_mut())
+                .zip(&signal_sources)
+            {
+                if !crate::finding_kinds::is_static_exposure(&finding.finding_type) {
+                    frozen.extend(sources.iter().cloned());
+                }
+                if !record.displayed {
+                    continue;
+                }
+                let service_key = finding.service_key.as_deref();
+                let (_, key_ip) = split_service_key(service_key.unwrap_or("-"));
+                let host_ip = finding.host_key.as_deref().unwrap_or(key_ip);
+                record.ops_reason = crate::ops_evidence::classify(
+                    &window,
+                    &finding.finding_type,
+                    service_key,
+                    host_ip,
+                    sources,
+                );
+            }
+            clientele.learn(&flows.to_scope, &frozen, at, &policy);
+            self.store.save("clientele", &clientele)?;
+        }
         memory.sweep(now);
         memory.flush(self.store.conn_mut())?;
         report.finding_lifecycle = lifecycle;

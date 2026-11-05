@@ -84,6 +84,8 @@ pub(crate) struct BehaviorFlows {
     pub(crate) internal: Vec<ConnectionObservation>,
     /// IDS alerty se zdrojem uvnitř a cílem venku.
     pub(crate) outbound_alerts: Vec<NormalizedEvent>,
+    /// Krok 6: toky s cílem v rozsahu (třída provozní problém, `ops_evidence`).
+    pub(crate) to_scope: Vec<ConnectionObservation>,
     pub(crate) outbound_seen: u64,
     pub(crate) outbound_dropped: u64,
     pub(crate) sample_level: u32,
@@ -130,6 +132,7 @@ pub(crate) fn load_and_normalize_with_behavior(
         );
         let split = egress::split_flows(parsed.connections, scope, policy);
         connections = split.to_scope;
+        flows.to_scope = connections.clone();
         flows.outbound = split.outbound;
         flows.internal = split.internal;
         flows.outbound_seen = split.outbound_seen;

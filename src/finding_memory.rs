@@ -847,6 +847,10 @@ pub struct LifecycleRecord {
     pub first_seen: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
     pub occurrences: u64,
+    /// Krok 6: zobrazený nález s důkazem provozní příčiny je ve frontě „provoz“
+    /// (`ops_evidence`), ne mezi podezřeními na útok; nezavírá se.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ops_reason: Option<String>,
 }
 
 impl LifecycleRecord {
@@ -874,6 +878,7 @@ impl LifecycleRecord {
             first_seen: entry.map(|e| e.first_seen).unwrap_or(at),
             last_seen: entry.map(|e| e.last_seen).unwrap_or(at),
             occurrences: entry.map(|e| e.occurrences).unwrap_or(1),
+            ops_reason: None,
         }
     }
 }

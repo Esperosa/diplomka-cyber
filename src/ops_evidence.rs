@@ -146,7 +146,7 @@ impl Clientele {
     }
 
     /// Důkazy okna z toků s cílem v rozsahu (před učením tohoto okna).
-    pub fn evidence(
+    pub(crate) fn evidence(
         &self,
         flows: &[ConnectionObservation],
         now: i64,
@@ -221,7 +221,7 @@ impl Clientele {
     }
 
     /// Naučí úspěšné klienty okna; zdroje s nálezem v okně (`frozen`) ne.
-    pub fn learn(
+    pub(crate) fn learn(
         &mut self,
         flows: &[ConnectionObservation],
         frozen: &HashSet<String>,
