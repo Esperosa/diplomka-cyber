@@ -639,6 +639,8 @@ impl V3Session {
             let policy = crate::ops_evidence::OpsPolicy::default();
             let mut clientele: crate::ops_evidence::Clientele =
                 self.store.load("clientele")?.unwrap_or_default();
+            let mut marks: crate::ops_evidence::OpsMarks =
+                self.store.load("ops_marks")?.unwrap_or_default();
             let at = now.timestamp();
             let window = clientele.evidence(&flows.to_scope, at, &policy);
             let mut frozen = std::collections::HashSet::new();
@@ -651,22 +653,26 @@ impl V3Session {
                 if !crate::finding_kinds::is_static_exposure(&finding.finding_type) {
                     frozen.extend(sources.iter().cloned());
                 }
-                if !record.displayed {
-                    continue;
-                }
                 let service_key = finding.service_key.as_deref();
                 let (_, key_ip) = split_service_key(service_key.unwrap_or("-"));
                 let host_ip = finding.host_key.as_deref().unwrap_or(key_ip);
-                record.ops_reason = crate::ops_evidence::classify(
+                if let Some(reason) = crate::ops_evidence::classify(
                     &window,
                     &finding.finding_type,
                     service_key,
                     host_ip,
                     sources,
-                );
+                ) {
+                    marks.note(&finding.finding_id, at, &reason);
+                }
+                if record.displayed {
+                    record.ops_reason = marks.get(&finding.finding_id, at).map(str::to_string);
+                }
             }
+            marks.sweep(at);
             clientele.learn(&flows.to_scope, &frozen, at, &policy);
             self.store.save("clientele", &clientele)?;
+            self.store.save("ops_marks", &marks)?;
         }
         memory.sweep(now);
         memory.flush(self.store.conn_mut())?;

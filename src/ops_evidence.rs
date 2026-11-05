@@ -258,6 +258,47 @@ impl Clientele {
     }
 }
 
+/// Krok 6 C (jediná úprava kandidáta 2 na ladicích seedech): důkaz platí pro nález i
+/// tehdy, když se zobrazí později (žebřík ho zobrazí až po ověření, kdy porucha už
+/// skončila). Značka = `finding_id` → (čas důkazu, důvod), s TTL a stropem.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OpsMarks {
+    marks: HashMap<String, (i64, String)>,
+}
+
+/// Jak dlouho platí důkaz provozní příčiny pro pozdější zobrazení (s).
+pub const OPS_MARK_TTL_S: i64 = 24 * 3600;
+const OPS_MARKS_CAP: usize = 200_000;
+
+impl OpsMarks {
+    pub fn note(&mut self, finding_id: &str, at: i64, reason: &str) {
+        self.marks
+            .insert(finding_id.to_string(), (at, reason.to_string()));
+    }
+
+    pub fn get(&self, finding_id: &str, at: i64) -> Option<&str> {
+        self.marks
+            .get(finding_id)
+            .filter(|(when, _)| at - when <= OPS_MARK_TTL_S)
+            .map(|(_, reason)| reason.as_str())
+    }
+
+    pub fn sweep(&mut self, at: i64) {
+        self.marks
+            .retain(|_, (when, _)| at - *when <= OPS_MARK_TTL_S);
+        evict_oldest(&mut self.marks, OPS_MARKS_CAP, |(when, _)| *when);
+    }
+
+    pub fn len(&self) -> usize {
+        self.marks.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.marks.is_empty()
+    }
+}
+
 /// Důvod zařazení nálezu do fronty provoz, nebo `None` (zůstává podezřením).
 /// `service_key` je klíč služby nálezu (`ip/proto/port`), `sources` dominantní zdroje.
 pub fn classify(
@@ -442,6 +483,17 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    #[test]
+    fn marks_survive_late_display_within_ttl() {
+        let mut marks = OpsMarks::default();
+        marks.note("finding:x", 1000, "provoz E1");
+        assert_eq!(marks.get("finding:x", 1000 + 3600), Some("provoz E1"));
+        assert!(marks.get("finding:x", 1000 + OPS_MARK_TTL_S + 1).is_none());
+        assert!(marks.get("finding:y", 1000).is_none());
+        marks.sweep(1000 + OPS_MARK_TTL_S + 1);
+        assert!(marks.is_empty());
     }
 
     #[test]

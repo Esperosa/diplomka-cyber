@@ -1594,25 +1594,25 @@ fn run_episode_inner(
                 let Some(show) = shown.get_mut(index) else {
                     continue;
                 };
-                if !show.displayed {
-                    continue;
-                }
                 let service_key = finding.service_key.as_deref();
                 let (_, key_ip) = split_service_key(service_key.unwrap_or("-"));
                 let host_ip = finding.host_key.as_deref().unwrap_or(key_ip);
-                if crate::ops_evidence::classify(
+                // dukaz se zapise i u nezobrazeneho nalezu (zebrik ho zobrazi pozdeji)
+                if let Some(reason) = crate::ops_evidence::classify(
                     &window,
                     &finding.finding_type,
                     service_key,
                     host_ip,
                     sources,
-                )
-                .is_some()
-                {
+                ) {
+                    runtime.ops_marks.note(&finding.finding_id, now, &reason);
+                }
+                if show.displayed && runtime.ops_marks.get(&finding.finding_id, now).is_some() {
                     show.ops = true;
                     agg.output.ops_class_displayed += 1;
                 }
             }
+            runtime.ops_marks.sweep(now);
             runtime
                 .clientele
                 .learn(&in_scope_obs, &frozen, now, &runtime.ops_policy);

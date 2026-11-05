@@ -59,6 +59,7 @@ pub struct V3Runtime {
     /// Krok 6: klientela sluzeb pro tridu provozni problem.
     pub clientele: crate::ops_evidence::Clientele,
     pub ops_policy: crate::ops_evidence::OpsPolicy,
+    pub ops_marks: crate::ops_evidence::OpsMarks,
 }
 
 impl V3Runtime {
@@ -94,6 +95,7 @@ impl V3Runtime {
             egress_policy: Default::default(),
             clientele: Default::default(),
             ops_policy: Default::default(),
+            ops_marks: Default::default(),
         })
     }
 
@@ -109,6 +111,7 @@ impl V3Runtime {
         self.store.save("behavior", &self.behavior)?;
         if self.engine.ops_class() {
             self.store.save("clientele", &self.clientele)?;
+            self.store.save("ops_marks", &self.ops_marks)?;
         }
         let calibrator = self.ladder.calibrator.take();
         self.history.flush(self.store.conn_mut())?;
@@ -134,6 +137,7 @@ impl V3Runtime {
         self.behavior = self.store.load("behavior")?.unwrap_or_default();
         if self.engine.ops_class() {
             self.clientele = self.store.load("clientele")?.unwrap_or_default();
+            self.ops_marks = self.store.load("ops_marks")?.unwrap_or_default();
         }
         self.sources.clear();
         Ok(())
