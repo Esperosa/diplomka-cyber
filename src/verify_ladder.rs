@@ -1276,7 +1276,20 @@ fn evaluate(
         }
         CheckId::Profile => {
             use crate::behavior::profile::ProfileVerdict;
-            match env.profile(input) {
+            let verdict = env.profile(input);
+            // novost: zvyk hostu ani flotily neni neskodny dukaz (profil drzi zvyky 14 dni,
+            // novost 7; review kola 1 S3, pojistka A7)
+            if crate::behavior::novelty::is_novelty_type(&input.finding_type)
+                && matches!(
+                    verdict,
+                    ProfileVerdict::Established { .. } | ProfileVerdict::Fleet { .. }
+                )
+            {
+                return Outcome::Undetermined(
+                    "novost vztahu: zvyk profilu neni dukaz neskodnosti".into(),
+                );
+            }
+            match verdict {
                 ProfileVerdict::Established { since, days } => Outcome::Evidence {
                     lr: lr.profile_host,
                     detail: format!(
@@ -1460,6 +1473,53 @@ mod tests {
             run_until_decided(&mut ladder, &mut env);
             assert_eq!(ladder.stats.outcomes.get(tag), Some(&1), "{on}");
         }
+    }
+
+    /// Review kola 1 (S3): zvyk flotily (profil drzi 14 dni, novost 7) ani zvyk hostu
+    /// novost nevyvrati; u jinych typu zustava neskodnym dukazem.
+    #[test]
+    fn profile_habit_is_not_benign_evidence_for_novelty() {
+        use crate::behavior::profile::ProfileVerdict;
+        let policy = LadderPolicy {
+            profile: true,
+            ..Default::default()
+        };
+        for verdict in [
+            ProfileVerdict::Fleet { hosts: 4 },
+            ProfileVerdict::Established {
+                since: 1_700_000_000,
+                days: 8,
+            },
+        ] {
+            for kind in ["novel_persistent_peer", "novel_fanout"] {
+                let mut ladder = Ladder::new(policy.clone(), 7);
+                let mut env = Env {
+                    profile: Some(verdict.clone()),
+                    peers: Some((5, 6)),
+                    ..Env::default()
+                };
+                let mut case = input(kind, "10.0.0.5", &["203.0.113.9"]);
+                case.history_key = None;
+                ladder.open(case, 0);
+                let decision = run_until_decided(&mut ladder, &mut env);
+                assert_ne!(decision.status, Status::Refuted, "{kind}: {}", decision.reason);
+                assert_eq!(ladder.stats.outcomes.get("profile:benign"), None, "{kind}");
+                assert_eq!(
+                    ladder.stats.outcomes.get("profile:undetermined"),
+                    Some(&1),
+                    "{kind}"
+                );
+            }
+        }
+        // kontrola: jiny typ dostane zvyk flotily jako neskodny dukaz
+        let mut ladder = Ladder::new(policy, 7);
+        let mut env = Env {
+            profile: Some(ProfileVerdict::Fleet { hosts: 4 }),
+            ..Env::default()
+        };
+        ladder.open(input("beacon_periodic", "10.0.0.5", &["203.0.113.9"]), 0);
+        run_until_decided(&mut ladder, &mut env);
+        assert_eq!(ladder.stats.outcomes.get("profile:benign"), Some(&1));
     }
 
     fn input(kind: &str, entity: &str, sources: &[&str]) -> CaseInput {
