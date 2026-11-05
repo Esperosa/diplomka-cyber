@@ -94,6 +94,14 @@ pub struct NoveltyState {
     pub alarms: u64,
 }
 
+/// Typy novosti vztahů. Pojistka A7: kontext je nevysvětlí ani nepodpoří a zvyk
+/// profilu (hostu ani flotily) není neškodný důkaz žebříku (review kola 1, S2 a S3).
+pub const NOVELTY_TYPES: &[&str] = &["novel_persistent_peer", "novel_fanout"];
+
+pub fn is_novelty_type(kind: &str) -> bool {
+    NOVELTY_TYPES.contains(&kind)
+}
+
 fn succeeded(flow: &ConnectionObservation) -> bool {
     let state = flow.conn_state.as_deref().unwrap_or("");
     !matches!(state, "S0" | "REJ" | "RSTOS0" | "SH" | "RSTRH") && flow.resp_bytes.unwrap_or(0) > 0

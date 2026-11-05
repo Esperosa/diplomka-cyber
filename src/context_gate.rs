@@ -382,7 +382,9 @@ impl ContextGate {
         provider: &dyn ContextProvider,
         input: &GateInput<'_>,
     ) -> Option<Explanation> {
+        // novost vztahu kontext nikdy nevysvetli (A7, review kola 1 S2)
         if self.policy.never.contains(input.finding_type)
+            || crate::behavior::novelty::is_novelty_type(input.finding_type)
             || input.finding_type.starts_with("intel:")
             || input.finding_type.starts_with("active_check:")
         {
@@ -469,7 +471,9 @@ impl ContextGate {
         provider: &dyn ContextProvider,
         input: &GateInput<'_>,
     ) -> Option<(ContextKind, String)> {
-        if self.policy.never.contains(input.finding_type) {
+        if self.policy.never.contains(input.finding_type)
+            || crate::behavior::novelty::is_novelty_type(input.finding_type)
+        {
             return None;
         }
         provider.entries().iter().find_map(|entry| {
@@ -635,6 +639,31 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    #[test]
+    fn novelty_types_are_never_explained_nor_supported_even_if_covered() {
+        // review kola 1 (S2): zaznam, ktery novost vyslovne pokryva, ji nesmi zavrit
+        let mut maintenance = entry(ContextKind::Maintenance, "10.0.0.5", 0, 10);
+        maintenance.hosts.push("203.0.113.9".to_string());
+        maintenance.covers = vec![
+            "novel_persistent_peer".to_string(),
+            "novel_fanout".to_string(),
+            "unexpected_traffic".to_string(),
+        ];
+        let calendar = StaticCalendar::new(vec![maintenance]);
+        let mut gate = ContextGate::new(GatePolicy::default());
+        let host = vec!["10.0.0.5".to_string()];
+        let sources = vec!["203.0.113.9".to_string()];
+        for kind in ["novel_persistent_peer", "novel_fanout"] {
+            let case = input(kind, &host, &sources, 1, Severity::Medium);
+            assert!(gate.explain(&calendar, &case).is_none(), "{kind}");
+            assert!(gate.supporting_context(&calendar, &case).is_none(), "{kind}");
+        }
+        // kontrola: tentyz zaznam jiny pokryty typ vysvetli
+        let other = input("unexpected_traffic", &host, &sources, 1, Severity::Medium);
+        assert!(gate.supporting_context(&calendar, &other).is_some());
+        assert!(gate.explain(&calendar, &other).is_some());
     }
 
     #[test]
