@@ -42,6 +42,10 @@ LOFO = {
     "dns_tunnel": {"egress_volume_anomaly", "source_volume_outlier"},
 }
 TEMPLATES = ["K-T1", "K-T2", "K-T3", "K-H1", "K-H2", "K-H3"]
+# K3: drzene a ladene nove poruchy kroku 5 (krok 6 B3; saas_adoption se hlasi zvlast)
+K3_HELD = {"cert_expired", "segment_power_loss", "vpn_reconnect_storm", "cloud_migration"}
+K3_TUNED = {"dns_outage", "dhcp_renumber", "link_flapping", "misconfig", "backup_failed"}
+HELD_FAULTS = K3_HELD | {"saas_adoption"}
 
 
 def wilson(k, n):
@@ -266,6 +270,36 @@ def main():
         rep.add(f"### Párově `{last}` − `{names[0]}`")
         rep.add()
         rep.table(["výběr", "párů", "rozdíl detekce"], prow)
+        # krok 6: parove po rodinach a pomer zobrazenych FP na sit-den (bootstrap po sitich)
+        fam_rows = []
+        for fam in sorted({a["family"] for _, _, a in paired}):
+            (d, lo, hi), n = diff_for(lambda a, fam=fam: a["family"] == fam)
+            fam_rows.append([fam, n, f"{pp(d)} p. b. ({pp(lo)} až {pp(hi)})",
+                             "pokles > 3 p. b." if n >= 100 and d < -0.03 else ""])
+        rep.add(f"### Párově po rodinách `{last}` − `{names[0]}`")
+        rep.add()
+        rep.table(["rodina", "párů", "rozdíl detekce", "B5/D1"], fam_rows)
+
+        def fp_ratio(field):
+            base_rows, eval_rows = rows[names[0]], rows[last]
+            keys = sorted(set(base_rows) & set(eval_rows))
+            def stat(idx):
+                b = sum(base_rows[keys[i]].get("output", {}).get(field, 0) for i in idx)
+                e = sum(eval_rows[keys[i]].get("output", {}).get(field, 0) for i in idx)
+                return e / b if b else float("nan")
+            full = stat(range(len(keys)))
+            rng = random.Random(20261611)
+            samples = sorted(s for s in (stat(boot_indices(keys, rng)) for _ in range(BOOT)) if s == s)
+            if not samples:
+                return full, float("nan"), float("nan")
+            return full, samples[int(0.025 * len(samples))], samples[min(len(samples) - 1, int(0.975 * len(samples)))]
+        fr = []
+        for field in ("displayed_fp", "displayed_fp_suspect"):
+            r, lo, hi = fp_ratio(field)
+            fr.append([field, f"{r:.3f} ({lo:.3f} až {hi:.3f})".replace(".", ",")])
+        rep.add(f"### Poměr zobrazených FP `{last}` / `{names[0]}` (stejné sítě)")
+        rep.add()
+        rep.table(["metrika", "poměr (bootstrap 95 %)"], fr)
 
     # --- krivky skrytosti ---
     det_cells(rep, arms, lambda a: [f"Q{band(a['stealth'], edges) + 1}"], "Křivka skrytosti: pásma S")
@@ -365,32 +399,60 @@ def main():
     # --- poruchy a lookalike ---
     f_rows = []
     pooled = {}
+    pooled_s = {}
+    type_rows = []
     for name in names:
-        by = defaultdict(lambda: [0, 0, 0])
+        by = defaultdict(lambda: [0, 0, 0, 0])
+        types = defaultdict(lambda: defaultdict(int))
         for r in rows[name].values():
             for f in r.get("faults", []):
                 b = by[f["label"]]
+                suspect = f.get("fp_suspect", f.get("fp_displayed", False))
                 b[0] += 1
                 b[1] += f.get("fp_displayed", False)
                 b[2] += f.get("fp_captured", False)
-                if f.get("new"):
-                    g = pooled.setdefault((name, f.get("held", False)), [0, 0])
+                b[3] += suspect
+                for t in f.get("fp_types", []):
+                    types[f["label"]][t] += 1
+                group = "held" if f["label"] in K3_HELD else ("tuned" if f["label"] in K3_TUNED else None)
+                if group:
+                    g = pooled.setdefault((name, group == "held"), [0, 0])
                     g[0] += 1
                     g[1] += f.get("fp_displayed", False)
+                    s = pooled_s.setdefault((name, group == "held"), [0, 0])
+                    s[0] += 1
+                    s[1] += suspect
         for label in sorted(by):
-            n, kd, kc = by[label]
-            held = label in {"cert_expired", "segment_power_loss", "vpn_reconnect_storm", "cloud_migration"}
+            n, kd, kc, ks = by[label]
+            held = label in HELD_FAULTS
             verdict = ""
             if n < 20:
                 verdict = "nedostatečná data"
-            elif kd / n > 0.2:
+            elif ks / n > 0.2:
                 verdict = "FP SLEPÉ MÍSTO"
             if name == last and verdict == "FP SLEPÉ MÍSTO":
-                rep.blind.append(("Poruchy a lookalike (zobrazené FP)", label, n, kd / n, verdict))
-            f_rows.append([name, label + (" (H)" if held else ""), n, wtxt(kd, n), wtxt(kc, n), verdict])
+                rep.blind.append(("Poruchy a lookalike (FP ve frontě podezření)", label, n, ks / n, verdict))
+            f_rows.append([name, label + (" (H)" if held else ""), n, wtxt(ks, n), wtxt(kd, n),
+                           wtxt(kc, n), verdict])
+            if name == last and types[label]:
+                top = sorted(types[label].items(), key=lambda x: -x[1])[:5]
+                type_rows.append([label, ", ".join(f"{t} {c}" for t, c in top)])
     rep.add("### Poruchy a lookalike: podíl výskytů s FP")
     rep.add()
-    rep.table(["rameno", "událost", "výskytů", "zobrazené FP", "zachycené FP", "registr"], f_rows)
+    rep.table(["rameno", "událost", "výskytů", "FP ve frontě podezření", "zobrazené FP (i provoz)",
+               "zachycené FP", "registr"], f_rows)
+    rep.add(f"### Typy FP ve frontě podezření (rameno `{last}`, počet výskytů s typem)")
+    rep.add()
+    rep.table(["událost", "typy"], type_rows)
+    # utoky, ktere skoncily jen ve fronte provoz (cena ops_class)
+    ops_rows = []
+    for name in names:
+        items = [a for _, a in arms[name]]
+        only = sum(1 for a in items if a.get("ops_shown") and not a["cf"])
+        ops_rows.append([name, len(items), wtxt(only, len(items))])
+    rep.add("### Útoky zobrazené jen ve frontě provoz (nezapočtené jako detekce)")
+    rep.add()
+    rep.table(["rameno", "útoků", "podíl"], ops_rows)
 
     # --- registr ---
     rep.add(f"### Registr slepých míst (rameno `{last}`, automaticky podle A8)")
@@ -413,11 +475,13 @@ def main():
             (d_q, lo_q, hi_q), _ = diff_for(lambda a: band(a["stealth"], edges) >= 3)
             g.append(["K2", f"vše {pp(d_all)} p. b., Q4+Q5 {pp(d_q)} p. b.",
                       "ano" if d_all >= 0 and d_q >= 0 else "ne"])
-        tuned = pooled.get((last, False), [0, 0])
-        heldf = pooled.get((last, True), [0, 0])
-        if tuned[0] and heldf[0]:
-            pt, ph = tuned[1] / tuned[0], heldf[1] / heldf[0]
-            g.append(["K3", f"držené {pct(ph)} % vs laděné {pct(pt)} %", "ano" if ph <= pt + 0.10 else "ne"])
+        for label, pool in (("K3 (fronta podezření)", pooled_s), ("K3 (krok 5: jakékoli zobrazení)", pooled)):
+            tuned = pool.get((last, False), [0, 0])
+            heldf = pool.get((last, True), [0, 0])
+            if tuned[0] and heldf[0]:
+                pt, ph = tuned[1] / tuned[0], heldf[1] / heldf[0]
+                g.append([label, f"držené {wtxt(heldf[1], heldf[0])} vs laděné {wtxt(tuned[1], tuned[0])}",
+                          "ano" if ph <= pt + 0.10 else "ne"])
         cnt = defaultdict(lambda: [0, 0])
         for _, a in arms[last]:
             cells = overlap_cells(a)
