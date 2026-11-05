@@ -302,8 +302,9 @@ struct Ledger {
     silenced: Option<&'static str>,
     silenced_cycles: u32,
     habituated: bool,
-    /// Krok 7 (C2): pocet kontrafaktualne omylem zavrenych pripsanych nalezu.
-    wrong_closed: u32,
+    /// Krok 7 (C2): ruzne klice kontrafaktualne omylem zavrenych pripsanych nalezu
+    /// (pocet nalezu, ne pozorovani v zavrenem stavu).
+    wrong_keys: BTreeSet<String>,
     /// Prvni cyklus kontrafaktualni zobrazene detekce.
     cf_first: Option<u32>,
     /// Krok 7 (B1): pripsany nalez nese provozni anotaci.
@@ -784,7 +785,7 @@ fn run_episode_inner(
             silenced: None,
             silenced_cycles: 0,
             habituated: false,
-            wrong_closed: 0,
+            wrong_keys: BTreeSet::new(),
             cf_first: None,
             ops_annotated: false,
         })
@@ -2057,7 +2058,7 @@ fn run_episode_inner(
                             {
                                 ledger.auto_closed = true;
                                 ledger.auto_closed_first |= first_key;
-                                ledger.wrong_closed += 1;
+                                ledger.wrong_keys.insert(finding.finding_id.clone());
                             }
                             if let Some(cf) = cf.as_deref() {
                                 // pripsat jen nalez, ktery ve svete bez utoku chybi;
@@ -3104,7 +3105,7 @@ fn run_episode_inner(
                                 silenced: ledger.silenced.map(str::to_string),
                                 silenced_cycles: ledger.silenced_cycles,
                                 habituated: ledger.habituated,
-                                wrong_closed: ledger.wrong_closed,
+                                wrong_closed: ledger.wrong_keys.len() as u32,
                                 latency: ledger
                                     .cf_first
                                     .map(|c| c.saturating_sub(truth.start_cycle)),
@@ -3680,6 +3681,70 @@ mod engine_v3_tests {
 
     /// Krok 5: svet pokryti je deterministicky, ma zaznamy po utocich a udalostech,
     /// ladici svet nema drzene poruchy ani drzene urovne os, pozadi zustane stejne.
+    /// Krok 7: svet k7 je deterministicky a nese drzene varianty; maska typu je
+    /// skutecna ablace (typ se ve vystupu neobjevi); provozni anotace ani chraneny
+    /// nalez nikdy neodkloni utok do fronty provoz (ops-only utoky = 0).
+    #[test]
+    fn k7_world_mask_and_ops_annotation_invariants() {
+        use crate::soak::coverage::CoverageMode;
+        let engine = EngineConfig {
+            mode: crate::engine::EngineMode::V3,
+            v3: crate::engine::V3Features::recommended()
+                .enable_list("protect,ops_annotate")
+                .unwrap(),
+        };
+        let world = |mask: u32| WorldOptions {
+            coverage: CoverageMode::K7,
+            type_mask: mask,
+            ..Default::default()
+        };
+        let mut levels = std::collections::BTreeSet::new();
+        for id in [3u64, 8] {
+            let cfg = EpisodeConfig {
+                world: world(0),
+                engine,
+                ..cfg_v3(id, 72)
+            };
+            let a = run_episode(&cfg);
+            let b = run_episode(&cfg);
+            assert_eq!(a.digest, b.digest, "sit {id}");
+            assert!(a.agg.invariant_violations.is_empty());
+            for attack in &a.summary.attacks {
+                let v = attack.variation.expect("variace");
+                levels.insert(format!("{}", v.tempo));
+                let k7 = attack.k7.as_ref().expect("v3 s pameti zapisuje k7");
+                assert!(k7.vis_cycles <= k7.post_cycles);
+                // anotace ani chraneny nalez neodkloni utok jen do fronty provoz
+                assert!(!attack.ops_shown, "anotace nikdy neodkloni");
+            }
+            assert_eq!(a.agg.output.ops_class_displayed, 0, "ops-only utoky = 0");
+            assert_eq!(
+                a.agg
+                    .output
+                    .k7
+                    .get("protected_auto_closed")
+                    .copied()
+                    .unwrap_or(0),
+                0
+            );
+            let mask = parse_type_mask("beacon_periodic,suricata_alert").unwrap();
+            let masked = run_episode(&EpisodeConfig {
+                world: world(mask),
+                engine,
+                ..cfg_v3(id, 72)
+            });
+            assert!(
+                !masked
+                    .agg
+                    .displayed_fp_by_type
+                    .contains_key("beacon_periodic")
+            );
+            assert!(!masked.agg.fp_noise_by_type.contains_key("suricata_alert"));
+        }
+        assert!(parse_type_mask("nic").is_err());
+        assert!(!levels.is_empty());
+    }
+
     #[test]
     fn coverage_world_is_deterministic_records_every_truth_and_respects_tuning_set() {
         use crate::soak::coverage::CoverageMode;

@@ -466,9 +466,9 @@ pub fn diagnose(
 
 /// Krok 7 (B4): nálezy `distributed_sources` z důkazů okna (jen podezření, chráněný
 /// typ: nikdy se automaticky nezavře). Vrací nález, zdroje a cíle toků.
-pub fn distributed_findings(
-    window: &OpsWindow,
-) -> Vec<(crate::model::Finding, u32, Vec<String>, Vec<(String, u16)>)> {
+pub type DistributedFinding = (crate::model::Finding, u32, Vec<String>, Vec<(String, u16)>);
+
+pub fn distributed_findings(window: &OpsWindow) -> Vec<DistributedFinding> {
     window
         .distributed
         .iter()

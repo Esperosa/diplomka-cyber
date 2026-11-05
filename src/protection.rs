@@ -261,7 +261,7 @@ mod tests {
             Recurrence::Seen { days: 5 }
         }
         fn context(&self, _: &CaseInput) -> Option<String> {
-            (self.0 % 2 == 0).then(|| "backup".to_string())
+            self.0.is_multiple_of(2).then_some("backup".to_string())
         }
         fn reputation(&self, _: &str) -> Reputation {
             Reputation::Good("feed".into())

@@ -202,6 +202,16 @@ pub fn submit_enable(
     Ok(conn.last_insert_rowid())
 }
 
+/// Řádek `closure_reviews`: id, akce, vzorek, druh, omyl, autor.
+type ReviewRow = (
+    i64,
+    String,
+    Option<i64>,
+    Option<String>,
+    Option<i64>,
+    String,
+);
+
 fn mix(mut x: u64) -> u64 {
     x ^= x >> 33;
     x = x.wrapping_mul(0xff51_afd7_ed55_8ccd);
@@ -299,14 +309,7 @@ impl ClosureAudit {
                  WHERE id > ?1 ORDER BY id",
             )
             .map_err(db_error)?;
-        let rows: Vec<(
-            i64,
-            String,
-            Option<i64>,
-            Option<String>,
-            Option<i64>,
-            String,
-        )> = stmt
+        let rows: Vec<ReviewRow> = stmt
             .query_map(params![self.applied_review], |row| {
                 Ok((
                     row.get(0)?,
