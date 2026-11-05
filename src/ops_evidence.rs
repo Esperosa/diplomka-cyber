@@ -41,6 +41,11 @@ pub struct OpsPolicy {
     pub clientele_window_s: i64,
     pub clientele_cap: usize,
     pub max_services: usize,
+    /// Krok 7 (B4): agregace přes zdroje, aspoň `dist_min_sources` zdrojů jen se
+    /// selháním nebo s novou vazbou, z toho aspoň `dist_new_share` nejsou dosavadní
+    /// klienti služby (opak E1).
+    pub dist_min_sources: usize,
+    pub dist_new_share: f64,
 }
 
 impl Default for OpsPolicy {
@@ -56,6 +61,8 @@ impl Default for OpsPolicy {
             clientele_window_s: 7 * 86_400,
             clientele_cap: 64,
             max_services: 100_000,
+            dist_min_sources: 10,
+            dist_new_share: 0.7,
         }
     }
 }
@@ -98,6 +105,8 @@ pub struct OpsWindow {
     by_service: HashMap<String, String>,
     surge: HashMap<String, String>,
     by_host: HashMap<String, String>,
+    /// Krok 7 (B4): služba -> (zdroje se selháním nebo novou vazbou, nejsilnější zdroje).
+    pub distributed: Vec<(String, u32, Vec<String>)>,
 }
 
 pub fn service_key(ip: &str, proto: &str, port: u16) -> String {
@@ -205,6 +214,27 @@ impl Clientele {
                         ),
                     );
                 }
+            }
+            // krok 7 (B4): mnoho zdroju, ktere nejsou klienty sluzby, jen selhava nebo
+            // navazuje novou vazbu (rozlozeny utok); E1 je opak (selhavaji klienti)
+            let mut spread: Vec<(&str, u32)> = sources
+                .iter()
+                .filter(|(src, t)| (t.fail > 0 && t.ok == 0) || (t.ok > 0 && !prior.contains(*src)))
+                .map(|(src, t)| (*src, t.flows))
+                .collect();
+            let outsiders = spread
+                .iter()
+                .filter(|(src, _)| !prior.contains(src))
+                .count();
+            if spread.len() >= policy.dist_min_sources
+                && outsiders as f64 >= policy.dist_new_share * spread.len() as f64
+            {
+                spread.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+                out.distributed.push((
+                    key.clone(),
+                    spread.len() as u32,
+                    spread.iter().take(5).map(|(s, _)| s.to_string()).collect(),
+                ));
             }
             let total: u32 = sources.values().map(|t| t.flows).sum();
             let top = sources.values().map(|t| t.flows).max().unwrap_or(0);
@@ -403,6 +433,63 @@ impl OpsMarks {
     pub fn is_empty(&self) -> bool {
         self.marks.is_empty()
     }
+}
+
+/// Krok 7 (B1): diagnostika, proč důkaz E1 nález (ne)zařadil: `typ|tvar klíče|zdroje|
+/// shoda` (tvar `exact`, `host`, `none`; zdroje `0`, `1`, `n`; shoda `svc`, `surge`,
+/// `host`, `-`). Jen měření, rozhodnutí se nemění.
+pub fn diagnose(
+    window: &OpsWindow,
+    finding_type: &str,
+    service_key: Option<&str>,
+    host_ip: &str,
+    sources: &[String],
+) -> String {
+    let form = match service_key {
+        Some(k) if k.matches('/').count() == 2 => "exact",
+        Some(_) => "host",
+        None => "none",
+    };
+    let src = match sources.len() {
+        0 => "0",
+        1 => "1",
+        _ => "n",
+    };
+    let hit = match service_key {
+        Some(k) if window.by_service.contains_key(k) => "svc",
+        Some(k) if window.surge.contains_key(k) => "surge",
+        _ if window.by_host.contains_key(host_ip) => "host",
+        _ => "-",
+    };
+    format!("{finding_type}|{form}|{src}|{hit}")
+}
+
+/// Krok 7 (B4): nálezy `distributed_sources` z důkazů okna (jen podezření, chráněný
+/// typ: nikdy se automaticky nezavře). Vrací nález, zdroje a cíle toků.
+pub fn distributed_findings(
+    window: &OpsWindow,
+) -> Vec<(crate::model::Finding, u32, Vec<String>, Vec<(String, u16)>)> {
+    window
+        .distributed
+        .iter()
+        .filter_map(|(key, count, top)| {
+            let mut parts = key.splitn(3, '/');
+            let (ip, proto, port) = (parts.next()?, parts.next()?, parts.next()?);
+            let port_n: u16 = port.parse().ok()?;
+            let finding = crate::behavior::finding(
+                "distributed_sources",
+                ip,
+                &format!("{proto}/{port}"),
+                crate::model::Severity::Medium,
+                crate::model::Confidence::Low,
+                format!("Na sluzbu {key} pristupuje {count} zdroju, ktere nejsou jejimi klienty"),
+                "Zdroje jen selhavaji nebo navazuji novou vazbu a vetsina nejsou dosavadni klienti sluzby (opak provozni pricny E1). Pravidlo heuristika-ops:distributed@v1 (krok 7, B4).".to_string(),
+                top.iter().map(|s| format!("{s} -> {key}")).collect(),
+                "Overit, zda nejde o rozlozene hadani hesel nebo sken; nalez se automaticky nezavira.",
+            );
+            Some((finding, *count, top.clone(), vec![(ip.to_string(), port_n)]))
+        })
+        .collect()
 }
 
 /// Důvod zařazení nálezu do fronty provoz, nebo `None` (zůstává podezřením).

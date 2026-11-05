@@ -49,6 +49,10 @@ pub struct GraphThresholds {
     pub max_edges_per_host: usize,
     pub max_hosts: usize,
     pub max_recent: usize,
+    /// Krok 7 (B2): všechny hopy jednoho pivotu jsou jeden incident paměti
+    /// (`chain/incident/tcp/0`), kořen řetězu zůstává zdrojem.
+    #[serde(default)]
+    pub incident: bool,
 }
 
 impl Default for GraphThresholds {
@@ -69,6 +73,7 @@ impl Default for GraphThresholds {
             max_edges_per_host: 512,
             max_hosts: 50_000,
             max_recent: 20_000,
+            incident: false,
         }
     }
 }
@@ -303,7 +308,11 @@ pub fn detect(
                 finding: finding(
                     "pivot_chain",
                     &edge.src,
-                    &format!("chain/{}/tcp/{}", edge.dst, edge.port),
+                    &if t.incident {
+                        "chain/incident/tcp/0".to_string()
+                    } else {
+                        format!("chain/{}/tcp/{}", edge.dst, edge.port)
+                    },
                     if edge.depth >= 3 {
                         Severity::High
                     } else {

@@ -42,6 +42,12 @@ pub struct BehaviorSwitches {
     pub profile: bool,
     /// Krok 6: obecná novost vztahů (`novelty`).
     pub novelty: bool,
+    /// Krok 7 (B2, B3, B5): incident grafu, rychlá nová vazba ven, fanout s druhým
+    /// signálem, seskupení nové vazby ven.
+    pub graph_incident: bool,
+    pub novel_burst: bool,
+    pub fanout2: bool,
+    pub saas_group: bool,
 }
 
 impl BehaviorSwitches {
@@ -53,6 +59,10 @@ impl BehaviorSwitches {
             graph: engine.graph(),
             profile: engine.profile(),
             novelty: engine.novelty(),
+            graph_incident: engine.graph_incident(),
+            novel_burst: engine.novel_burst(),
+            fanout2: engine.fanout2(),
+            saas_group: engine.saas_group(),
         }
     }
 
@@ -71,6 +81,7 @@ pub const BEHAVIOR_TYPES: &[&str] = &[
     "pivot_chain",
     "novel_persistent_peer",
     "novel_fanout",
+    "novel_burst_peer",
 ];
 
 pub fn is_behavior_type(kind: &str) -> bool {
@@ -222,23 +233,28 @@ pub fn run_window(
             })
             .map(|f| f.actor.clone())
             .collect();
-        let (findings, chains) = graph::detect(
-            &mut state.graph,
-            &thresholds.graph,
-            input.internal,
-            &roots,
-            now,
-        );
+        let graph_t = graph::GraphThresholds {
+            incident: switches.graph_incident,
+            ..thresholds.graph.clone()
+        };
+        let (findings, chains) =
+            graph::detect(&mut state.graph, &graph_t, input.internal, &roots, now);
         out.findings.extend(findings);
         out.chains = chains;
     }
     if switches.novelty && switches.egress {
         // profil zna jen minula okna (uci se az po rozhodnuti o tomto okne)
+        let novelty_t = novelty::NoveltyThresholds {
+            burst: switches.novel_burst,
+            fanout2: switches.fanout2,
+            group: switches.saas_group,
+            ..thresholds.novelty.clone()
+        };
         out.findings.extend(novelty::detect(
             &mut state.novelty,
             &state.profile,
             &state.prevalence,
-            &thresholds.novelty,
+            &novelty_t,
             input.outbound,
             input.internal,
             now,

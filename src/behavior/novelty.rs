@@ -52,6 +52,18 @@ pub struct NoveltyThresholds {
     pub idle_s: i64,
     pub max_pairs: usize,
     pub max_hosts: usize,
+    /// Krok 7 (B3a): `novel_burst_peer`, rychlá nová vazba ven (`burst_windows` oken
+    /// během `burst_span_s`), dokud vazba nevyhlásí trvalý poplach.
+    pub burst: bool,
+    pub burst_windows: usize,
+    pub burst_span_s: i64,
+    /// Krok 7 (B3b): `novel_fanout` s prahem `fanout2_min` jen s druhým signálem (host
+    /// má i novou vazbu ven, nebo ho nově kontaktoval jiný vnitřní host).
+    pub fanout2: bool,
+    pub fanout2_min: usize,
+    /// Krok 7 (B5): nová vazba ven jako jeden incident na vnější /24 a službu
+    /// (`out/<prefix>.0/<proto>/<port>`), opakovaná upozornění se seskupí.
+    pub group: bool,
 }
 
 impl Default for NoveltyThresholds {
@@ -70,6 +82,12 @@ impl Default for NoveltyThresholds {
             idle_s: 3 * 86_400,
             max_pairs: 200_000,
             max_hosts: 50_000,
+            burst: false,
+            burst_windows: 3,
+            burst_span_s: 6 * 3600,
+            fanout2: false,
+            fanout2_min: 8,
+            group: false,
         }
     }
 }
@@ -80,6 +98,9 @@ struct NewPair {
     /// Začátky oken s úspěšným spojením (vzestupně, nejvýš `2 × persist_windows`).
     windows: Vec<i64>,
     alarmed: bool,
+    /// Krok 7 (B3a): rychlá vazba už vyhlášená.
+    #[serde(default)]
+    burst: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -96,11 +117,24 @@ pub struct NoveltyState {
     fanout: HashMap<String, Fanout>,
     pub evicted: u64,
     pub alarms: u64,
+    /// Krok 7 (B3b): vnitřní host -> poslední nové kontaktování jiným vnitřním hostem.
+    #[serde(default)]
+    contacted: HashMap<String, i64>,
 }
 
 /// Typy novosti vztahů. Pojistka A7: kontext je nevysvětlí ani nepodpoří a zvyk
 /// profilu (hostu ani flotily) není neškodný důkaz žebříku (review kola 1, S2 a S3).
-pub const NOVELTY_TYPES: &[&str] = &["novel_persistent_peer", "novel_fanout"];
+pub const NOVELTY_TYPES: &[&str] = &["novel_persistent_peer", "novel_fanout", "novel_burst_peer"];
+
+/// Služba nálezu nové vazby ven (B5: seskupení na vnější /24).
+fn out_service(dst: &str, proto: &str, port: u16, group: bool) -> String {
+    match (group, dst.rsplit_once('.')) {
+        (true, Some((prefix, _))) if dst.parse::<std::net::Ipv4Addr>().is_ok() => {
+            format!("out/{prefix}.0/{proto}/{port}")
+        }
+        _ => format!("out/{dst}/{proto}/{port}"),
+    }
+}
 
 pub fn is_novelty_type(kind: &str) -> bool {
     NOVELTY_TYPES.contains(&kind)
@@ -173,6 +207,43 @@ pub fn detect(
             .count();
         if !pair.alarmed {
             let (fleet, _) = prevalence.of(&target_key(&dst, &proto, port), now);
+            // krok 7 (B3a): rychla vazba (zraly host, vzacny cil, 3 okna za 6 h)
+            let quick = pair
+                .windows
+                .iter()
+                .filter(|w| now - **w < t.burst_span_s)
+                .count();
+            if t.burst
+                && active < t.persist_windows
+                && quick >= t.burst_windows
+                && fleet <= t.fleet_max
+            {
+                if !pair.burst {
+                    pair.burst = true;
+                    state.alarms += 1;
+                }
+                out.push(BehaviorFinding {
+                    finding: finding(
+                        "novel_burst_peer",
+                        &src,
+                        &out_service(&dst, &proto, port, t.group),
+                        Severity::Low,
+                        Confidence::Low,
+                        format!("Host {src} rychle navazal novou vazbu ven na {dst}:{port}"),
+                        format!(
+                            "Vazba neni v profilu hostu ani flotily; uspesna spojeni v {quick} oknech za {} h. Pravidlo heuristika-behavior:novelty-burst@v1 (obecny priznak, RQ4 Z10).",
+                            t.burst_span_s / 3600
+                        ),
+                        vec![format!("{src} -> {dst}:{port}/{proto}: {quick} oken")],
+                        "Overit, jakou sluzbu host nove pouziva; nezname a nove se automaticky nezavira.",
+                    ),
+                    sources: vec![dst.clone()],
+                    targets: vec![(dst.clone(), port)],
+                    count: quick as u32,
+                    actor: src.clone(),
+                });
+                continue;
+            }
             if active < t.persist_windows || fleet > t.fleet_max {
                 continue;
             }
@@ -183,7 +254,7 @@ pub fn detect(
             finding: finding(
                 "novel_persistent_peer",
                 &src,
-                &format!("out/{dst}/{proto}/{port}"),
+                &out_service(&dst, &proto, port, t.group),
                 Severity::Medium,
                 Confidence::Low,
                 format!("Host {src} opakovane komunikuje s novym vnejsim cilem {dst}:{port}"),
@@ -202,23 +273,45 @@ pub fn detect(
     }
     // --- nove vnitrni vazby hostu ---
     let mut fresh: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let internal = if t.fanout_min == 0 { &[][..] } else { internal };
+    // krok 7 (B3b): fanout s druhym signalem ma vlastni prah
+    let fanout_min = if t.fanout2 {
+        t.fanout2_min
+    } else {
+        t.fanout_min
+    };
+    let internal = if fanout_min == 0 { &[][..] } else { internal };
     for (src, dst, proto, port) in successful_pairs(internal) {
         if src == dst || profile.knows(&src, &dst, &proto, port) || !mature(profile, &src, now, t) {
             continue;
+        }
+        if t.fanout2 {
+            state.contacted.insert(dst.clone(), now);
         }
         fresh
             .entry(src)
             .or_default()
             .push(format!("{dst}|{proto}/{port}"));
     }
+    // druhy signal: host s novou vazbou ven v okne fanout (stav novosti)
+    let outward: std::collections::HashSet<&str> = if t.fanout2 {
+        state
+            .pairs
+            .iter()
+            .filter(|(_, p)| now - p.last < t.fanout_span_s)
+            .filter_map(|(key, _)| key.split('|').next())
+            .collect()
+    } else {
+        Default::default()
+    };
+    let outward: std::collections::HashSet<String> =
+        outward.into_iter().map(str::to_string).collect();
     for (src, relations) in fresh {
         let host = state.fanout.entry(src.clone()).or_default();
         host.last = now;
         host.recent.retain(|(at, _)| now - at < t.fanout_span_s);
         // deterministicky strop (vztahy jdou serazene z BTreeSet), prah zustava dosazitelny;
         // obnoveny vektor nad stropem se nejdriv orizne (review kola 2, S5)
-        let cap = t.fanout_cap.max(t.fanout_min);
+        let cap = t.fanout_cap.max(fanout_min);
         host.recent.truncate(cap);
         for relation in relations {
             if host.recent.len() >= cap {
@@ -228,8 +321,17 @@ pub fn detect(
                 host.recent.push((now, relation));
             }
         }
-        if host.recent.len() < t.fanout_min {
+        if host.recent.len() < fanout_min {
             continue;
+        }
+        if t.fanout2
+            && !outward.contains(&src)
+            && !state
+                .contacted
+                .get(&src)
+                .is_some_and(|at| now - at < t.fanout_span_s)
+        {
+            continue; // bez druheho signalu jen rys
         }
         state.alarms += 1;
         let targets: Vec<(String, u16)> = host
@@ -272,7 +374,8 @@ pub fn detect(
     state.pairs.retain(|_, p| now - p.last <= t.idle_s);
     // strop i na existujicich vektorech (obnoveny stav, snizeny strop, neaktivni hoste):
     // ponechat nejstarsi vlozene vazby, deterministicky (review kola 2, S5)
-    let cap = t.fanout_cap.max(t.fanout_min);
+    let cap = t.fanout_cap.max(fanout_min);
+    state.contacted.retain(|_, at| now - *at < t.fanout_span_s);
     state.fanout.retain(|_, h| {
         h.recent.truncate(cap);
         now - h.last <= t.fanout_span_s.max(t.idle_s)
