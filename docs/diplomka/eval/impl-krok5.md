@@ -440,3 +440,5 @@ Co z toho plyne pro tvrzení práce: v simulaci je v3 proti parametrické skryto
 ## Commity kroku 5
 
 `6428952` předregistrace, `ada1b47` svět pokrytí, `b414f00` zdroje CIC-IDS2017 a UNSW-NB15 a kotva k5, `f8729af` plán laboratoře, `c4598de` rozdělení zdrojů po řadě a `--v3-on`, `90243f3` hranice pásem S, `bebcf93` ladicí měření, a commit této sekce.
+
+> Aktualizace 2026-11-05: registr slepých míst po kroku 6 je v `impl-krok6.md` (sekce E). Bod 1 (výpadek senzoru) je opravený, K6 na nových držených seedech 2,5 %. Body 2 a 5 jsou opravené částečně, ostatní zůstávají.
