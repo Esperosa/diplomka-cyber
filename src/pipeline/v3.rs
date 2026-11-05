@@ -673,7 +673,8 @@ impl V3Session {
                     &report.run.scope,
                 );
                 // znacka plati jen pro epizodu sveho dukazu (review kola 1 S1)
-                let escalated = record.disposition.starts_with("escalated");
+                let escalated =
+                    crate::ops_evidence::OpsMarks::memory_contradicts(&record.disposition);
                 let reason = marks.update(
                     &finding.finding_id,
                     at,

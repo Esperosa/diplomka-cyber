@@ -347,6 +347,13 @@ impl OpsMarks {
         );
     }
 
+    /// Zneplatňuje paměť nálezu uloženou značku? Eskalace (`escalated:<příčina>` v
+    /// produkci, `escalated_<příčina>` v soaku) i znovuotevření (`reopened`): paměť
+    /// vrací `Reopened` i při vyšší závažnosti nebo objemu (review kola 2, S1).
+    pub fn memory_contradicts(disposition: &str) -> bool {
+        disposition.starts_with("escalated") || disposition == "reopened"
+    }
+
     /// Jeden cyklus nálezu: čerstvý důkaz (`fresh`) značku obnoví, protichůdný důkaz
     /// ji zneplatní. Vrací platný důvod fronty provoz.
     pub fn update(
@@ -746,6 +753,37 @@ mod tests {
             marks
                 .update("f", 2800, Some("provoz E1".into()), svc, &pair, true)
                 .is_some()
+        );
+    }
+
+    /// Review kola 2 (S1): znovuotevreni nalezu (pamet vraci `Reopened` i pri vyssi
+    /// zavaznosti nebo objemu) zneplatni ulozenou znacku i bez zdroju a pri stejne sluzbe.
+    #[test]
+    fn reopened_finding_invalidates_mark() {
+        let reopened = crate::finding_memory::LifecycleRecord::new(
+            "f",
+            &crate::finding_memory::Disposition::Reopened,
+            None,
+            Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+        );
+        for disposition in [
+            reopened.disposition.as_str(),
+            "reopened",
+            "escalated:volume",
+        ] {
+            assert!(OpsMarks::memory_contradicts(disposition), "{disposition}");
+        }
+        for disposition in ["first", "suppressed", "auto_resolved", "ladder_escalated"] {
+            assert!(!OpsMarks::memory_contradicts(disposition), "{disposition}");
+        }
+        let svc = Some("10.0.0.9/tcp/443");
+        let mut marks = OpsMarks::default();
+        marks.note("f", 1000, "provoz E1", svc, &[]);
+        let contradicted = OpsMarks::memory_contradicts(&reopened.disposition);
+        assert!(
+            marks
+                .update("f", 2800, None, svc, &[], contradicted)
+                .is_none()
         );
     }
 

@@ -1609,7 +1609,7 @@ fn run_episode_inner(
                     &scope_nets,
                 );
                 // znacka plati jen pro epizodu sveho dukazu (review kola 1 S1)
-                let escalated = show.reason.starts_with("escalated");
+                let escalated = crate::ops_evidence::OpsMarks::memory_contradicts(show.reason);
                 let valid = runtime
                     .ops_marks
                     .update(
