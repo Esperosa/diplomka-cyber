@@ -656,17 +656,26 @@ impl V3Session {
                 let service_key = finding.service_key.as_deref();
                 let (_, key_ip) = split_service_key(service_key.unwrap_or("-"));
                 let host_ip = finding.host_key.as_deref().unwrap_or(key_ip);
-                if let Some(reason) = crate::ops_evidence::classify(
+                let fresh = crate::ops_evidence::classify(
                     &window,
                     &finding.finding_type,
                     service_key,
                     host_ip,
                     sources,
-                ) {
-                    marks.note(&finding.finding_id, at, &reason);
-                }
+                    &report.run.scope,
+                );
+                // znacka plati jen pro epizodu sveho dukazu (review kola 1 S1)
+                let escalated = record.disposition.starts_with("escalated");
+                let reason = marks.update(
+                    &finding.finding_id,
+                    at,
+                    fresh,
+                    service_key,
+                    sources,
+                    escalated,
+                );
                 if record.displayed {
-                    record.ops_reason = marks.get(&finding.finding_id, at).map(str::to_string);
+                    record.ops_reason = reason.map(str::to_string);
                 }
             }
             marks.sweep(at);

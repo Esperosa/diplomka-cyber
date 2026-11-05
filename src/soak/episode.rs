@@ -1598,16 +1598,28 @@ fn run_episode_inner(
                 let (_, key_ip) = split_service_key(service_key.unwrap_or("-"));
                 let host_ip = finding.host_key.as_deref().unwrap_or(key_ip);
                 // dukaz se zapise i u nezobrazeneho nalezu (zebrik ho zobrazi pozdeji)
-                if let Some(reason) = crate::ops_evidence::classify(
+                let fresh = crate::ops_evidence::classify(
                     &window,
                     &finding.finding_type,
                     service_key,
                     host_ip,
                     sources,
-                ) {
-                    runtime.ops_marks.note(&finding.finding_id, now, &reason);
-                }
-                if show.displayed && runtime.ops_marks.get(&finding.finding_id, now).is_some() {
+                    &scope_nets,
+                );
+                // znacka plati jen pro epizodu sveho dukazu (review kola 1 S1)
+                let escalated = show.reason.starts_with("escalated");
+                let valid = runtime
+                    .ops_marks
+                    .update(
+                        &finding.finding_id,
+                        now,
+                        fresh,
+                        service_key,
+                        sources,
+                        escalated,
+                    )
+                    .is_some();
+                if show.displayed && valid {
                     show.ops = true;
                     agg.output.ops_class_displayed += 1;
                 }

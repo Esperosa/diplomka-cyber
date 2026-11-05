@@ -116,12 +116,25 @@ fn succeeded(flow: &ConnectionObservation) -> bool {
     flow.conn_state.is_some() && !failed(flow) && flow.resp_bytes.unwrap_or(0) > 0
 }
 
-/// Cíl není hostitel: broadcast posledního oktetu, omezený broadcast, multicast.
-pub fn is_broadcast_or_multicast(ip: &str) -> bool {
+/// Cíl není hostitel: omezený broadcast, multicast, nebo směrovaný broadcast podle
+/// skutečného prefixu podsítě (nejdelší shoda v `subnets`; review kola 1 S4:
+/// 10.0.3.255 je v /16 běžná unicast adresa). Bez známé podsítě se směrovaný
+/// broadcast neuznává (fail closed: nález zůstává podezřením).
+pub fn is_broadcast_or_multicast(ip: &str, subnets: &[ipnet::IpNet]) -> bool {
     let Ok(addr) = ip.parse::<std::net::Ipv4Addr>() else {
         return false;
     };
-    addr.is_broadcast() || addr.is_multicast() || addr.octets()[3] == 255
+    if addr.is_broadcast() || addr.is_multicast() {
+        return true;
+    }
+    subnets
+        .iter()
+        .filter_map(|net| match net {
+            ipnet::IpNet::V4(net) if net.contains(&addr) => Some(net),
+            _ => None,
+        })
+        .max_by_key(|net| net.prefix_len())
+        .is_some_and(|net| net.prefix_len() <= 30 && net.broadcast() == addr)
 }
 
 #[derive(Default)]
@@ -211,7 +224,10 @@ impl Clientele {
                 );
             }
         }
-        for (key, reason) in &out.by_service {
+        // serazene klice: stejny vstup = stejny duvod hostu (review kola 1 S6)
+        let mut services: Vec<(&String, &String)> = out.by_service.iter().collect();
+        services.sort();
+        for (key, reason) in services {
             let host = key.split('/').next().unwrap_or("");
             out.by_host
                 .entry(host.to_string())
@@ -260,11 +276,48 @@ impl Clientele {
 
 /// Krok 6 C (jediná úprava kandidáta 2 na ladicích seedech): důkaz platí pro nález i
 /// tehdy, když se zobrazí později (žebřík ho zobrazí až po ověření, kdy porucha už
-/// skončila). Značka = `finding_id` → (čas důkazu, důvod), s TTL a stropem.
+/// skončila). Značka = `finding_id` → otisk důkazu, s TTL a stropem.
+///
+/// Review kola 1 (S1): značka je vázaná na epizodu důkazu (klíč služby a množina
+/// zdrojů v době důkazu). Protichůdný důkaz ji zneplatní: jediný dominantní zdroj,
+/// zdroj mimo otisk, jiná služba nebo eskalace v paměti nálezu. Jinak by nový
+/// jednozdrojový útok se stejným `finding_id` dostal 24 h starý neškodný důvod.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OpsMarks {
-    marks: HashMap<String, (i64, String)>,
+    #[serde(deserialize_with = "marks_compat")]
+    marks: HashMap<String, OpsMark>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct OpsMark {
+    at: i64,
+    reason: String,
+    service: Option<String>,
+    /// Seřazené dominantní zdroje nálezu v době důkazu.
+    sources: Vec<String>,
+}
+
+/// Starý stav (`finding_id` → `[čas, důvod]`, před review kola 1) se načte, ale
+/// značky bez otisku se zahodí: nejde ověřit, ke které epizodě patří (fail closed).
+fn marks_compat<'de, D>(de: D) -> std::result::Result<HashMap<String, OpsMark>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Mark(OpsMark),
+        Legacy(#[allow(dead_code)] (i64, String)),
+    }
+    let raw: HashMap<String, Stored> = HashMap::deserialize(de)?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|(id, stored)| match stored {
+            Stored::Mark(mark) => Some((id, mark)),
+            Stored::Legacy(_) => None,
+        })
+        .collect())
 }
 
 /// Jak dlouho platí důkaz provozní příčiny pro pozdější zobrazení (s).
@@ -272,22 +325,68 @@ pub const OPS_MARK_TTL_S: i64 = 24 * 3600;
 const OPS_MARKS_CAP: usize = 200_000;
 
 impl OpsMarks {
-    pub fn note(&mut self, finding_id: &str, at: i64, reason: &str) {
-        self.marks
-            .insert(finding_id.to_string(), (at, reason.to_string()));
+    pub fn note(
+        &mut self,
+        finding_id: &str,
+        at: i64,
+        reason: &str,
+        service: Option<&str>,
+        sources: &[String],
+    ) {
+        let mut sources = sources.to_vec();
+        sources.sort();
+        sources.dedup();
+        self.marks.insert(
+            finding_id.to_string(),
+            OpsMark {
+                at,
+                reason: reason.to_string(),
+                service: service.map(str::to_string),
+                sources,
+            },
+        );
+    }
+
+    /// Jeden cyklus nálezu: čerstvý důkaz (`fresh`) značku obnoví, protichůdný důkaz
+    /// ji zneplatní. Vrací platný důvod fronty provoz.
+    pub fn update(
+        &mut self,
+        finding_id: &str,
+        at: i64,
+        fresh: Option<String>,
+        service: Option<&str>,
+        sources: &[String],
+        escalated: bool,
+    ) -> Option<&str> {
+        match fresh {
+            Some(reason) => self.note(finding_id, at, &reason, service, sources),
+            None => {
+                let contradicted = self.marks.get(finding_id).is_some_and(|mark| {
+                    escalated
+                        || mark.service.as_deref() != service
+                        || sources.len() == 1
+                        || sources
+                            .iter()
+                            .any(|s| mark.sources.binary_search(s).is_err())
+                });
+                if contradicted {
+                    self.marks.remove(finding_id);
+                }
+            }
+        }
+        self.get(finding_id, at)
     }
 
     pub fn get(&self, finding_id: &str, at: i64) -> Option<&str> {
         self.marks
             .get(finding_id)
-            .filter(|(when, _)| at - when <= OPS_MARK_TTL_S)
-            .map(|(_, reason)| reason.as_str())
+            .filter(|mark| at - mark.at <= OPS_MARK_TTL_S)
+            .map(|mark| mark.reason.as_str())
     }
 
     pub fn sweep(&mut self, at: i64) {
-        self.marks
-            .retain(|_, (when, _)| at - *when <= OPS_MARK_TTL_S);
-        evict_oldest(&mut self.marks, OPS_MARKS_CAP, |(when, _)| *when);
+        self.marks.retain(|_, mark| at - mark.at <= OPS_MARK_TTL_S);
+        evict_oldest(&mut self.marks, OPS_MARKS_CAP, |mark| mark.at);
     }
 
     pub fn len(&self) -> usize {
@@ -300,18 +399,20 @@ impl OpsMarks {
 }
 
 /// Důvod zařazení nálezu do fronty provoz, nebo `None` (zůstává podezřením).
-/// `service_key` je klíč služby nálezu (`ip/proto/port`), `sources` dominantní zdroje.
+/// `service_key` je klíč služby nálezu (`ip/proto/port`), `sources` dominantní zdroje,
+/// `subnets` skutečné podsítě (rozsah) pro směrovaný broadcast.
 pub fn classify(
     window: &OpsWindow,
     finding_type: &str,
     service_key: Option<&str>,
     host_ip: &str,
     sources: &[String],
+    subnets: &[ipnet::IpNet],
 ) -> Option<String> {
     if !E1_TYPES.contains(&finding_type) {
         return None;
     }
-    if is_broadcast_or_multicast(host_ip) {
+    if is_broadcast_or_multicast(host_ip, subnets) {
         return Some(format!(
             "provoz E2: cil {host_ip} je broadcast nebo multicast"
         ));
@@ -339,6 +440,31 @@ pub fn classify(
 mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
+
+    /// Podsítě rozsahu v testech (/24 jako v soaku).
+    fn scope() -> Vec<ipnet::IpNet> {
+        vec![
+            "10.0.0.0/24".parse().unwrap(),
+            "10.0.3.0/24".parse().unwrap(),
+        ]
+    }
+
+    fn classify(
+        window: &OpsWindow,
+        finding_type: &str,
+        service_key: Option<&str>,
+        host_ip: &str,
+        sources: &[String],
+    ) -> Option<String> {
+        super::classify(
+            window,
+            finding_type,
+            service_key,
+            host_ip,
+            sources,
+            &scope(),
+        )
+    }
 
     fn flow(src: &str, dst: &str, port: u16, state: &str, rb: u64) -> ConnectionObservation {
         ConnectionObservation {
@@ -453,8 +579,13 @@ mod tests {
     fn broadcast_target_and_surge_of_known_clients() {
         let policy = OpsPolicy::default();
         let window = OpsWindow::default();
-        assert!(is_broadcast_or_multicast("10.0.3.255") && is_broadcast_or_multicast("239.1.2.3"));
-        assert!(!is_broadcast_or_multicast("10.0.3.7") && !is_broadcast_or_multicast("x"));
+        let nets = scope();
+        assert!(is_broadcast_or_multicast("10.0.3.255", &nets));
+        assert!(is_broadcast_or_multicast("239.1.2.3", &[]));
+        assert!(is_broadcast_or_multicast("255.255.255.255", &[]));
+        assert!(
+            !is_broadcast_or_multicast("10.0.3.7", &nets) && !is_broadcast_or_multicast("x", &nets)
+        );
         assert!(
             classify(&window, "unexpected_traffic", None, "10.0.3.255", &[])
                 .is_some_and(|r| r.contains("E2"))
@@ -485,15 +616,150 @@ mod tests {
         );
     }
 
+    /// Review kola 1 (S4): smerovany broadcast podle skutecneho prefixu, ne podle .255.
+    #[test]
+    fn directed_broadcast_follows_real_subnet_prefix() {
+        let wide: Vec<ipnet::IpNet> = vec!["10.0.0.0/16".parse().unwrap()];
+        // v /16 je 10.0.3.255 bezny unicast host
+        assert!(!is_broadcast_or_multicast("10.0.3.255", &wide));
+        assert!(is_broadcast_or_multicast("10.0.255.255", &wide));
+        // nejdelsi shoda rozhoduje
+        let nested: Vec<ipnet::IpNet> = vec![
+            "10.0.0.0/16".parse().unwrap(),
+            "10.0.3.0/24".parse().unwrap(),
+        ];
+        assert!(is_broadcast_or_multicast("10.0.3.255", &nested));
+        assert!(!is_broadcast_or_multicast("10.0.255.255", &nested[1..]));
+        // bez znalosti podsite se smerovany broadcast neuznava
+        assert!(!is_broadcast_or_multicast("10.0.3.255", &[]));
+        // /31 a /32 nemaji broadcast
+        let p2p: Vec<ipnet::IpNet> = vec!["10.9.9.0/31".parse().unwrap()];
+        assert!(!is_broadcast_or_multicast("10.9.9.1", &p2p));
+        let window = OpsWindow::default();
+        assert!(
+            super::classify(
+                &window,
+                "unexpected_traffic",
+                None,
+                "10.0.3.255",
+                &[],
+                &wide
+            )
+            .is_none()
+        );
+    }
+
+    /// Review kola 1 (S6): duvod hostu nezavisi na poradi HashMap.
+    #[test]
+    fn host_level_reason_is_deterministic() {
+        let policy = OpsPolicy::default();
+        let mut c = Clientele::default();
+        let mut learn = Vec::new();
+        let mut fail = Vec::new();
+        for port in [443u16, 8443, 22, 993, 25, 80] {
+            for i in 0..20 {
+                let src = format!("10.0.1.{}", i + 1);
+                learn.push(flow(&src, "10.0.0.9", port, "SF", 5000));
+                if i < 10 + port as usize % 5 {
+                    fail.push(flow(&src, "10.0.0.9", port, "S0", 0));
+                }
+            }
+        }
+        c.learn(&learn, &HashSet::new(), 0, &policy);
+        let reasons: HashSet<String> = (0..20)
+            .map(|_| {
+                let window = c.clone().evidence(&fail, 1800, &policy);
+                classify(
+                    &window,
+                    "service_unreachable",
+                    Some("10.0.0.9"),
+                    "10.0.0.9",
+                    &[],
+                )
+                .expect("E1 na hostu")
+            })
+            .collect();
+        assert_eq!(reasons.len(), 1, "{reasons:?}");
+        // vyhrava nejmensi klic sluzby (10.0.0.9/tcp/22: 12 selhavajicich zdroju)
+        assert!(reasons.iter().next().unwrap().contains("12 zdroju"));
+    }
+
     #[test]
     fn marks_survive_late_display_within_ttl() {
         let mut marks = OpsMarks::default();
-        marks.note("finding:x", 1000, "provoz E1");
+        let svc = Some("10.0.0.9/tcp/443");
+        marks.note("finding:x", 1000, "provoz E1", svc, &[]);
         assert_eq!(marks.get("finding:x", 1000 + 3600), Some("provoz E1"));
+        // pozdni zobrazeni bez zdroju a bez eskalace: znacka plati
+        assert_eq!(
+            marks.update("finding:x", 1000 + 3600, None, svc, &[], false),
+            Some("provoz E1")
+        );
         assert!(marks.get("finding:x", 1000 + OPS_MARK_TTL_S + 1).is_none());
         assert!(marks.get("finding:y", 1000).is_none());
         marks.sweep(1000 + OPS_MARK_TTL_S + 1);
         assert!(marks.is_empty());
+    }
+
+    /// Review kola 1 (S1): novy jednozdrojovy utok se stejnym `finding_id` nedostane
+    /// stary duvod provozu; znacku zneplatni i zdroj mimo otisk, jina sluzba a eskalace.
+    #[test]
+    fn mark_is_invalidated_by_contradicting_evidence() {
+        let svc = Some("10.0.0.9/tcp/443");
+        let pair = vec!["10.0.1.1".to_string(), "10.0.1.2".to_string()];
+        let attacker = vec!["203.0.113.7".to_string()];
+        let fresh = |marks: &mut OpsMarks| marks.note("f", 1000, "provoz E1", svc, &pair);
+        let cases: [(&str, Option<&str>, &[String], bool); 4] = [
+            ("jediny zdroj", svc, &attacker, false),
+            (
+                "zdroj mimo otisk",
+                svc,
+                &[pair[0].clone(), attacker[0].clone()],
+                false,
+            ),
+            ("jina sluzba", Some("10.0.0.9/tcp/22"), &[], false),
+            ("eskalace v pameti", svc, &[], true),
+        ];
+        for (label, service, sources, escalated) in cases {
+            let mut marks = OpsMarks::default();
+            fresh(&mut marks);
+            assert!(
+                marks
+                    .update("f", 1000 + 1800, None, service, sources, escalated)
+                    .is_none(),
+                "{label}"
+            );
+            // zneplatnena znacka se nevrati ani v dalsim cyklu
+            assert!(
+                marks
+                    .update("f", 1000 + 3600, None, svc, &[], false)
+                    .is_none(),
+                "{label}"
+            );
+        }
+        // podmnozina zdroju otisku: plati
+        let mut marks = OpsMarks::default();
+        fresh(&mut marks);
+        assert!(marks.update("f", 2800, None, svc, &pair, false).is_some());
+        // cerstvy dukaz pri eskalaci znacku obnovi (dukaz z tohoto okna)
+        assert!(
+            marks
+                .update("f", 2800, Some("provoz E1".into()), svc, &pair, true)
+                .is_some()
+        );
+    }
+
+    /// Stary stav `ops_marks` (pred review kola 1) se nacte; znacky bez otisku se zahodi.
+    #[test]
+    fn legacy_ops_marks_state_loads_and_fails_closed() {
+        let old = r#"{"marks":{"finding:x":[1000,"provoz E1"]}}"#;
+        let marks: OpsMarks = serde_json::from_str(old).expect("stary stav se nacte");
+        assert!(marks.get("finding:x", 1000).is_none());
+        let mut new = OpsMarks::default();
+        new.note("finding:y", 1000, "provoz E2", None, &[]);
+        let text = serde_json::to_string(&new).unwrap();
+        let back: OpsMarks = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.get("finding:y", 1000), Some("provoz E2"));
     }
 
     #[test]
