@@ -658,7 +658,10 @@ mod tests {
         for kind in ["novel_persistent_peer", "novel_fanout"] {
             let case = input(kind, &host, &sources, 1, Severity::Medium);
             assert!(gate.explain(&calendar, &case).is_none(), "{kind}");
-            assert!(gate.supporting_context(&calendar, &case).is_none(), "{kind}");
+            assert!(
+                gate.supporting_context(&calendar, &case).is_none(),
+                "{kind}"
+            );
         }
         // kontrola: tentyz zaznam jiny pokryty typ vysvetli
         let other = input("unexpected_traffic", &host, &sources, 1, Severity::Medium);

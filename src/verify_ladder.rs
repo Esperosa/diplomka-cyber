@@ -1502,7 +1502,12 @@ mod tests {
                 case.history_key = None;
                 ladder.open(case, 0);
                 let decision = run_until_decided(&mut ladder, &mut env);
-                assert_ne!(decision.status, Status::Refuted, "{kind}: {}", decision.reason);
+                assert_ne!(
+                    decision.status,
+                    Status::Refuted,
+                    "{kind}: {}",
+                    decision.reason
+                );
                 assert_eq!(ladder.stats.outcomes.get("profile:benign"), None, "{kind}");
                 assert_eq!(
                     ladder.stats.outcomes.get("profile:undetermined"),
