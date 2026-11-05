@@ -137,3 +137,98 @@ p99 cyklu (ladicí sítě, zatížený stroj) se u žádného kandidáta nezvý�
 Ladicí svět neobsahuje dlouhé držené útoky, na kterých v kroku 5 selhal K6. Přínos `sensor_strict` se proto ukáže až na držených seedech.
 
 **Odchylka F2 (před drženým během).** Držený běh jsem jednou spustil (09:40) se sestavou `sensor_strict,novelty` z binárky `22d62af`. Po 10 minutách jsem ho zastavil a výstupy smazal, aniž bych otevřel jakýkoli výsledek (žádná síť nebyla dokončená). Důvod: ještě jsem nevyužil povolenou úpravu kandidáta 2 a ta mohla změnit sestavu. Držený běh se pak pustil jednou, s binárkou `8828834` a se stejnou sestavou, protože kandidát 2 po úpravě neprošel. Soak cesta sestavy je v `22d62af` a `8828834` stejná (úprava se týká jen kódu za `ops_class`).
+
+## D) Držený běh a plné testy
+
+**Držený běh** (seedy 20261701 a 20261801, jednou, binárka `8828834`, 2026-11-05 10:47 až 11:45, priorita Idle, 2 ramena po 2 vláknech, celkové zatížení stroje 39 až 46 %). Svět `--coverage full --families all`, 2 × 40 sítí, 2 224 útoků. Ramena `legacy`, `v3k5` (preset kroku 5) a `v3k6` (`--v3-on sensor_strict,novelty`). Plné výstupy: `docs/diplomka/eval/k6/held-v3k5-v3k6.md` a `held-legacy-v3k6.md` (`tools/soak_coverage.py`, hranice S z kroku 5). Po pohledu na výsledek se nic neladilo a běh se neopakoval.
+
+| práh | definice | hodnota | splněno |
+|---|---|---|---|
+| K6 | zavřeno omylem (G3), horní mez Wilson ≤ 5 % (cíl ≤ 2 %) | `v3k6` 33 / 1 320 = 2,50 % (1,79 až 3,49 %); `v3k5` 88 / 1 318 = 6,68 % (5,45 až 8,15 %) | **ano** (cíl 2 % ne) |
+| K3 | fronta podezření: držené nové poruchy ≤ laděné + 10 p. b. | 84,0 % (79,6 až 87,6) proti 69,3 % (65,0 až 73,3), +14,7 p. b. | **ne** |
+| D1 | `v3k6` − `v3k5` po rodinách s n ≥ 100, nepokles o víc než 3 p. b. | nejhorší 0,0 p. b.; c2_beacon +3,3, dns_tunnel +3,3 | ano |
+| D2 | `v3k6` − `v3k5` souhrnně ≥ +3 p. b. | +0,49 p. b. (+0,16 až +0,78) | **ne** |
+| F1 | zobrazené FP / síť-den `v3k6` / `v3k5` ≤ 1,15 | 13,1 / 12,4 = 1,059 (1,040 až 1,090) | ano |
+| K5 | LOFO zobecňuje ≥ 4 ze 6 | 2 ze 6 (ssh 29/32, lateral 24/39; dns_tunnel 13/28 = 46 %, c2 8/35, exfil 0/37, vertikální sken 2/39) | **ne** |
+| G4 | XXXL p99 cyklu < 3 s na nezatíženém stroji | stroj zatížený (dva 72h běhy, ~45 %): p99 v reálném čase 0,73 až 1,65 s, CPU čas cyklu p99 281 až 422 ms (6 sítí, 8 147 až 9 543 zařízení, 1 vlákno) | **nevyhodnoceno** (podmínka klidného stroje nesplněna) |
+| M | peak haldy XXXL < 1,5 GiB | 382 a 368 MiB | ano |
+| R | determinismus | `soak verify` 2/2 bloky shodné (ladicí `k6set-20261611` i držený `v3k6-20261701`); golden snapshot zelený; výchozí a ladicí svět bajtově beze změny | ano |
+| K8 | panika, porušené invarianty | 0 / 0 (6 držených, 27 ladicích a 2 XXXL běhy) | ano |
+| K1 | Q5 / Q1 | 0,93 | ano |
+| K2 | `v3k6` − `v3k5` vše a Q4 + Q5 | +0,5 a +0,2 p. b. | ano |
+| K4 | souběh s nesenzorovou poruchou | +1,9 p. b. | ano |
+| K6b | útoky s automatickým zavřením: držené rodiny proti laděným | 3,5 % proti 0,9 % | ano |
+| K7 | kampaně zachycené aspoň v jedné fázi | 95,8 % (91,6 až 97,9) | ano |
+
+**Co se opravilo.** Slepé místo 1 z kroku 5 (výpadek senzoru zavírá útoky) je pryč: kontext `sensor_outage` měl v `v3k5` 40 zavření nálezů připsaných útoku, v `v3k6` žádné; kontrafaktuální kontextové omyly klesly ze 47 na 9. Omylem vyvrácené případy žebříku klesly z 41 na 24, protože výpadek senzoru už nebyl ani podpůrným důkazem. Zbylých 9 kontextových omylů dělají patch_window, service_outage, backup, batch_job a authorized_scanner. Platí se za to vyšším FP u samotného výpadku senzoru (sensor_crash 13,5 → 19,1 % výskytů se zobrazeným FP): nálezy kolem výpadku se teď ukážou člověku. Druhý přínos: c2_beacon +3,3 a dns_tunnel +3,3 p. b. z `novel_persistent_peer`.
+
+**Co neprošlo.**
+
+- **D2:** zisk +0,49 p. b. je skutečný (interval vylučuje nulu), ale malý. Velké zisky (graf +2,7 p. b., `novel_fanout` +2,7 p. b.) neprošly ladicími kritérii kvůli zavírání omylem nebo FP.
+- **K3:** třída provoz (kandidát 2) neprošla ani po úpravě. Držené poruchy cert_expired (90,4 %), cloud_migration (97,4 %) a vpn_reconnect_storm (88,6 %) dál vypadají jako útok.
+- **K5:** dns_tunnel na ladicích seedech zobecňoval (35/64), na držených 13/28 = 46 % už ne. Neznámý maják bez vlastního detektoru se zachytí v 23 % případů (8/35).
+- **Cena novosti:** držená lookalike `saas_adoption` (jeden klient a nová cloudová služba) má FP ve frontě podezření v 69,0 % výskytů proti 36,8 % bez novosti. Je to přesně ten případ, který tok od majáku neodliší. Nález se nezavírá a člověk ho vidí.
+
+**Proti `legacy` (G z kroku 4, držený běh tohoto kroku):**
+
+| práh | hodnota | splněno |
+|---|---|---|
+| G1a | FP / síť-den 900,8 → 13,1, −98,5 % (poměr 0,015, 0,012 až 0,020) | ano |
+| G1b až G1d | znovu nepuštěno, platí krok 4 (1,010 / 1,031 / 1,083) | (krok 4) |
+| G2a | nejhorší rodina s n ≥ 100: lateral_movement −2,5 p. b. (−7,1 až +1,3) | ano (≥ −5) |
+| G2b | souhrnně +18,9 p. b. (+16,8 až +21,6) | ano |
+| G3 | = K6, horní mez 3,49 % | ano |
+| G4 | nevyhodnoceno (stroj zatížený), viz výše | ne |
+| G5 | 0 panik, 0 invariantů | ano |
+
+**Plné testy** (binárka a kód `eb0fb1f`, kde se mění jen preset):
+
+- `cargo test --lib`: 486 prošlo, 5 selhalo, všechny `broker::tests` (známá výjimka, chybí Redis);
+- integrační testy: golden snapshot, engine_v3, case_memory_learning, incremental_ingest, mas_deep a verification_execution zelené; `e2e` autopilot selhal (známá výjimka, httpx); broker_two_process vyžaduje Redis;
+- `cargo clippy --all-targets`: lib 89, lib test 97, bin 3, e2e 1, tedy stejně jako HEAD před krokem 6;
+- kotvy (preset se změnil, takže jednou dev a jednou zamčené části, 2026-11-05 kolem 12:10, výstup `F:\claude-tmp\k6\anchor.out`): výsledky jsou totožné s kroky 4 a 5. Zamčená CTU-13 a IoT-23: 2 ze 30 škodlivých a 1 ze 112 neškodných hostů. CIC-IDS2017 a UNSW-NB15: 0 nálezů. Novost potřebuje zralý profil (48 h), krátké výřezy ji nespustí.
+
+## E) Rozhodnutí, registr slepých míst a co zůstává
+
+**Preset v3** (`V3Features::recommended()`, commit `eb0fb1f`) = vybraná sestava kroku 6: preset kroku 5 + `sensor_strict` + `novelty` (jen `novel_persistent_peer`). Pro párové srovnání zůstává `V3Features::step5()`. Třída provoz, `context_guard` a graf jsou dál volitelné přes `--v3-on`.
+
+**Výchozí režim zůstává `legacy`.** G1a, G2, G3 a G5 jsou na nových držených seedech splněné. G4 ale podle B7 vyžaduje měření na nezatíženém stroji a ten celý krok sdílely dva 72h běhy (asi 45 % CPU). Orientační čísla jsou daleko pod prahem: p99 v reálném čase nejvýš 1,65 s, CPU čas cyklu nejvýš 422 ms. Formálně ale G4 změřený není, a podle předregistrace se proto výchozí režim nemění. Až 72h běhy skončí (přibližně 2026-11-07), stačí pustit jen G4 (`--size xxxl --max-networks 3 --threads 1 --block-size 1` na seedech 20261701 a 20261801, nic dalšího současně). Pokud projde, výchozí režim se přepne na `v3`. Poznámka k migraci pro tu chvíli: `engine.mode = "v3"` v konfiguraci a nové klíče stavu `clientele` a `ops_marks` v `engine-state.sqlite` vznikají jen s `ops_class`. Behaviorální stav dostane pole `novelty` (serde default, starý stav se načte). Kontext `sensor_outage` v `context-calendar.json` přestane zavírat nálezy, záznamy zůstávají platné.
+
+### Registr slepých míst po kroku 6 (držený běh `v3k6`, pokud není uvedeno jinak)
+
+| # | slepé místo | stav po kroku 6 | měření | mitigace |
+|---|---|---|---|---|
+| 1 | Kontext „výpadek senzoru“ zavírá útoky | **opraveno** | zavření útoků kontextem sensor_outage 40 → 0, K6 6,7 → 2,5 % | výpadek senzoru je jen informace pro člověka, nikdy důkaz neškodnosti |
+| 1b | Zbylé kontextové omyly (patch_window, service_outage, backup, batch_job, scanner) | zůstává | 9 kontrafaktuálních omylů z 367 kontextových zavření (2,5 %), K6 cíl 2 % nesplněn | audit 10 % zavřených a automatické vypnutí druhu kontextu (H-A3); `context_guard` vyzkoušen a zamítnut (víc omylů přes žebřík) |
+| 2 | Neznámá rodina podobná majáku, exfiltraci, vertikálnímu skenu nebo pohybu v síti | **částečně** | LOFO 2/6: c2 23 %, exfil 0 %, vertikální sken 5 %, dns_tunnel 46 %; obecná novost přidala c2 +3,3 a dns_tunnel +3,3 p. b. | nový vztah se nezavírá kontextem ani profilem a jde člověku; zbytek je vlastnost tokových dat (vertikální sken na otevřené porty nevytvoří úspěšnou novou vazbu ven) |
+| 3 | exploit_attempt | zůstává | 39,5 % (n = 233) | mimo tokový detektor (IDS a CVE kontext), vždy zobrazit IDS alerty |
+| 4 | Provozní problémy jako podezření na útok | zůstává | K3 84,0 % vs 69,3 %; třída provoz zachytí jen broadcast (misconfig −13,6 p. b. v ladění) a stojí detekci (credential_stuffing −1,9, ddos −1,5 p. b.) | neautomatizovat; kalendář změn (CMDB) jako zdroj kontextu v produkci, v simulaci by zkreslil měření (A, kandidát 13) |
+| 4b | Nová cloudová služba jednoho hostu (`saas_adoption`, nová držená lookalike) | **nové a vědomé** | FP 69,0 % výskytů (bez novosti 36,8 %) | cena obecné novosti; nález má nízkou závažnost, nezavírá se a doporučuje ověřit službu; po 3 dnech zvyku profil cíl naučí |
+| 5 | Rychlý maják (tempo 2× až 8×) | **částečně** | v ladění c2 tempo 4× 54,3 → 61,0 % | obecná trvalost vazby; zbytek je krátké trvání (méně než 6 oken za 24 h) |
+| 6 | Útok rozložený na 10 zdrojů | zůstává | viz `held-v3k5-v3k6.md`, osa zdroje | agregace přes zdroje neimplementována (kandidát 8) |
+| 7 | lateral_movement | zůstává | 67,0 % (n = 197), legacy 69,5 % | graf (+20 p. b. v ladění) a `novel_fanout` (+16 p. b.) neprošly kvůli omylům a FP; další krok je graf, jehož případy žebřík nezavírá |
+| 8 | Krátké útoky | zůstává | vlastnost útoku | – |
+| 9 | Reálná data | zůstává | kotvy beze změny (2/30 škodlivých) | laboratoř a pasivní sběr (`lab-plan.md`) |
+| 10 | ics_attack | nedostatečná data | n = 8 | cílený běh průmyslových sítí |
+| 11 | Výpadek senzoru zvyšuje FP | **nové, vědomé** | sensor_crash 13,5 → 19,1 % výskytů se zobrazeným FP | cena opravy 1; okno výpadku je v UI vidět |
+
+Na otázku, zda už nejsou žádná slepá místa: nejsou opravená. Dvě jsem opravil (1 a část 2 a 5). Dvě nová vznikla vědomě (4b a 11) jako cena za to, že engine nezavírá neznámé věci. Ostatní zůstávají s mitigací. Žádné slepé místo engine neschová tichým zavřením: kromě kontextů s auditem a žebříku s pozitivním důkazem se nic automaticky nezavírá.
+
+### Odchylky od předregistrace (souhrn)
+
+1. **F1:** `sensor_strict` doslovně nesplnil B5.3 (podíl omylů na ladění 1,47 → 1,49 %, počet omylů 34 → 33, jmenovatel menší o 91 správných zavření). Do sestavy jsem ho zařadil s tímto zdůvodněním. Sestava B5.3 splňuje.
+2. **F2:** první spuštění drženého běhu (09:40) jsem po 10 minutách zastavil, aniž bych viděl jakýkoli výsledek, a držený běh se pustil jednou znovu.
+3. Kandidát 2 je zamítnutý, ale jeho kód v enginu zůstává za přepínačem (`ops_class`), včetně produkční cesty. Je vypnutý a výchozí cestu nemění.
+4. Sestava proti B5 na ladicích seedech proběhla s binárkou `22d62af`, držený běh s `8828834`. Rozdíl je jen v kódu za `ops_class`, `soak verify` s `8828834` nad ladicím výstupem `22d62af` dal 2/2 shodné bloky.
+
+### Co zůstává otevřené
+
+- G4 na nezatíženém stroji (po skončení 72h běhů) a podle výsledku přepnutí výchozího režimu.
+- Proč důkaz E1 třídy provoz nezabírá (klíč nálezu proti cíli selhání). Bez opravy zůstává K3 nesplněný.
+- Graf a `novel_fanout` s pravidlem, že jejich případy žebřík nezavírá, s novou předregistrací.
+- Zbylé kontextové omyly (1b) pod cíl 2 %.
+- Laboratoř, pasivní sběr a UHK (nic neodesláno).
+
+## Commity kroku 6
+
+`3054301` předregistrace, `4a461c1` kandidáti v enginu, `b5a913c` měření v soaku, `fecbe66` nástroj, `bf16fc3` třída provoz v produkční cestě, `22d62af` úprava novosti, `8828834` úprava třídy provoz, `f6afbe1` ladicí výsledky, `eb0fb1f` preset, a commit této sekce.
