@@ -100,3 +100,40 @@ K5 s novými obecnými typy (kandidáti 4 a 5) se vyhodnotí stejně jako v krok
 ### B7. Výchozí režim
 
 Na v3 jako výchozí se přepne jen tehdy, když `v3k6` splní prahy G1 až G5 z kroku 4 (B, beze změny definic) na držených seedech tohoto kroku. G1 a G2 se počítají proti `legacy` ve stejném běhu (G1b až G1d proti `s2` se nepouštějí znovu; k nim platí hodnoty kroku 4 a v E to bude uvedeno). G3 = K6. G4 musí být změřený na nezatíženém stroji. Když stroj klidný není, G4 se nevyhodnotí a `legacy` zůstává výchozí. Prahy K tohoto kroku o výchozím režimu nerozhodují, rozhodují o tom, která tvrzení práce smí udělat.
+
+## C) Implementace a ladicí A/B (seedy 20261611 až 20261613, 3 × 40 sítí)
+
+Kód: `4a461c1` (kandidáti za přepínači `--v3-on sensor_strict | ops_class | novelty | context_guard`, `graph` existoval), `b5a913c` (měření: fronta podezření a fronta provoz, typy FP poruch, držená lookalike `saas_adoption`), `fecbe66` (nástroj), `bf16fc3` (třída provoz v produkční cestě v3, záznam `ops_reason` v životním cyklu nálezu). Výchozí svět i ladicí svět dávají s novou binárkou bajtově stejný `networks.jsonl` jako binárka kroku 5 (4 sítě seedu 20261611, v3 s kontrafaktuálem, 0 rozdílů po odečtení nových polí). Všechny přepínače jsou mimo preset, `V3Features::recommended()` se nemění.
+
+Běhy: binárka `b5a913c` (první kolo), `22d62af` (úprava novosti) a `8828834` (úprava třídy provoz). Stroj sdílely dva 72h běhy, proto 2 ramena současně, 2 vlákna, priorita Idle, celkové zatížení 43 až 51 %. Párově proti `v3k5`, bootstrap po sítích stratifikovaný po seedech (B = 2000). Výstupy jsou v `F:\bakula-soak\ab\k6\tuning`, plné srovnání vybrané sestavy je v `docs/diplomka/eval/k6/tuning-v3k5-v3k6.md`.
+
+Základ `v3k5`: 3 759 útoků, detekce 79,1 %, zobrazené FP 21,3 na síť-den, zavřeno omylem 34 / 2 313 = 1,47 % (horní mez 2,05 %), K3 laděné nové poruchy 70,0 % výskytů se zobrazeným FP, LOFO zobecňuje 2 ze 6 (ssh 54/56, lateral 36/72).
+
+| kandidát | detekce (p. b., 95% CI) | FP / síť-den (poměr) | zavřeno omylem | K3 laděné | LOFO | B5 |
+|---|---|---:|---|---:|---|---|
+| 1 `sensor_strict` | +0,00 (+0,00 až +0,00) | 1,001 | 33 / 2 221 = 1,49 % | 70,0 % | 2/6 | doslovně ne (B5.3, viz F1), přijat jako odchylka |
+| 2 `ops_class` (první verze) | −0,19 (−0,35 až −0,06) | 1,000 (podezření 0,994) | 34 / 2 313 | 66,9 % | 2/6 | ne (B5.1) |
+| 2 `ops_class` po úpravě (značky s TTL) | −0,21 (−0,38 až −0,08) | 1,000 (podezření 0,992) | 34 / 2 313 | 66,5 % | 2/6 | ne (B5.1) |
+| 3 `graph` | +2,71 (+2,21 až +3,23) | 1,086 | 40 / 2 675 = 1,50 % | 70,4 % | 2/6 | ne (B5.3: 6 omylů navíc) |
+| 4+5 `novelty` (první verze) | +2,71 (+2,09 až +3,36) | 1,474 | 34 / 3 553 = 0,96 % | 70,5 % | 3/6 | ne (B5.2) |
+| 4 `novelty` po úpravě (`novel_fanout` vypnuto), v sestavě s 1 | +0,74 (+0,40 až +1,12) | 1,036 | 33 / 2 518 = 1,31 % | 69,6 % | 3/6 | ano |
+| 6 `context_guard` | −0,05 (−0,12 až +0,00) | 1,000 | 40 / 2 198 = 1,82 % | 69,7 % | 2/6 | ne (B5.1, B5.3) |
+| sestava 1 + 4 + 2 (po úpravě) | +0,53 (+0,11 až +0,95) | 1,036 (podezření 1,028) | 33 / 2 518 | 66,0 % | 3/6 | ne (B5.1 pro 2) |
+
+p99 cyklu (ladicí sítě, zatížený stroj) se u žádného kandidáta nezvýšil: medián p99 sítě 0,13 až 0,15 s proti 0,14 s, maximum 1,02 až 1,19 s proti 1,23 s. Žádná panika, žádný porušený invariant (21 ramen × 40 sítí).
+
+**1 `sensor_strict`.** V ladicím světě kontext výpadku senzoru zavíral 92 nálezů, z toho 1 omylem, takže efekt je tu nulový. Detekce se nezměnila, FP +0,1 %. Počet omylů klesl z 34 na 33, ale podíl stoupl z 1,47 na 1,49 %, protože ubylo 91 správných zavření. Podle B5.3 (podíl, bodový odhad) by kandidát neprošel o 0,02 p. b. Zařadil jsem ho přesto a je to odchylka F1: B5.3 měl zabránit tomu, aby kandidát zavíral víc útoků. Tady se počet omylem zavřených útoků nezvýšil, jen se zmenšil jmenovatel. Sestava, ve které je, B5.3 splňuje (1,31 %).
+
+**2 `ops_class`.** E2 (broadcast) zabírá: misconfig 96,9 → 83,3 % výskytů s FP ve frontě podezření. E1 a E3 skoro nezabírají (dns_outage 87,9 → 87,6 %, dhcp_renumber 79,3 → 78,7 %, service_crash beze změny). Jediná povolená úprava řešila hypotézu, že žebřík zobrazí nález až po ověření, kdy porucha skončila: důkaz se zapíše i k nezobrazenému nálezu a platí 24 h. Efekt to nemělo (K3 laděné 66,9 → 66,5 %). Cena je skutečná: 18 až 21 útoků ze 3 759 skončilo jen ve frontě provoz (credential_stuffing −1,9 p. b., ddos_volume −1,5 p. b.). To je přesně riziko z A (rozložený útok mnoha zdroji vypadá jako porucha služby). **Zamítnuto** (B5.1). Kód zůstává za přepínačem jako diagnostika. Proč E1 nezabírá, jsem neověřil. Pravděpodobná příčina je, že nálezy poruch nesou jediný dominantní zdroj nebo klíč služby jiný než cíl selhání (`unmapped_passive_event` na staré adrese, `service_unreachable` na hostu bez portu). To je otevřený bod.
+
+**3 `graph`.** Největší zisk detekce (lateral_movement +20,4 p. b.) za +8,6 % FP, ale zavřeno omylem 34 → 40 (žebřík vyvrací nálezy `pivot_chain`). **Zamítnuto** podle B5.3. Je to stejný závěr jako v kroku 4 (FP), tentokrát kvůli zavírání.
+
+**4 a 5 `novelty`.** První verze: +2,71 p. b. (lateral +15,7, dns_tunnel +4,5, c2 +4,0), ale `novel_fanout` přidal 9,3 zobrazených FP na síť-den (+44 %). `novel_persistent_peer` přidal jen 0,8. Jediná povolená úprava: `novel_fanout` vypnuto (`fanout_min` 8 → 0, commit `22d62af`). Zbylý `novel_persistent_peer` dává +0,74 p. b. (c2_beacon +3,1, dns_tunnel +4,1), z toho c2_beacon s tempem 4× 54,3 → 61,0 %. FP stoupnou o 3,6 %. Zavřeno omylem kleslo na 1,31 %: zavření přibylo 205 (žebřík vyvrací neškodné nálezy, které nová vazba otevřela), omylů ubyl jeden. Jeden nález `novel_persistent_peer` žebřík vyvrátil (neškodný). Tvrzení „nový vztah se nikdy nezavře“ proto neplatí doslova: zavře ho jen žebřík s pozitivním neškodným důkazem, kontext ani profil ne. LOFO: dns_tunnel začne zobecňovat (35/64), c2_beacon 21/76 nestačí, celkem 3 ze 6. **Přijato.**
+
+**6 `context_guard`.** Bez identifikovaného zdroje kontext nezavře. Odebral 115 zavření, ale přidal 6 omylů (40 / 2 198 = 1,82 %): nálezy, které kontext nezavřel, potom zavřel žebřík, a to hůř. **Zamítnuto** (B5.1, B5.3).
+
+**Vybraná sestava `v3k6` = `--v3-on sensor_strict,novelty`** (preset kroku 5 plus kandidáti 1 a 4 s upraveným prahem). Sestava na ladicích seedech: detekce +0,74 p. b. (+0,40 až +1,12), FP × 1,036, zavřeno omylem 1,31 % (horní mez 1,83 %), žádná rodina s n ≥ 100 neklesla, kampaně „všechny fáze“ 36,4 → 38,7 %. Splňuje B5.1 až B5.3 i strop sestavy (FP ≤ 1,15).
+
+Ladicí svět neobsahuje dlouhé držené útoky, na kterých v kroku 5 selhal K6. Přínos `sensor_strict` se proto ukáže až na držených seedech.
+
+**Odchylka F2 (před drženým během).** Držený běh jsem jednou spustil (09:40) se sestavou `sensor_strict,novelty` z binárky `22d62af`. Po 10 minutách jsem ho zastavil a výstupy smazal, aniž bych otevřel jakýkoli výsledek (žádná síť nebyla dokončená). Důvod: ještě jsem nevyužil povolenou úpravu kandidáta 2 a ta mohla změnit sestavu. Držený běh se pak pustil jednou, s binárkou `8828834` a se stejnou sestavou, protože kandidát 2 po úpravě neprošel. Soak cesta sestavy je v `22d62af` a `8828834` stejná (úprava se týká jen kódu za `ops_class`).
