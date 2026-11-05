@@ -43,6 +43,7 @@ pub struct NoveltyThresholds {
     pub persist_span_s: i64,
     /// Cíl zná nejvýš tolik vnitřních hostů (víc = flotila, software).
     pub fleet_max: usize,
+    /// Mez nových vnitřních vazeb; 0 = `novel_fanout` vypnuto.
     pub fanout_min: usize,
     pub fanout_span_s: i64,
     pub idle_s: i64,
@@ -51,14 +52,16 @@ pub struct NoveltyThresholds {
 }
 
 impl Default for NoveltyThresholds {
-    /// Volba autora před prvním měřením (impl-krok6.md, B5).
+    /// Volba autora před prvním měřením (impl-krok6.md, B5). Jediná povolená úprava na
+    /// ladicích seedech (impl-krok6.md, C): `novel_fanout` vypnuto (`fanout_min` 8 → 0),
+    /// protože přidal 9,3 zobrazených FP na síť-den (+44 %) při zisku jen u lateral.
     fn default() -> Self {
         Self {
             mature_s: 48 * 3600,
             persist_windows: 6,
             persist_span_s: 24 * 3600,
             fleet_max: 2,
-            fanout_min: 8,
+            fanout_min: 0,
             fanout_span_s: 6 * 3600,
             idle_s: 3 * 86_400,
             max_pairs: 200_000,
@@ -187,6 +190,7 @@ pub fn detect(
     }
     // --- nove vnitrni vazby hostu ---
     let mut fresh: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let internal = if t.fanout_min == 0 { &[][..] } else { internal };
     for (src, dst, proto, port) in successful_pairs(internal) {
         if src == dst || profile.knows(&src, &dst, &proto, port) || !mature(profile, &src, now, t) {
             continue;
@@ -362,7 +366,36 @@ mod tests {
     fn slow_internal_fanout_accumulates_across_windows() {
         let profile = mature_profile("10.0.0.5");
         let prevalence = Prevalence::default();
-        let t = NoveltyThresholds::default();
+        // vychozi stav po kroku 6 C: novel_fanout vypnuto
+        let off = NoveltyThresholds::default();
+        assert_eq!(off.fanout_min, 0);
+        let mut quiet = NoveltyState::default();
+        let burst: Vec<ConnectionObservation> = (0..20)
+            .map(|k| {
+                conn(
+                    "10.0.0.5",
+                    &format!("10.0.9.{}", k + 1),
+                    445,
+                    T0 + 3 * 86_400,
+                )
+            })
+            .collect();
+        assert!(
+            detect(
+                &mut quiet,
+                &profile,
+                &prevalence,
+                &off,
+                &[],
+                &burst,
+                T0 + 3 * 86_400
+            )
+            .is_empty()
+        );
+        let t = NoveltyThresholds {
+            fanout_min: 8,
+            ..Default::default()
+        };
         let mut state = NoveltyState::default();
         let start = T0 + 3 * 86_400;
         let mut alarmed_at = None;
