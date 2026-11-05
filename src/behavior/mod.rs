@@ -21,6 +21,7 @@ pub mod beacon;
 pub mod egress_volume;
 pub mod graph;
 pub mod interactive;
+pub mod novelty;
 pub mod profile;
 
 use chrono::{DateTime, Utc};
@@ -39,6 +40,8 @@ pub struct BehaviorSwitches {
     pub interactive: bool,
     pub graph: bool,
     pub profile: bool,
+    /// Krok 6: obecná novost vztahů (`novelty`).
+    pub novelty: bool,
 }
 
 impl BehaviorSwitches {
@@ -49,6 +52,7 @@ impl BehaviorSwitches {
             interactive: engine.interactive(),
             graph: engine.graph(),
             profile: engine.profile(),
+            novelty: engine.novelty(),
         }
     }
 
@@ -65,6 +69,8 @@ pub const BEHAVIOR_TYPES: &[&str] = &[
     "interactive_session",
     "long_lived_tunnel",
     "pivot_chain",
+    "novel_persistent_peer",
+    "novel_fanout",
 ];
 
 pub fn is_behavior_type(kind: &str) -> bool {
@@ -81,6 +87,8 @@ pub struct BehaviorState {
     pub interactive: interactive::InteractiveState,
     pub graph: graph::GraphState,
     pub profile: profile::HostProfiles,
+    /// Krok 6: novost vztahů.
+    pub novelty: novelty::NoveltyState,
     /// Začátek prvního okna (stáří senzoru, zahřívání).
     pub first_window: Option<i64>,
 }
@@ -132,6 +140,7 @@ pub struct BehaviorThresholds {
     pub beacon: beacon::BeaconThresholds,
     pub interactive: interactive::InteractiveThresholds,
     pub graph: graph::GraphThresholds,
+    pub novelty: novelty::NoveltyThresholds,
 }
 
 impl BehaviorThresholds {
@@ -222,6 +231,18 @@ pub fn run_window(
         );
         out.findings.extend(findings);
         out.chains = chains;
+    }
+    if switches.novelty && switches.egress {
+        // profil zna jen minula okna (uci se az po rozhodnuti o tomto okne)
+        out.findings.extend(novelty::detect(
+            &mut state.novelty,
+            &state.profile,
+            &state.prevalence,
+            &thresholds.novelty,
+            input.outbound,
+            input.internal,
+            now,
+        ));
     }
     out.findings
         .sort_by(|a, b| a.finding.finding_id.cmp(&b.finding.finding_id));

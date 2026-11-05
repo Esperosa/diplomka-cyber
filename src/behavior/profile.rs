@@ -294,6 +294,19 @@ impl HostProfiles {
         self.hosts.len()
     }
 
+    /// Krok 6: první výskyt hostu v profilu (stáří profilu pro novost vztahů).
+    pub fn host_first(&self, host: &str) -> Option<i64> {
+        self.hosts.get(host).map(|p| p.first)
+    }
+
+    /// Krok 6: profil o vztahu ví (kandidát, zvyk i poznamenaná dvojice). Nový vztah
+    /// = profil ho nikdy neviděl, ani jako kandidáta (zapomenutí po `candidate_forget_s`).
+    pub fn knows(&self, host: &str, peer: &str, proto: &str, port: u16) -> bool {
+        self.hosts
+            .get(host)
+            .is_some_and(|p| p.habits.contains_key(&habit_key(peer, proto, port)))
+    }
+
     /// Zavedený a nepoznamenaný zvyk hostu (krok 4: periodicita na zvyk není nová).
     pub fn is_habit(&self, host: &str, peer: &str, proto: &str, port: u16) -> bool {
         self.hosts

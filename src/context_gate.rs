@@ -221,6 +221,44 @@ pub struct GatePolicy {
     /// (máme doklad, že omyl překračuje cíl 2 %; Dodatek A, H-A2).
     pub audit_error_target: f64,
     pub audit_min_samples: u64,
+    /// Krok 6 (kandidát 1): výpadek senzoru nezavírá a není ani podpůrným neškodným
+    /// důkazem. Absence dat není vysvětlení (Dodatek A.2 d, RQ6 Z3); v kroku 5 kontext
+    /// výpadku zavřel 147 nálezů útoků (impl-krok5.md, G).
+    #[serde(default)]
+    pub sensor_strict: bool,
+    /// Krok 6 (kandidát 6): zdrojově citlivý kontext vysvětlí nález jen s
+    /// identifikovaným dominantním zdrojem; výjimka je objem v okně zálohy a dávky.
+    #[serde(default)]
+    pub require_identified_source: bool,
+}
+
+impl GatePolicy {
+    /// Mantinely podle konfigurace jádra (krok 6).
+    pub fn for_engine(engine: &crate::engine::EngineConfig) -> Self {
+        Self {
+            sensor_strict: engine.sensor_strict(),
+            require_identified_source: engine.context_guard(),
+            ..Self::default()
+        }
+    }
+
+    /// Smí záznam vysvětlit nález vzhledem k pravidlům kroku 6?
+    fn admits(&self, entry: &ContextEntry, input: &GateInput<'_>) -> bool {
+        if self.sensor_strict && entry.kind == ContextKind::SensorOutage {
+            return false;
+        }
+        if self.require_identified_source
+            && entry.kind.source_sensitive()
+            && input.sources.is_empty()
+        {
+            let volume = matches!(
+                input.finding_type,
+                "inductive_volume_anomaly" | "packet_rate_spike"
+            );
+            return entry.kind.explains_volume() && volume;
+        }
+        true
+    }
 }
 
 impl Default for GatePolicy {
@@ -245,6 +283,8 @@ impl Default for GatePolicy {
             max_closures_per_cycle: 200,
             audit_error_target: 0.02,
             audit_min_samples: 30,
+            sensor_strict: false,
+            require_identified_source: false,
         }
     }
 }
@@ -356,6 +396,10 @@ impl ContextGate {
             if !entry.active(input.at) || !entry.covers(input.finding_type) {
                 continue;
             }
+            if !self.policy.admits(entry, input) {
+                refused_source = true;
+                continue;
+            }
             let host_match = if entry.hosts.is_empty() {
                 entry.kind == ContextKind::SensorOutage || (!entry.sources.is_empty() && !severe)
             } else {
@@ -443,6 +487,7 @@ impl ContextGate {
                         .any(|s| !entry.hosts.contains(s) && !entry.sources.contains(s)));
             (entry.active(input.at)
                 && entry.covers(input.finding_type)
+                && self.policy.admits(entry, input)
                 && host_match
                 && source_ok
                 && !self.disabled.contains(&entry.kind))
@@ -689,6 +734,80 @@ mod tests {
         assert!(
             ContextKind::Backup.explains_volume() && !ContextKind::PatchWindow.explains_volume()
         );
+    }
+
+    /// Krok 6 (kandidát 1): výpadek senzoru bez přísného režimu zavírá, v přísném
+    /// režimu nezavře nic a nedá ani podpůrný důkaz žebříku.
+    #[test]
+    fn strict_sensor_outage_neither_closes_nor_supports() {
+        let outage = ContextEntry {
+            hosts: Vec::new(),
+            ..entry(ContextKind::SensorOutage, "-", 0, 4)
+        };
+        let calendar = StaticCalendar::new(vec![outage]);
+        assert!(calendar.rejected.is_empty());
+        let host = vec!["10.0.0.5".to_string()];
+        let probe = input("packet_rate_spike", &host, &[], 1, Severity::Medium);
+        let mut loose = ContextGate::new(GatePolicy::default());
+        assert!(loose.explain(&calendar, &probe).is_some());
+        assert!(loose.supporting_context(&calendar, &probe).is_some());
+        let mut strict = ContextGate::new(GatePolicy {
+            sensor_strict: true,
+            ..GatePolicy::default()
+        });
+        assert!(strict.explain(&calendar, &probe).is_none());
+        assert!(strict.supporting_context(&calendar, &probe).is_none());
+    }
+
+    /// Krok 6 (kandidát 6): nález bez identifikovaného zdroje zavře jen objem v okně
+    /// zálohy; timeouty v patch okně bez zdroje ne.
+    #[test]
+    fn guard_requires_identified_source_except_backup_volume() {
+        let calendar = StaticCalendar::new(vec![
+            entry(ContextKind::PatchWindow, "10.0.0.5", 0, 10),
+            entry(ContextKind::Backup, "10.0.0.6", 0, 10),
+        ]);
+        let patch = vec!["10.0.0.5".to_string()];
+        let backup = vec!["10.0.0.6".to_string()];
+        let policy = GatePolicy {
+            require_identified_source: true,
+            ..GatePolicy::default()
+        };
+        let mut gate = ContextGate::new(policy.clone());
+        let timeout = input("connection_timeout_burst", &patch, &[], 1, Severity::Medium);
+        assert!(gate.explain(&calendar, &timeout).is_none());
+        assert!(gate.supporting_context(&calendar, &timeout).is_none());
+        let own = vec!["10.0.0.5".to_string()];
+        assert!(
+            gate.explain(
+                &calendar,
+                &input(
+                    "connection_timeout_burst",
+                    &patch,
+                    &own,
+                    1,
+                    Severity::Medium
+                )
+            )
+            .is_some()
+        );
+        assert!(
+            gate.explain(
+                &calendar,
+                &input(
+                    "inductive_volume_anomaly",
+                    &backup,
+                    &[],
+                    1,
+                    Severity::Medium
+                )
+            )
+            .is_some()
+        );
+        let mut loose = ContextGate::new(GatePolicy::default());
+        assert!(loose.explain(&calendar, &timeout).is_some());
+        let engine = crate::engine::EngineConfig::v3();
+        assert!(!GatePolicy::for_engine(&engine).require_identified_source);
     }
 
     #[test]

@@ -548,6 +548,8 @@ fn checks_for(input: &CaseInput, policy: &LadderPolicy) -> Vec<CheckId> {
             | "interactive_session"
             | "long_lived_tunnel"
             | "egress_volume_anomaly"
+            | "novel_persistent_peer"
+            | "novel_fanout"
     ) {
         checks.push(CheckId::Peers);
     }
@@ -567,6 +569,8 @@ fn checks_for(input: &CaseInput, policy: &LadderPolicy) -> Vec<CheckId> {
             | "long_lived_tunnel"
             | "egress_ids_alert"
             | "pivot_chain"
+            | "novel_persistent_peer"
+            | "novel_fanout"
     ) {
         checks.push(CheckId::Pivot);
     }

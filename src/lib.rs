@@ -38,6 +38,7 @@ pub mod model;
 pub mod narrative;
 pub mod nmap;
 pub mod ops;
+pub mod ops_evidence;
 pub mod passive;
 pub mod paths;
 pub mod pentest;

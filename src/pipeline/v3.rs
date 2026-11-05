@@ -366,7 +366,7 @@ impl V3Session {
         for reason in &calendar.rejected {
             tracing::warn!(%reason, "kontextovy zaznam odmitnut");
         }
-        let mut gate = ContextGate::new(GatePolicy::default());
+        let mut gate = ContextGate::new(GatePolicy::for_engine(&self.engine));
         let mut memory = FindingMemory::load(self.store.conn(), self.engine.memory_config())?;
         let services: std::collections::HashMap<&str, &crate::model::ServiceReport> = report
             .hosts

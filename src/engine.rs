@@ -83,6 +83,22 @@ pub struct V3Features {
     pub graph: bool,
     /// Profil hostu a známé neškodné vzory jako pozitivní důkaz žebříku (krok 3E).
     pub profile: bool,
+    /// Krok 6 (kandidát 1): výpadek senzoru nic nezavře a není neškodný důkaz žebříku
+    /// (Dodatek A.2 d, RQ6 Z3: chybějící data nejsou důkaz neškodnosti).
+    #[serde(default)]
+    pub sensor_strict: bool,
+    /// Krok 6 (kandidát 2): třída „provozní problém“ s pozitivním důkazem provozní
+    /// příčiny; nezavírá se, jen jde do fronty provoz místo podezření na útok.
+    #[serde(default)]
+    pub ops_class: bool,
+    /// Krok 6 (kandidáti 4 a 5): obecná novost vztahů hostu (nová trvalá vazba ven,
+    /// nové vnitřní vazby), nezávislá na rodině útoku.
+    #[serde(default)]
+    pub novelty: bool,
+    /// Krok 6 (kandidát 6): zdrojově citlivý kontext nezavře nález bez
+    /// identifikovaného zdroje (kromě objemu v okně zálohy a dávky).
+    #[serde(default)]
+    pub context_guard: bool,
 }
 
 impl Default for V3Features {
@@ -92,7 +108,7 @@ impl Default for V3Features {
 }
 
 impl V3Features {
-    pub const NAMES: [&'static str; 16] = [
+    pub const NAMES: [&'static str; 20] = [
         "memory",
         "rate",
         "volume",
@@ -109,6 +125,10 @@ impl V3Features {
         "interactive",
         "graph",
         "profile",
+        "sensor_strict",
+        "ops_class",
+        "novelty",
+        "context_guard",
     ];
 
     pub fn all() -> Self {
@@ -129,6 +149,10 @@ impl V3Features {
             interactive: true,
             graph: true,
             profile: true,
+            sensor_strict: true,
+            ops_class: true,
+            novelty: true,
+            context_guard: true,
         }
     }
 
@@ -137,10 +161,16 @@ impl V3Features {
     /// grafu nových hran (`pivot_chain`), který v A/B kroku 4 na ladicích seedech
     /// přidal +3,7 % zobrazených FP při zisku detekce jen u malých rodin
     /// (impl-krok4.md, A). Graf zůstává volitelný.
+    /// Změny kroku 6 jsou mimo preset, dokud je nevybere předregistrované A/B
+    /// (impl-krok6.md, B5).
     pub fn recommended() -> Self {
         Self {
             peers: false,
             graph: false,
+            sensor_strict: false,
+            ops_class: false,
+            novelty: false,
+            context_guard: false,
             ..Self::all()
         }
     }
@@ -163,6 +193,10 @@ impl V3Features {
             interactive: false,
             graph: false,
             profile: false,
+            sensor_strict: false,
+            ops_class: false,
+            novelty: false,
+            context_guard: false,
         }
     }
 
@@ -208,6 +242,10 @@ impl V3Features {
             "interactive" => &mut self.interactive,
             "graph" => &mut self.graph,
             "profile" => &mut self.profile,
+            "sensor_strict" => &mut self.sensor_strict,
+            "ops_class" => &mut self.ops_class,
+            "novelty" => &mut self.novelty,
+            "context_guard" => &mut self.context_guard,
             _ => return None,
         })
     }
@@ -326,6 +364,22 @@ impl EngineConfig {
     pub fn profile(&self) -> bool {
         self.on(|f| f.profile && f.ladder && f.memory)
     }
+    /// Krok 6: výpadek senzoru není vysvětlení (jen s kontextovou bránou).
+    pub fn sensor_strict(&self) -> bool {
+        self.on(|f| f.context && f.sensor_strict)
+    }
+    /// Krok 6: třída provozní problém (jen s pamětí nálezů, rozhoduje o zobrazení).
+    pub fn ops_class(&self) -> bool {
+        self.on(|f| f.ops_class && f.memory)
+    }
+    /// Krok 6: novost vztahů stojí na profilu hostu a viditelnosti ven.
+    pub fn novelty(&self) -> bool {
+        self.profile() && self.egress() && self.v3.novelty
+    }
+    /// Krok 6: kontext bez identifikovaného zdroje nezavírá.
+    pub fn context_guard(&self) -> bool {
+        self.on(|f| f.context && f.context_guard)
+    }
     /// Běží behaviorální vrstva kroku 3 (aspoň jedna její část)?
     pub fn behavior(&self) -> bool {
         self.egress() || self.graph() || self.profile()
@@ -380,7 +434,7 @@ mod tests {
         };
         assert_eq!(
             cfg.label(),
-            "v3[memory+unexpected+context+identity+recall+ladder+learning+devices+peers+egress+beacon+interactive+graph+profile]"
+            "v3[memory+unexpected+context+identity+recall+ladder+learning+devices+peers+egress+beacon+interactive+graph+profile+sensor_strict+ops_class+novelty+context_guard]"
         );
         let step2 = EngineConfig {
             mode: EngineMode::V3,
@@ -409,6 +463,26 @@ mod tests {
             "v3[memory+rate+volume+unexpected+context+identity]"
         );
         assert!(!step1.ladder() && !step1.recall());
+        // krok 6: nove zmeny mimo preset, zapinaji se jmenem
+        let k6 = EngineConfig {
+            mode: EngineMode::V3,
+            v3: V3Features::recommended()
+                .enable_list("sensor_strict,ops_class,novelty,context_guard")
+                .unwrap(),
+        };
+        assert!(k6.sensor_strict() && k6.ops_class() && k6.novelty() && k6.context_guard());
+        let preset = EngineConfig::v3();
+        assert!(!preset.sensor_strict() && !preset.ops_class() && !preset.novelty());
+        assert!(!preset.context_guard());
+        let no_profile = EngineConfig {
+            mode: EngineMode::V3,
+            v3: V3Features::recommended()
+                .enable_list("novelty")
+                .unwrap()
+                .disable_list("profile")
+                .unwrap(),
+        };
+        assert!(!no_profile.novelty(), "novost potrebuje profil hostu");
     }
 
     #[test]
