@@ -1492,7 +1492,7 @@ mod tests {
             },
         ] {
             for kind in ["novel_persistent_peer", "novel_fanout"] {
-                let mut ladder = Ladder::new(policy.clone(), 7);
+                let mut ladder = Ladder::new(policy, 7);
                 let mut env = Env {
                     profile: Some(verdict.clone()),
                     peers: Some((5, 6)),
