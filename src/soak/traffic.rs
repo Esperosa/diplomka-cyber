@@ -336,11 +336,16 @@ pub enum Lookalike {
     VpnReconnectStorm,
     /// Migrace do cloudu: novy blok vnejsich adres, velky prenos ven.
     CloudMigration,
+    /// Krok 6 (drzena lookalike): jeden klient zacne trvale pouzivat novou vnejsi
+    /// sluzbu (nova adresa, HTTPS, nepravidelne casy, bezne velikosti).
+    SaasAdoption,
 }
 
 impl Lookalike {
     /// Nove poruchy kroku 5 (svet pokryti).
-    pub const COVERAGE: [Lookalike; 9] = [
+    /// `SaasAdoption` je drzena lookalike kroku 6; v ladicim svete chybi jako ostatni
+    /// drzene, takze ladici svet se jejim pridanim nemeni.
+    pub const COVERAGE: [Lookalike; 10] = [
         Lookalike::DnsOutage,
         Lookalike::DhcpRenumber,
         Lookalike::LinkFlapping,
@@ -350,6 +355,7 @@ impl Lookalike {
         Lookalike::SegmentPowerLoss,
         Lookalike::VpnReconnectStorm,
         Lookalike::CloudMigration,
+        Lookalike::SaasAdoption,
     ];
 
     /// Drzena porucha (krok 5, predregistrace A2): v ladicim svete se nevyskytuje.
@@ -360,6 +366,7 @@ impl Lookalike {
                 | Lookalike::SegmentPowerLoss
                 | Lookalike::VpnReconnectStorm
                 | Lookalike::CloudMigration
+                | Lookalike::SaasAdoption
         )
     }
 
@@ -387,6 +394,7 @@ impl Lookalike {
                 | Lookalike::FlashCrowd
                 | Lookalike::SoftwareUpdate
                 | Lookalike::NtpFanout
+                | Lookalike::SaasAdoption
         )
     }
 
@@ -415,6 +423,7 @@ impl Lookalike {
             Lookalike::SegmentPowerLoss => "segment_power_loss",
             Lookalike::VpnReconnectStorm => "vpn_reconnect_storm",
             Lookalike::CloudMigration => "cloud_migration",
+            Lookalike::SaasAdoption => "saas_adoption",
         }
     }
 }
@@ -3106,6 +3115,33 @@ fn emit_truth(
                         "SF"
                     );
                 }
+            }
+        }
+        Kind::Benign(Lookalike::SaasAdoption) => {
+            // jeden klient, nova vnejsi sluzba, nepravidelne (ne v kazdem cyklu)
+            let (Some(&client), Some(service)) =
+                (truth.victim_devices.first(), truth.target_external.as_ref())
+            else {
+                return;
+            };
+            if !model.devices[client as usize].up || !rng.chance(0.7) {
+                return;
+            }
+            let src = ips[client as usize].clone();
+            for _ in 0..rng.range(1, 4) {
+                let ob = rng.lognormal(3000.0, 1.0) as u64;
+                let rb = rng.lognormal(40000.0, 1.2) as u64;
+                flow!(
+                    at(rng),
+                    &src,
+                    service,
+                    "tcp",
+                    443,
+                    rng.range_f(0.2, 120.0),
+                    ob,
+                    rb,
+                    "SF"
+                );
             }
         }
     }

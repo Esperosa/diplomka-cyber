@@ -249,10 +249,15 @@ struct Ledger {
     /// prvni vyskyt dvojice typ a entita v siti).
     auto_closed: bool,
     auto_closed_first: bool,
+    /// Krok 6: pripsany nalez se zobrazil ve fronte provoz (ne jako podezreni).
+    ops_shown: bool,
 }
 
 /// Zobrazeni nalezu v cyklu (legacy: vse, v3: podle pameti a kontextu).
 struct Shown {
+    /// Krok 6: zobrazeny nalez je ve fronte provoz (trida provozni problem), ne
+    /// podezreni na utok. Bez `ops_class` vzdy `false`.
+    ops: bool,
     displayed: bool,
     reason: &'static str,
     auto: Option<ContextKind>,
@@ -642,11 +647,15 @@ fn run_episode_inner(
             loo_displayed: None,
             auto_closed: false,
             auto_closed_first: false,
+            ops_shown: false,
         })
         .collect();
     // krok 5: zobrazene FP neskodnych udalosti a prvni vyskyty (typ, entita)
     let coverage_on = cfg.world.coverage.on();
     let mut lookalike_displayed: HashSet<usize> = HashSet::new();
+    // krok 6: FP neskodnych udalosti ve fronte podezreni a jejich typy
+    let mut lookalike_suspect: HashSet<usize> = HashSet::new();
+    let mut lookalike_types: HashMap<usize, BTreeSet<String>> = HashMap::new();
     let mut seen_finding_keys: HashSet<(String, String)> = HashSet::new();
     for (ledger, truth) in ledgers.iter_mut().zip(&truths) {
         if loo_of.contains_key(&truth.id) {
@@ -1216,6 +1225,7 @@ fn run_episode_inner(
                     targets: Vec::new(),
                     sources: Vec::new(),
                     ladder_refuted: false,
+                    ops: false,
                 })
                 .collect(),
             Some(runtime) => {
@@ -1303,6 +1313,7 @@ fn run_episode_inner(
                             targets: Vec::new(),
                             sources: Vec::new(),
                             ladder_refuted: false,
+                            ops: false,
                         },
                         Disposition::Reopened => Shown {
                             displayed: true,
@@ -1311,6 +1322,7 @@ fn run_episode_inner(
                             targets: Vec::new(),
                             sources: Vec::new(),
                             ladder_refuted: false,
+                            ops: false,
                         },
                         Disposition::Escalated(cause) => Shown {
                             displayed: true,
@@ -1323,6 +1335,7 @@ fn run_episode_inner(
                             targets: Vec::new(),
                             sources: Vec::new(),
                             ladder_refuted: false,
+                            ops: false,
                         },
                         Disposition::Suppressed => Shown {
                             displayed: false,
@@ -1331,6 +1344,7 @@ fn run_episode_inner(
                             targets: Vec::new(),
                             sources: Vec::new(),
                             ladder_refuted: false,
+                            ops: false,
                         },
                         Disposition::AutoResolved(_) => Shown {
                             displayed: false,
@@ -1339,6 +1353,7 @@ fn run_episode_inner(
                             targets: Vec::new(),
                             sources: Vec::new(),
                             ladder_refuted: false,
+                            ops: false,
                         },
                     };
                     if auto_closed && let Some((_, _, targets)) = behavior_item {
@@ -1516,6 +1531,7 @@ fn run_episode_inner(
                                             targets: Vec::new(),
                                             sources: Vec::new(),
                                             ladder_refuted: false,
+                                            ops: false,
                                         },
                                     ));
                                 }
@@ -1560,6 +1576,47 @@ fn run_episode_inner(
             lc.sources.push(Vec::new());
             run_report.findings.push(finding);
             shown.push(show);
+        }
+        // krok 6 (kandidat 2): trida provozni problem; zobrazeny nalez s pozitivnim
+        // dukazem provozni priciny jde do fronty provoz (nezavira se)
+        if let Some(runtime) = v3.as_mut().filter(|_| cfg.engine.ops_class()) {
+            let started = Instant::now();
+            let now = t0;
+            let window = runtime
+                .clientele
+                .evidence(&in_scope_obs, now, &runtime.ops_policy);
+            let mut frozen: HashSet<String> = HashSet::new();
+            for (index, finding) in run_report.findings.iter().enumerate() {
+                let sources = lc.sources.get(index).map(Vec::as_slice).unwrap_or(&[]);
+                if !is_static_exposure(&finding.finding_type) {
+                    frozen.extend(sources.iter().cloned());
+                }
+                let Some(show) = shown.get_mut(index) else {
+                    continue;
+                };
+                if !show.displayed {
+                    continue;
+                }
+                let service_key = finding.service_key.as_deref();
+                let (_, key_ip) = split_service_key(service_key.unwrap_or("-"));
+                let host_ip = finding.host_key.as_deref().unwrap_or(key_ip);
+                if crate::ops_evidence::classify(
+                    &window,
+                    &finding.finding_type,
+                    service_key,
+                    host_ip,
+                    sources,
+                )
+                .is_some()
+                {
+                    show.ops = true;
+                    agg.output.ops_class_displayed += 1;
+                }
+            }
+            runtime
+                .clientele
+                .learn(&in_scope_obs, &frozen, now, &runtime.ops_policy);
+            agg.perf_record("ops_class", started.elapsed().as_secs_f64());
         }
         agg.perf_record("memory_context", memory_started.elapsed().as_secs_f64());
 
@@ -1710,6 +1767,8 @@ fn run_episode_inner(
         let findings_started = Instant::now();
         for (finding_index, finding) in run_report.findings.iter().enumerate() {
             let show = &shown[finding_index];
+            // krok 6: detekce a FP poruch jen z fronty podezreni (bez ops_class totez)
+            let suspect = show.displayed && !show.ops;
             let is_behavioral = !is_static_exposure(&finding.finding_type);
             let mut attributed = false;
             let mut attacked = false;
@@ -1735,7 +1794,7 @@ fn run_episode_inner(
                 if candidate {
                     let slot = world.cycles.entry(cycle).or_default();
                     let entry = slot.entry(fhash).or_insert(false);
-                    *entry |= show.displayed;
+                    *entry |= suspect;
                 }
             }
             if is_behavioral {
@@ -1768,7 +1827,8 @@ fn run_episode_inner(
                                 .expected_types()
                                 .contains(&finding.finding_type.as_str());
                             ledger.typed |= typed;
-                            if show.displayed {
+                            ledger.ops_shown |= show.displayed && show.ops;
+                            if suspect {
                                 ledger.displayed_detect.get_or_insert(cycle);
                                 ledger.typed_displayed |= typed;
                             }
@@ -1790,19 +1850,19 @@ fn run_episode_inner(
                                 ledger.cf_detect |= new;
                                 ledger.cf_detect_strict |= new_strict;
                                 ledger.cf_typed |= new && typed;
-                                if show.displayed && !shown_cf {
+                                if suspect && !shown_cf {
                                     ledger.cf_displayed = true;
                                     ledger.cf_typed_displayed |= typed;
                                     ledger.cf_types.insert(finding.finding_type.clone());
                                 }
-                                if show.displayed && new_strict {
+                                if suspect && new_strict {
                                     ledger.cf_displayed_strict = true;
                                 }
                                 if let Some(&slot) = loo_of.get(&truth.id) {
                                     let loo_world = &cf.loo[slot].1;
                                     let loo_shown =
                                         loo_world.displayed(cycle, fhash).unwrap_or(false);
-                                    let hit = show.displayed && !loo_shown;
+                                    let hit = suspect && !loo_shown;
                                     let entry = ledger.loo_displayed.get_or_insert(false);
                                     *entry |= hit;
                                 }
@@ -1812,6 +1872,13 @@ fn run_episode_inner(
                             *attributed_to_lookalike.entry(index).or_default() += 1;
                             if coverage_on && show.displayed {
                                 lookalike_displayed.insert(index);
+                            }
+                            if coverage_on && suspect {
+                                lookalike_suspect.insert(index);
+                                lookalike_types
+                                    .entry(index)
+                                    .or_default()
+                                    .insert(finding.finding_type.clone());
                             }
                         }
                     }
@@ -1828,6 +1895,13 @@ fn run_episode_inner(
                                 *attributed_to_lookalike.entry(index).or_default() += 1;
                                 if coverage_on && show.displayed {
                                     lookalike_displayed.insert(index);
+                                }
+                                if coverage_on && suspect {
+                                    lookalike_suspect.insert(index);
+                                    lookalike_types
+                                        .entry(index)
+                                        .or_default()
+                                        .insert(finding.finding_type.clone());
                                 }
                                 break;
                             }
@@ -1853,6 +1927,7 @@ fn run_episode_inner(
                     *agg.fp_noise_by_type
                         .entry(finding.finding_type.clone())
                         .or_default() += 1;
+                    agg.output.displayed_fp_suspect += suspect as u64;
                     if show.displayed {
                         agg.output.displayed_fp += 1;
                         *agg.displayed_fp_by_type
@@ -2714,6 +2789,7 @@ fn run_episode_inner(
                         cf_types: ledger.cf_types.iter().cloned().collect(),
                         auto_closed: ledger.auto_closed,
                         auto_closed_first: ledger.auto_closed_first,
+                        ops_shown: ledger.ops_shown,
                     });
                 }
                 Kind::Benign(look) => records.faults.push(FaultRecord {
@@ -2725,6 +2801,11 @@ fn run_episode_inner(
                     cycles: cycles_len,
                     fp_captured: lookalike_with_fp.contains(&index),
                     fp_displayed: lookalike_displayed.contains(&index),
+                    fp_suspect: lookalike_suspect.contains(&index),
+                    fp_types: lookalike_types
+                        .get(&index)
+                        .map(|types| types.iter().cloned().collect())
+                        .unwrap_or_default(),
                 }),
             }
         }

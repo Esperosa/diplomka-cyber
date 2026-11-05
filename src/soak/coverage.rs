@@ -611,6 +611,7 @@ fn build_fault(
         Lookalike::SegmentPowerLoss => rng.range(2, 4),
         Lookalike::VpnReconnectStorm => rng.range(1, 3),
         Lookalike::CloudMigration => rng.range(24, 200),
+        Lookalike::SaasAdoption => rng.range(24, 200),
         _ => 1,
     } as u32;
     let end = (start + len - 1).min(cycles - 1);
@@ -728,6 +729,13 @@ fn build_fault(
             }
             truth.victim_devices = victims;
         }
+        Lookalike::SaasAdoption => {
+            if pools.clients.is_empty() {
+                return;
+            }
+            truth.victim_devices = vec![*rng.pick(&pools.clients)];
+            truth.target_external = Some(public_ip(rng));
+        }
         _ => return,
     }
     truths.push(truth);
@@ -758,6 +766,9 @@ pub struct AttackRecord {
     pub auto_closed: bool,
     /// ... a slo o prvni vyskyt (typ, entita) v siti (pravidlo A7).
     pub auto_closed_first: bool,
+    /// Krok 6: nektery pripsany nalez se zobrazil ve fronte provoz.
+    #[serde(default)]
+    pub ops_shown: bool,
 }
 
 /// Zaznam o jedne neskodne udalosti ve svete pokryti.
@@ -771,6 +782,12 @@ pub struct FaultRecord {
     pub cycles: u32,
     pub fp_captured: bool,
     pub fp_displayed: bool,
+    /// Krok 6: zobrazeny FP ve fronte podezreni (bez `ops_class` = `fp_displayed`).
+    #[serde(default)]
+    pub fp_suspect: bool,
+    /// Krok 6: typy nalezu zobrazenych ve fronte podezreni (diagnostika).
+    #[serde(default)]
+    pub fp_types: Vec<String>,
 }
 
 /// Prekryvaji se okna dvou pravd (vcetne latence atribuce).

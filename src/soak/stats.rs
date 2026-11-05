@@ -139,6 +139,10 @@ pub struct OutputStats {
     pub displayed_behavioral: u64,
     /// Zobrazene behavioralni polozky bez pripsatelne priciny (falesny poplach).
     pub displayed_fp: u64,
+    /// Krok 6: z toho ve fronte podezreni (bez tridy provozni problem).
+    pub displayed_fp_suspect: u64,
+    /// Krok 6: zobrazene polozky zarazene do fronty provoz (`ops_class`).
+    pub ops_class_displayed: u64,
     pub displayed_by_reason: BTreeMap<String, u64>,
     pub states_captured: u64,
     pub states_behavioral: u64,
@@ -225,6 +229,8 @@ impl OutputStats {
         self.displayed += o.displayed;
         self.displayed_behavioral += o.displayed_behavioral;
         self.displayed_fp += o.displayed_fp;
+        self.displayed_fp_suspect += o.displayed_fp_suspect;
+        self.ops_class_displayed += o.ops_class_displayed;
         self.egress_seen += o.egress_seen;
         self.egress_dropped += o.egress_dropped;
         self.egress_sample_level_max = self.egress_sample_level_max.max(o.egress_sample_level_max);

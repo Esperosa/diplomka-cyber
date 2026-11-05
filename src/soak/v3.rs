@@ -56,6 +56,9 @@ pub struct V3Runtime {
     pub profile_policy: crate::behavior::profile::ProfilePolicy,
     /// Meze objemu odchozich toku okna (vzorkovani po dvojici, krok 3A).
     pub egress_policy: crate::passive::egress::EgressPolicy,
+    /// Krok 6: klientela sluzeb pro tridu provozni problem.
+    pub clientele: crate::ops_evidence::Clientele,
+    pub ops_policy: crate::ops_evidence::OpsPolicy,
 }
 
 impl V3Runtime {
@@ -70,7 +73,7 @@ impl V3Runtime {
             detector: DetectorState::default(),
             thresholds: V3Thresholds::default(),
             inventory: PersistentInventory::default(),
-            gate: ContextGate::new(GatePolicy::default()),
+            gate: ContextGate::new(GatePolicy::for_engine(&engine)),
             identity: IdentityResolverV3::new(),
             sources: SourceMap::new(),
             peer_groups: Default::default(),
@@ -89,6 +92,8 @@ impl V3Runtime {
             behavior_thresholds: Default::default(),
             profile_policy: Default::default(),
             egress_policy: Default::default(),
+            clientele: Default::default(),
+            ops_policy: Default::default(),
         })
     }
 
@@ -102,6 +107,9 @@ impl V3Runtime {
         self.store.save("identity", &self.identity)?;
         self.store.save("ladder", &self.ladder)?;
         self.store.save("behavior", &self.behavior)?;
+        if self.engine.ops_class() {
+            self.store.save("clientele", &self.clientele)?;
+        }
         let calibrator = self.ladder.calibrator.take();
         self.history.flush(self.store.conn_mut())?;
         if self.memory.is_some() {
@@ -124,6 +132,9 @@ impl V3Runtime {
         self.ladder.calibrator = calibrator;
         self.history = crate::flow_history::FlowHistory::load(self.store.conn())?;
         self.behavior = self.store.load("behavior")?.unwrap_or_default();
+        if self.engine.ops_class() {
+            self.clientele = self.store.load("clientele")?.unwrap_or_default();
+        }
         self.sources.clear();
         Ok(())
     }

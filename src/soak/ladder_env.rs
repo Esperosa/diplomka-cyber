@@ -304,6 +304,8 @@ pub fn is_suspicious_type(kind: &str) -> bool {
             | "pivot_chain"
             | "egress_ids_alert"
             | "egress_volume_anomaly"
+            | "novel_persistent_peer"
+            | "novel_fanout"
     )
 }
 
