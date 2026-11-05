@@ -312,4 +312,4 @@ Kolo 3 uzavřelo S2, S3 a S5. S1 zůstal otevřený jen v soakové cestě. `src/
 
 **Kontroly.** Výchozí i ladicí svět (`legacy`, seed 20261611, 4 sítě) jsou bajtově shodné s `8828834`. `soak verify` na `k6set-20261612` a na změněném `k6set2-20261611` dal 2 ze 2 shodných bloků. `cargo test --lib` bez `broker::` (Redis): 498 prošlo, 0 selhalo. Golden snapshot, engine_v3, case_memory_learning, incremental_ingest a verification_execution jsou zelené. `cargo clippy --all-targets` dává 89 / 97 / 3 / 1 (stejně jako `1c307ce`), `cargo fmt --check` je čisté. Formát stavu se nemění (`Shown` je jen v paměti během cyklu).
 
-Commity kola 3: `1ee60db` (S1, soak) a commit této sekce. Diff kola 3 v kódu: `1c307ce..1ee60db`, `src/soak/episode.rs`.
+Commity kola 3: `1ee60db` (S1, soak) a commit této sekce. Diff kola 3 v kódu: `6c18f2a..1ee60db` (jen `src/soak/episode.rs`, +123 a −64 řádků, většinou přesun konstrukce `Shown` do `shown_for`).
