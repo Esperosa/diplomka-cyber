@@ -739,6 +739,8 @@ fn run_episode_inner(
 
     // rucni profil (krok 4): BAKULA_SOAK_CYCLE_TRACE=1 vypise cas fazi kazdeho cyklu
     let trace_cycles = std::env::var_os("BAKULA_SOAK_CYCLE_TRACE").is_some();
+    // rucni diagnostika pameti: velikosti slozek stavu v3 kazdych 48 cyklu
+    let state_trace = std::env::var_os("BAKULA_SOAK_STATE_TRACE").is_some();
     let mut trace_sums: BTreeMap<String, f64> = BTreeMap::new();
     let mut trace_lines: Vec<String> = Vec::new();
     for cycle in 0..cycles {
@@ -2630,6 +2632,21 @@ fn run_episode_inner(
                 line.push_str(&format!(" {stage}={:.0}", (hist.sum - before) * 1000.0));
             }
             trace_lines.push(line);
+        }
+        if state_trace
+            && (cycle + 1) % 48 == 0
+            && let Some(runtime) = v3.as_ref()
+        {
+            let sizes = runtime.state_sizes();
+            let mut line = format!(
+                "STATE net={} cycle={cycle} heap_live={}",
+                cfg.network_id,
+                crate::soak::alloc::heap_live()
+            );
+            for (name, bytes) in sizes {
+                line.push_str(&format!(" {name}={bytes}"));
+            }
+            eprintln!("{line}");
         }
     }
     for line in &trace_lines {

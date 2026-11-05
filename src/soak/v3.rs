@@ -99,6 +99,55 @@ impl V3Runtime {
         })
     }
 
+    /// Ruční diagnostika paměti (`BAKULA_SOAK_STATE_TRACE=1`): velikost složek stavu
+    /// v bajtech serializovaného JSON (přibližná míra, ne přesná halda). Výsledky
+    /// soaku nemění, jen vypisuje na stderr.
+    pub fn state_sizes(&self) -> Vec<(&'static str, usize)> {
+        fn json<T: serde::Serialize>(value: &T) -> usize {
+            serde_json::to_vec(value).map(|v| v.len()).unwrap_or(0)
+        }
+        let b = &self.behavior;
+        let pages: i64 = self
+            .store
+            .conn()
+            .query_row(
+                "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let (entries, audit, deleted) = self
+            .memory
+            .as_ref()
+            .map(FindingMemory::pending_counts)
+            .unwrap_or_default();
+        vec![
+            ("sqlite_store", pages.max(0) as usize),
+            ("memory.entries_n", entries),
+            ("memory.audit_n", audit),
+            ("memory.deleted_n", deleted),
+            ("detector", json(&self.detector)),
+            ("inventory", json(&self.inventory)),
+            ("identity", json(&self.identity)),
+            ("ladder", json(&self.ladder)),
+            (
+                "case_findings",
+                json(&self.case_findings.values().collect::<Vec<_>>()),
+            ),
+            ("device_classes", json(&self.device_classes)),
+            ("peer_groups", json(&self.peer_groups)),
+            ("beh.egress", json(&b.egress)),
+            ("beh.prevalence", json(&b.prevalence)),
+            ("beh.beacon", json(&b.beacon)),
+            ("beh.interactive", json(&b.interactive)),
+            ("beh.graph", json(&b.graph)),
+            ("beh.profile", json(&b.profile)),
+            ("beh.novelty", json(&b.novelty)),
+            ("clientele", json(&self.clientele)),
+            ("ops_marks", json(&self.ops_marks)),
+        ]
+    }
+
     /// Restart procesu: zapsat stav, zahodit paměť procesu, načíst ze SQLite.
     pub fn restart(&mut self) -> Result<()> {
         if let Some(memory) = self.memory.as_mut() {

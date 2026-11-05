@@ -409,6 +409,11 @@ impl FindingMemory {
         self.entries.is_empty()
     }
 
+    /// Diagnostika paměti: (záznamy, nezapsané řádky auditu, nezapsaná smazání).
+    pub fn pending_counts(&self) -> (usize, usize, usize) {
+        (self.entries.len(), self.audit.len(), self.deleted.len())
+    }
+
     pub fn get(&self, key: &FindingKey) -> Option<&Entry> {
         self.entries.get(key)
     }
