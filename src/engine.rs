@@ -201,7 +201,21 @@ impl V3Features {
     /// A/B, přísný výpadek senzoru a novost vztahů (bez `novel_fanout`). Na držených
     /// seedech zavřeno omylem 6,7 → 2,5 %, detekce +0,5 p. b., FP × 1,06. Třída provoz,
     /// kontext jen se zdrojem a graf zůstávají volitelné (neprošly B5).
+    /// Preset po kroku 7 (impl-krok7.md, sekce D3 a E): preset kroku 6 + chráněné
+    /// nálezy (`protect`), graf s incidentem (`graph`, `graph_incident`) a `novel_fanout`
+    /// s druhým signálem (`fanout2`).
     pub fn recommended() -> Self {
+        Self {
+            graph: true,
+            protect: true,
+            graph_incident: true,
+            fanout2: true,
+            ..Self::step6()
+        }
+    }
+
+    /// Preset po kroku 6 (bez změn kroku 7), pro párové srovnání.
+    pub fn step6() -> Self {
         Self {
             peers: false,
             graph: false,
@@ -218,12 +232,12 @@ impl V3Features {
         }
     }
 
-    /// Preset po kroku 5 (bez změn kroku 6), pro párové srovnání.
+    /// Preset po kroku 5 (bez změn kroku 6 a 7), pro párové srovnání.
     pub fn step5() -> Self {
         Self {
             sensor_strict: false,
             novelty: false,
-            ..Self::recommended()
+            ..Self::step6()
         }
     }
 
@@ -522,9 +536,9 @@ mod tests {
         let features = V3Features::all().disable_list("rate, volume").unwrap();
         assert!(!features.rate && !features.volume && features.memory);
         assert!(V3Features::all().disable_list("nic").is_err());
-        // krok 5: zapnuti mimo preset (graf neni v doporucenem presetu)
-        let with_graph = V3Features::recommended().enable_list("graph").unwrap();
-        assert!(with_graph.graph && !V3Features::recommended().graph);
+        // krok 5: zapnuti mimo preset (graf neni v presetu kroku 6)
+        let with_graph = V3Features::step6().enable_list("graph").unwrap();
+        assert!(with_graph.graph && !V3Features::step6().graph);
         assert!(V3Features::recommended().enable_list("nic").is_err());
         let cfg = EngineConfig {
             mode: EngineMode::V3,
@@ -543,9 +557,14 @@ mod tests {
             "v3[memory+rate+volume+unexpected+context+identity+recall+ladder+learning+devices]"
         );
         assert!(!step2.behavior() && !step2.egress());
-        // krok 4 A: graf nových hran není ve výchozím presetu
+        // krok 4 A: graf nových hran není v presetu kroku 6; krok 7 ho přidává
+        let step6 = V3Features::step6();
+        assert!(!step6.graph && !step6.peers && step6.beacon);
         let recommended = V3Features::recommended();
-        assert!(!recommended.graph && !recommended.peers && recommended.beacon);
+        assert!(recommended.graph && recommended.graph_incident && !recommended.peers);
+        assert!(recommended.protect && recommended.fanout2);
+        assert!(!recommended.ops_annotate && !recommended.novel_burst);
+        assert!(!recommended.cross_source && !recommended.saas_group);
         let no_egress = EngineConfig {
             mode: EngineMode::V3,
             v3: V3Features::all().disable_list("egress").unwrap(),

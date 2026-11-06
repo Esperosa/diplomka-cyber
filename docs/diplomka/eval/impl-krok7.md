@@ -271,9 +271,120 @@ Všechna ramena kromě `v3k6` mají `protect`. Chráněná automatická zavřen�
 
 Plný výstup je v `k7/check.md`. `v3k7` proti `v3k6`: detekce 78,8 → 81,0 %, párově +2,1 p. b. (+1,5 až +2,8). Zobrazené FP 14,7 → 16,3 na síť-den, poměr 1,106 (1,063 až 1,187). Zavřeno omylem 29 / 2 083 → 12 / 962 (1,4 → 1,2 %). Útoků s omylem zavřeným nálezem je 16 místo 27. Kritéria B4 (detekce ≥ 0, FP ≤ 1,15, omyly počtem ≤ `v3k6`) jsou splněná, sestava jde do drženého běhu beze změny. Varování před drženým během: všech zobrazených položek je o 25,8 % víc (1,175 až 1,327), protože chráněné nálezy se zobrazují hned a graf přidává incidenty. Předregistrovaný práh L1 (≤ 1,15) proto pravděpodobně nesplní. Sestava se kvůli tomu neupravuje, B4 o zátěži analytika nerozhoduje.
 
+### D3. Držený běh (seedy 20261901 a 20262001, svět `k7`, jednou)
+
+Binárka `997d81f`, 2026-11-05 23:34 až 2026-11-06 02:44. Ve frontě 20 úloh po 2 ramenech, každé se 3 vlákny, priorita Idle, zatížení stroje 37 až 51 %, oba 72h běhy běžely dál. Každé rameno má 2 × 40 sítí a 2 934 útoků. Plné výstupy: `k7/held.md` (párově proti `v3k6` a LOFO), `k7/held-vs-legacy.md`, `k7/ics.md`.
+
+| rameno | detekce mikro | makro | FP/síť-den | zobrazeno/síť-den | zavřeno omylem (G3) | útoky s omylem zavřeným nálezem | latence medián / p90 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `legacy` | 62,6 % (59,5 až 65,5) | 65,5 % | 919,0 | 8 993 | – | – | – |
+| `v3k6` | 77,9 % (74,7 až 81,2) | 80,3 % | 28,4 | 153,8 | 30 / 2 153 = 1,4 % (1,0 až 2,0) | 31 | 0 / 8 |
+| `v3k7` | **80,3 % (77,2 až 83,2)** | **82,9 %** | 29,9 | 183,7 | 17 / 1 232 = 1,4 % (0,9 až 2,2) | 27 | 0 / 6 |
+
+Párově `v3k7` − `v3k6`: detekce +2,4 p. b. (+1,7 až +3,1), FP poměr 1,051 (1,021 až 1,134), zobrazené položky 1,195 (1,145 až 1,249). Párově `v3k7` − `legacy`: detekce +17,7 p. b. (+15,5 až +20,2), FP poměr 0,033, zobrazené 0,020. `v3k6` − `legacy`: +15,3 p. b. (+13,1 až +17,9). Největší zisk `v3k7` proti `v3k6` má lateral_movement (72,7 → 86,8 %), dál fleet_beacon (+6,5), c2_beacon (+3,5), dns_tunnel (+3,4) a cryptomining (+2,5). Nejhorší rodina s n ≥ 100 je exfiltration (−0,5 p. b.).
+
+**Prahy B6:**
+
+| práh | hodnota | výsledek |
+|---|---|---|
+| K6 | G3 1,4 %, horní mez 2,2 % | **splněno** (≤ 5 %, i cíl ≤ 2 % bodově) |
+| K6n | 27 útoků proti 31 | **splněno** |
+| S0 | chráněná automatická zavření 0 (27 947 chráněných zobrazení), ops-only útoky 0 | **splněno** |
+| S1 | ztráta viditelnosti `ladder` + `context`: 14 proti 16 (15 + 1) | **splněno** |
+| D1 | nejhorší rodina n ≥ 100: exfiltration −0,5 p. b. | **splněno** |
+| D2 | +2,4 p. b. | **splněno** |
+| D3 | +17,7 p. b. mikro, +17,4 p. b. makro | **splněno** |
+| F1 | 1,051 | **splněno** |
+| L1 | 1,195 (1,145 až 1,249) | **nesplněno** (> 1,15) |
+| L2 | medián 0 proti 0 cyklů | **splněno** |
+| K3 | držené varianty proti ladicím ve stejném běhu (`v3k7`): `cert_expired` 8443 100 % (52/52) proti 93,5 % (29/31), tedy +6,5 p. b.; poruchy kroku 5 s intenzitou < 0,4 77,4 % (260/336) proti 75,0 % (408/544), +2,4 p. b.; `saas_group` 85,7 % (48/56) proti 78,7 % (37/47), +7,0 p. b. | **splněno** (vše ≤ +10 p. b.) |
+| K3p | `v3k7` − `v3k6` ve frontě podezření: `saas_group` +10,7 p. b. (75,0 → 85,7 %), `saas_adoption` s 1 klientem +4,2, poruchy s nízkou intenzitou +2,7, ostatní poruchy kroku 5 +1,7, `cert_expired` 0. Záměna provoz a útok (B1) se nehodnotí, anotace není v sestavě. | hlásí se |
+| K5 | LOFO skutečnou ablací, první útok rodiny bez IDS: ssh_bruteforce 88,9 % (74,7 až 95,6; n = 36), lateral_movement 69,2 % (53,6 až 81,4; n = 39), dns_tunnel 61,5 % (45,9 až 75,1; n = 39), **c2_beacon 30,8 % (19,9 až 44,3; n = 52)**. Definiční: exfiltration 12,8 % (n = 47), port_scan_vertical 5,9 % (n = 51). | **splněno** (3 ze 4), c2_beacon nezobecňuje |
+| ICS | seed 20262101, 40 sítí Industrial: ics_attack n = 78 (seed 20262102 nebyl potřeba), `v3k7` 69,2 % (58,3 až 78,4), `v3k6` 65,4 % (54,3 až 75,0) | n splněno; kategorie (b) |
+| C | 598 buněk: bez korekce (a) 261, (b) 76, (c) 261; s Holmovou korekcí (a) 141, (b) 196, (c) 261. Každá buňka má kategorii. | **splněno** |
+| K8 | paniky 0, porušené invarianty 0 ve všech 20 úlohách | **splněno** |
+| R | viz D5 | viz D5 |
+| G4 | neměřeno, oba 72h běhy pořád běží | nevyhodnoceno |
+
+**Výchozí režim zůstává `legacy`.** G4 nelze změřit, dokud běží 72h běhy (B6). `V3Features::recommended()` se mění na sestavu kroku 7, protože ta splnila všechny prahy kromě L1 (viz E). L1 je jediný nesplněný práh: zobrazených položek je o 19,5 % víc než u `v3k6`, ale pořád 50× méně než u `legacy`. Zvýšení jde ze zásady A1 (chráněný nález se zobrazí hned, nečeká na ověření, a nezavře se) a z incidentů grafu. Práce proto nesmí tvrdit, že krok 7 zátěž analytika drží.
+
+**A2 na drženém světě.** Po prvním zobrazení je útok viditelný 97,0 % cyklů (`v3k6` 94,4 %). Ztrátu viditelnosti mělo 53 útoků (`ladder` 14, `quiet` 39), u `v3k6` 79 (`ladder` 15, `context` 1, `quiet` 63). Habituace: 160 útoků (`v3k6` 168).
+
+### D4. C5: přehrání veřejných dat celou produkční cestou
+
+**Licence a dostupnost.** UGR'16 (`nesg.ugr.es`): obě oficiální stránky vracejí HTTP 403 a ve výsledcích vyhledávání podmínky použití nejsou, licenci jsem tedy neověřil. Dataset se proto nepoužije. IoT-23 (Stratosphere Lab): licence je podle registru datasetů CC BY-NC-SA 4.0 (ověřeno 31. 10. 2026). Současná stránka datasetu text licence neuvádí, jen žádá citaci. Nejdelší záznamy jsou rotované po 24 h a v repozitáři jsou jen labelované výřezy do 24 MB.
+
+**Běh** (`tools/replay_public.py`, protect zapnutý, debug binárka `f28029a`, okna 30 min, prázdný nmap, bez IDS, bez aktivních kontrol):
+
+| záznam | toků | oken | škodliví hosté | zobrazeno (na škodlivém hostu / jinde) | auto zavřeno | žebřík (potvrzeno/vyvráceno/eskalováno) | degradace pokrytí |
+|---|---:|---:|---:|---|---:|---|---|
+| CTU-IoT-Malware-Capture-44-1 (ověření) | 237 | 4 | 1 | 2 (2 / 0) | 0 | 0/0/1 | `no_ids`, `immature_profiles` ve všech oknech |
+| CTU-IoT-Malware-Capture-34-1 | 23 145 | 48 | 1 | 4 (2 / 2) | 0 | 0/0/4 | totéž |
+| CTU-IoT-Malware-Capture-3-1 | 156 103 | 73 | 2 | 3 (3 / 0) | 0 | 0/0/3 | totéž |
+
+Všechna okna spadají do studeného startu (< 48 h). Zralé období v žádném dostupném záznamu nevzniká, takže C5 dokládá jen to, že celá produkční cesta na reálných tocích běží, nic automaticky nezavře, nevyvrátí nic bez aktivní kontroly a degradaci pokrytí ohlásí. O detekci po zrání profilu nic neříká. Plný dlouhý běh (B8) chybí, protože chybí dlouhý záznam s ověřenou licencí. Zůstává otevřený (registr, bod 15).
+
+### D5. Determinismus a zpětná kompatibilita (R)
+
+- `soak verify --samples 6` nad drženým výstupem `v3k7-20261901`: 6 ze 6 bloků bit po bitu shodných.
+- Golden snapshot (legacy) je zelený (`cargo test --test golden_snapshot`).
+- Svět `full` bez nových přepínačů: kód kroku 7 (`749047d`) dává na 40 sítích seedu 20261701 bajtově stejný `networks.jsonl` jako výstup kroku 6 (`8828834`). Na seedu 20261801 se liší 2 sítě ze 40 (8 a 25), a to jen ve výsledcích žebříku. Abych zjistil příčinu, sestavil jsem stav těsně před krokem 7 (`24be082`) a pustil 26 sítí seedu 20261801: proti kroku 7 se neliší žádná síť, proti `8828834` tytéž 2 sítě. Rozdíl tedy způsobily opravy z review kol 2 a 3 kroku 6 (`fceb31e`, reset uložených případů novosti v žebříku) až po drženém běhu kroku 6, ne krok 7. Zpětná kompatibilita kroku 7 je doložená. Výstupy kroku 6 nejsou bajtově reprodukovatelné aktuálním kódem kroku 6: změna leží jen v počtu rozhodnutí žebříku na 2 sítích ze 80 a čísla kroku 6 nemění.
+- Dotčené testy po změně presetu prošly (`engine::`, `eval::`, `soak::`, `behavior::`, 138 testů). Celá knihovna před změnou presetu: 513 prošlo, 0 selhalo (`--skip broker::`). Integrační `engine_v3`: 3 ze 3.
+
+**R: splněno.**
+
 ## E) Registr slepých míst a tvrzení
 
-(doplní se)
+**Preset v3** (`V3Features::recommended()`) = sestava kroku 7: preset kroku 6 + `protect` + `graph` + `graph_incident` + `fanout2`. Pro párové srovnání jsou `V3Features::step6()` a `step5()`. `ops_annotate`, `novel_burst`, `cross_source` a `saas_group` jsou zamítnuté a zůstávají volitelné za přepínačem. Provozní audit uzavření (A3) a stav pokrytí (A4) platí v produkční cestě v3 vždy.
+
+**Výchozí režim zůstává `legacy`.** G1 až G3 a G5 jsou splněné ve stejném drženém běhu (D3), G4 změřený není, protože pořád běží oba 72h běhy. Až skončí, stačí pustit jen G4 (`--size xxxl --max-networks 3 --threads 1 --block-size 1`, seedy 20261901 a 20262001, nic dalšího současně). Pokud projde, výchozí režim se přepne na `v3` s presetem kroku 7. **Migrace:** nové klíče stavu `closure_audit` a tabulky `closure_reviews` a `novelty_consents` v `engine-state.sqlite` vznikají samy. Uložené chráněné nálezy ve stavu `AutoResolved` nebo `Refuted` se při prvním načtení převedou na `Closed` (audit `protect_reset`) a další výskyt je znovu otevře. Uložené chráněné případy žebříku s neškodným důkazem se resetují. Volitelný `closure-audit.json` mění parametry auditu jen v bezpečných mezích.
+
+### Co smí práce tvrdit (držený běh, rameno `v3k7`)
+
+1. Chráněné nálezy (novost, graf, signatura IDS, degradace, nejednoznačný kontext nebo identita) se nikdy automaticky nezavřou, nevyvrátí ani neodkloní do fronty provoz. Doložené to je property testy, přehráním uloženého stavu a v soaku: 0 automatických zavření z 27 947 chráněných zobrazení a 0 ops-only útoků.
+2. Detekce útoků 80,3 % (77,2 až 83,2), makro 82,9 %, o +2,4 p. b. lepší než krok 6 a o +17,7 p. b. lepší než `legacy` na stejných sítích. Zobrazené FP jsou 1,05× proti kroku 6 a 0,03× proti `legacy`.
+3. Zavřeno omylem 1,4 % (0,9 až 2,2). Útoků s omylem zavřeným nálezem je 27 ze 2 934 (krok 6: 31). Automatická zavření má v produkci provozní audit s trvalým vypnutím druhu a fail-safe.
+4. Bez signatur zobecňují na neznámou variantu rodiny ssh_bruteforce, lateral_movement a dns_tunnel, při skutečném vypnutí vlastních detektorů v enginu.
+
+### Co práce tvrdit nesmí
+
+- Že krok 7 drží zátěž analytika: zobrazených položek je 1,195× víc než v kroku 6 (L1 nesplněn).
+- Že nevypnutý druh kontextu má chybovost pod 2 %: audit dokládá jen překročení (dolní mez Wilsona nad cílem).
+- Cokoliv o detekci na reálných datech po zrání profilu (D4: jen studený start).
+
+### Registr slepých míst po kroku 7
+
+| # | slepé místo | stav | měření (držený `v3k7`) | mitigace |
+|---|---|---|---|---|
+| 1 | Kontext zavírá útoky | **zadrženo** | zavřeno omylem 17 / 1 232 = 1,4 %; ztráta viditelnosti kontextem 0 útoků | chráněné typy kontext nezavře; bez zdroje nebo u vysoké závažnosti jsou potřeba dva druhy kontextu; produkční audit 10 %, 72 h, trvalé vypnutí, fail-safe |
+| 2 | Vyvrácení žebříkem skryje útok | **částečně** | 14 útoků ztratilo viditelnost vyvrácením (krok 6: 15) | chráněné případy se nevyvracejí; vyvrácení je ve vzorku auditu jako druh `ladder` |
+| 3 | Tiché zapomenutí (24 h bez výskytu) | zůstává | 39 útoků (`quiet`), krok 6: 63 | další výskyt nález znovu otevře; je to vlastnost paměti, ne zavření |
+| 4 | c2_beacon bez detektoru majáku | **nezobecňuje** | LOFO 30,8 % (19,9 až 44,3) | detektor majáku je pro tuto rodinu nutný; novost a graf ho nenahradí |
+| 5 | exploit_attempt | zůstává (b) | 35,5 % (30,1 až 41,3; n = 276), nejslabší i ve všech úrovních os | mimo tokový detektor; signatura IDS je chráněná (P3) a vždy se zobrazí; bez IDS `coverageStatus` hlásí `no_ids` a `deployment_blocking` |
+| 6 | Krátký útok (doba 0,25× až 0,5×) | zůstává (b) | c2 0,25× 54,5 %, port_scan_horizontal 0,5× 48,1 % | vlastnost útoku |
+| 7 | Rozložený útok (10 a 30 zdrojů) | **částečně** | osa zdrojů v (a); exploit_attempt × 3 zdroje 24,5 %, dns_tunnel × 10 58,1 % | agregace přes zdroje (B4) zachytí, ale FP × 35,7, zamítnuto |
+| 8 | Provozní poruchy jako podezření | zůstává | K3p: držené varianty 77 až 100 % výskytů s FP ve frontě podezření | anotace (B1) má přesnost 62 % a zamítnuta; E1 nezabírá u upovídaných protokolů (DNS) a u nálezů s klíčem hostu |
+| 9 | Nová cloudová služba více klientů (`saas_group`) | **vědomá cena** | 85,7 % výskytů s FP (krok 6: 75,0 %) | souhlas člověka přes API (přesná dvojice, nejvýš 30 dní), profil se dvojici z trvání nenaučí |
+| 10 | Zátěž analytika | **nové** | 183,7 zobrazených na síť-den (krok 6: 153,8) | cena A1 a grafu; incident grafu slučuje hopy pivotu |
+| 11 | Habituace dvojic útoku bez poplachu | zůstává | 160 útoků | poznamenané dvojice se zvykem nestanou (property test); dvojice, která nikdy neměla poplach, se naučí |
+| 12 | ics_attack | (b) | 69,2 % (58,3 až 78,4), n = 78 | `coverageStatus` hlásí `low_ics_data`; průmyslové protokoly potřebují vlastní parser |
+| 13 | Výpadek senzoru a nezralý profil | **viditelné** | `coverageStatus`: `telemetry_gap`, `immature_profiles`; nálezy v okně jsou chráněné (P4) | – |
+| 14 | Reálná data po zrání profilu | otevřené | D4: IoT-23 jen studený start | dlouhý záznam s ověřenou licencí (UGR'16 nedostupný), laboratoř UHK |
+| 15 | Výkon XXXL (G4) | neměřeno | – | po skončení 72h běhů |
+
+### Odchylky od předregistrace (souhrn)
+
+1. **D1:** počet omylem zavřených nálezů na útok v binárce `749047d` počítal pozorování, ne nálezy. Opraveno v `997d81f` před drženým během. Ladicí rozhodnutí na tom nestojí.
+2. **D2:** druhý seed ramene B4 jsem zastavil po 38 ze 40 sítí. Kill kritérium bylo splněné už předtím.
+3. Kandidáti B1, B3a, B4 a B5 jsou zamítnutí, ale jejich kód zůstává za přepínači. Výchozí cestu nemění (D5).
+4. C5 proběhl jen jako ověření na třech záznamech IoT-23 (B8 to připouští). Plný dlouhý běh chybí (registr, bod 14).
+
+### Co zůstává otevřené
+
+- G4 na nezatíženém stroji po skončení 72h běhů a podle výsledku přepnutí výchozího režimu.
+- Zátěž analytika (L1): seskupení chráněných nálezů do incidentů bez ztráty viditelnosti.
+- E1 pro upovídané protokoly (práh pokusů na zdroj podle protokolu) a pro nálezy s klíčem hostu.
+- Dlouhý replay reálných dat a laboratoř.
 
 ## Review
 
