@@ -304,7 +304,7 @@ Párově `v3k7` − `v3k6`: detekce +2,4 p. b. (+1,7 až +3,1), FP poměr 1,051 
 | C | 598 buněk: bez korekce (a) 261, (b) 76, (c) 261; s Holmovou korekcí (a) 141, (b) 196, (c) 261. Každá buňka má kategorii. | **splněno** |
 | K8 | paniky 0, porušené invarianty 0 ve všech 20 úlohách | **splněno** |
 | R | viz D5 | viz D5 |
-| G4 | neměřeno, oba 72h běhy pořád běží | nevyhodnoceno |
+| G4 | XXXL p99 cyklu 1 083,6 ms (seed 20261901) a 428,8 ms (seed 20262001), prah 3 s; 3 sítě na seed, 1 vlákno, klidný stroj po skončení obou 72h běhů, engine v3, binárka bakula-k7-0a59fb2, výstupy F:akula-soak\g4 | splněno |
 
 **Výchozí režim zůstává `legacy`.** G4 nelze změřit, dokud běží 72h běhy (B6). `V3Features::recommended()` se mění na sestavu kroku 7, protože ta splnila všechny prahy kromě L1 (viz E). L1 je jediný nesplněný práh: zobrazených položek je o 19,5 % víc než u `v3k6`, ale pořád 50× méně než u `legacy`. Zvýšení jde ze zásady A1 (chráněný nález se zobrazí hned, nečeká na ověření, a nezavře se) a z incidentů grafu. Práce proto nesmí tvrdit, že krok 7 zátěž analytika drží.
 
@@ -370,7 +370,7 @@ Všechna okna spadají do studeného startu (< 48 h). Zralé období v žádném
 | 12 | ics_attack | (b) | 69,2 % (58,3 až 78,4), n = 78 | `coverageStatus` hlásí `low_ics_data`; průmyslové protokoly potřebují vlastní parser |
 | 13 | Výpadek senzoru a nezralý profil | **viditelné** | `coverageStatus`: `telemetry_gap`, `immature_profiles`; nálezy v okně jsou chráněné (P4) | – |
 | 14 | Reálná data po zrání profilu | otevřené | D4: IoT-23 jen studený start | dlouhý záznam s ověřenou licencí (UGR'16 nedostupný), laboratoř UHK |
-| 15 | Výkon XXXL (G4) | neměřeno | – | po skončení 72h běhů |
+| 15 | Výkon XXXL (G4) | p99 cyklu 1,08 s a 0,43 s | < 3 s | splněno |
 
 ### Odchylky od předregistrace (souhrn)
 
