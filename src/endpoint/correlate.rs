@@ -727,12 +727,22 @@ pub fn assess(
                 );
             }
         } else {
-            let weight = if writable { 3 } else { 2 };
+            // pravidelne spojeni nepodepsaneho procesu z bezne cesty je slaby rys (vlastni
+            // software), ze zapisovatelne cesty (docasne slozky) silny; slaby se pocita
+            // jednou na obraz, ne na kazdou protistranu
+            let (weight, detail) = if writable {
+                (
+                    3,
+                    format!("{} -> {dst}:{dport} ({}x)", base(&image), times.len()),
+                )
+            } else {
+                (1, base(&image))
+            };
             add(
                 &mut out,
                 "periodic_unsigned_connection",
                 weight,
-                format!("{} -> {dst}:{dport} ({}x)", base(&image), times.len()),
+                detail,
                 Some(dst),
             );
         }
