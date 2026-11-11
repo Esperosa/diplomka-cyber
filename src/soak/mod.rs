@@ -4,6 +4,7 @@
 pub mod alloc;
 pub mod benign_regular;
 pub mod coverage;
+pub mod endpoint_sim;
 pub mod episode;
 pub mod hist;
 pub mod kernel;

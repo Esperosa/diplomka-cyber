@@ -129,6 +129,8 @@ pub struct SoakEvidence<'a> {
         &'a crate::behavior::profile::HostProfiles,
         &'a crate::behavior::profile::ProfilePolicy,
     )>,
+    /// Koncová telemetrie cyklu (krok 8); `None` = vypnuto.
+    pub endpoint: Option<&'a crate::endpoint::correlate::EndpointView>,
 }
 
 impl LadderEvidence for SoakEvidence<'_> {
@@ -256,6 +258,15 @@ impl LadderEvidence for SoakEvidence<'_> {
                 .copied()
         });
         case_verdict(profiles, policy, case, group, self.at.timestamp())
+    }
+
+    fn endpoint(&self, case: &CaseInput) -> crate::endpoint::correlate::EndpointSignal {
+        match self.endpoint {
+            Some(view) => view.signal(&case.host_ip, &case.sources),
+            None => crate::endpoint::correlate::EndpointSignal::NoCoverage(
+                "koncova telemetrie vypnuta".into(),
+            ),
+        }
     }
 }
 

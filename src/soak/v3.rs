@@ -85,6 +85,7 @@ impl V3Runtime {
                 crate::verify_ladder::LadderPolicy {
                     profile: engine.profile(),
                     protect: engine.protect(),
+                    endpoint: engine.endpoint(),
                     ..Default::default()
                 },
                 secret,

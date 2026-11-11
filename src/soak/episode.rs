@@ -143,6 +143,9 @@ pub struct WorldOptions {
     pub families: crate::soak::traffic::FamilySet,
     /// Svet pokryti (krok 5, `--coverage off|tuning|full`); vychozi vypnuto.
     pub coverage: crate::soak::coverage::CoverageMode,
+    /// Krok 8: svět koncové telemetrie (`--endpoint`, `--endpoint-coverage`, `--endpoint-agent`).
+    #[serde(default)]
+    pub endpoint: crate::soak::endpoint_sim::EndpointWorld,
 }
 
 impl Default for WorldOptions {
@@ -154,6 +157,7 @@ impl Default for WorldOptions {
             type_mask: 0,
             families: Default::default(),
             coverage: Default::default(),
+            endpoint: Default::default(),
         }
     }
 }
@@ -402,6 +406,13 @@ struct LadderCycle {
     opened: HashSet<usize>,
     decisions: Vec<crate::verify_ladder::Decision>,
     late: Vec<(Finding, Shown)>,
+}
+
+/// Koncova telemetrie epizody (krok 8): simulace agentu, sklad a politika.
+struct EndpointRt {
+    sim: crate::soak::endpoint_sim::EndpointSim,
+    store: crate::endpoint::correlate::EndpointStore,
+    policy: crate::endpoint::correlate::Policy,
 }
 
 /// Pravda o pripadu zebriku zjistena pri otevreni (jen mereni).
@@ -886,6 +897,23 @@ fn run_episode_inner(
     let state_trace = std::env::var_os("BAKULA_SOAK_STATE_TRACE").is_some();
     let mut trace_sums: BTreeMap<String, f64> = BTreeMap::new();
     let mut trace_lines: Vec<String> = Vec::new();
+    // krok 8: koncova telemetrie (simulovany agenti, sklad s limity, verdikty hostu)
+    let mut endpoint_rt = (cfg.engine.endpoint() && cfg.world.endpoint.on).then(|| {
+        let ips0: Vec<String> = (0..model.devices.len() as u32)
+            .map(|d| model.ip_of(d))
+            .collect();
+        EndpointRt {
+            sim: crate::soak::endpoint_sim::EndpointSim::new(
+                cfg.world.endpoint,
+                &model,
+                &truths,
+                &regular,
+                &ips0,
+            ),
+            store: crate::endpoint::correlate::EndpointStore::new(Default::default()),
+            policy: crate::endpoint::correlate::Policy::default(),
+        }
+    });
     for cycle in 0..cycles {
         let cycle_started = Instant::now();
         let cycle_cpu = if trace_cycles {
@@ -1359,6 +1387,81 @@ fn run_episode_inner(
                 (before - run_report.findings.len()) as u64,
             );
         }
+        // krok 8: koncova telemetrie cyklu a nalezy `endpoint_alert` (chraneny typ)
+        let mut endpoint_view: Option<crate::endpoint::correlate::EndpointView> = None;
+        if let Some(rt) = endpoint_rt.as_mut() {
+            use crate::endpoint::correlate::{EndpointView, HostDirectory};
+            let now = t0 + crate::soak::traffic::CYCLE_SECS;
+            let mut dir = HostDirectory::default();
+            for (d, device) in model.devices.iter().enumerate() {
+                if device.up {
+                    dir.add(
+                        &ips[d],
+                        Some(&format!("host{d}")),
+                        std::slice::from_ref(&ips[d]),
+                        Some(&device.mac),
+                    );
+                }
+            }
+            for event in rt.sim.cycle(cycle, t0, &truths, &masked, &model, &ips) {
+                let resolution = dir.resolve(&event.host);
+                rt.store.ingest(event, &resolution, now);
+            }
+            if cycle % 4 == 0 {
+                rt.store.prune(now);
+            }
+            let view = EndpointView::build(&rt.store, &dir, now, &rt.policy);
+            agg.output
+                .k7_add("endpoint_host_cycles", view.coverage.hosts_total as u64);
+            agg.output.k7_add(
+                "endpoint_covered_host_cycles",
+                view.coverage.hosts_covered as u64,
+            );
+            for a in view.suspicious_hosts() {
+                let peers: Vec<String> = a
+                    .indicators
+                    .iter()
+                    .filter_map(|i| i.peer.clone())
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect();
+                let finding = crate::behavior::finding(
+                    "endpoint_alert",
+                    &a.host,
+                    "endpoint",
+                    if a.score >= 6 {
+                        crate::model::Severity::High
+                    } else {
+                        crate::model::Severity::Medium
+                    },
+                    crate::model::Confidence::Medium,
+                    format!("Podezrela koncova aktivita na hostu {}", a.host),
+                    format!(
+                        "Indikatory koncove telemetrie (soucet vah {}): {}",
+                        a.score,
+                        a.reasons()
+                    ),
+                    peers
+                        .iter()
+                        .map(|p| format!("{} <-> {p}", a.host))
+                        .collect(),
+                    "Overit proces a uzivatele na hostu; nalez se automaticky nezavira.",
+                );
+                behavior_signal.insert(
+                    finding.finding_id.clone(),
+                    (a.score, peers.clone(), vec![(a.host.clone(), 0)]),
+                );
+                run_report.findings.push(finding);
+                agg.output.k7_add("endpoint_alerts", 1);
+            }
+            run_report
+                .findings
+                .sort_by(|l, r| l.finding_id.cmp(&r.finding_id));
+            run_report
+                .findings
+                .dedup_by(|l, r| l.finding_id == r.finding_id);
+            endpoint_view = Some(view);
+        }
         // krok 7 (B4): agregace pres zdroje (pred pameti, aby nalez prosel celou cestou)
         if let Some(runtime) = v3.as_mut().filter(|_| cfg.engine.cross_source()) {
             let window = runtime
@@ -1649,12 +1752,28 @@ fn run_episode_inner(
                             .engine
                             .profile()
                             .then_some((&runtime.behavior.profile, &runtime.profile_policy)),
+                        endpoint: endpoint_view.as_ref(),
                     };
                     let decisions = runtime.ladder.step(cycle as u64, &mut env);
                     agg.output.ladder_liveness_runs += env.liveness_runs;
                     agg.output.ladder_liveness_failures += env.liveness_failures;
                     for decision in &decisions {
                         use crate::verify_ladder::Status;
+                        // krok 8: pocitadla vlivu koncove telemetrie (E10)
+                        for (check, tag) in &decision.steps {
+                            if *check == crate::verify_ladder::CheckId::Endpoint {
+                                agg.output.k7_add(&format!("endpoint_step_{tag}"), 1);
+                                if *tag == "benign" && decision.status == Status::Refuted {
+                                    agg.output.k7_add("endpoint_benign_refuted", 1);
+                                    if decision.protected {
+                                        agg.output.k7_add("endpoint_protected_closed", 1);
+                                    }
+                                }
+                                if *tag == "malicious" && decision.status == Status::Confirmed {
+                                    agg.output.k7_add("endpoint_suspicious_confirmed", 1);
+                                }
+                            }
+                        }
                         let index = lc
                             .keys
                             .iter()
@@ -3684,6 +3803,79 @@ mod engine_v3_tests {
     /// Krok 7: svet k7 je deterministicky a nese drzene varianty; maska typu je
     /// skutecna ablace (typ se ve vystupu neobjevi); provozni anotace ani chraneny
     /// nalez nikdy neodkloni utok do fronty provoz (ops-only utoky = 0).
+    /// Krok 8 (E10, E13): koncova telemetrie je deterministicka, bez prepinace beze zmeny
+    /// proti v3 a v zadnem rezimu agenta (poctivy, mlcici, "vse v poradku") neporusi
+    /// invarianty ochrany.
+    #[test]
+    fn endpoint_world_is_inert_without_switch_deterministic_and_keeps_protection() {
+        use crate::soak::endpoint_sim::{AgentMode, EndpointWorld};
+        let on_engine = EngineConfig {
+            mode: crate::engine::EngineMode::V3,
+            v3: crate::engine::V3Features::recommended()
+                .enable_list("endpoint")
+                .unwrap(),
+        };
+        let off_engine = EngineConfig {
+            mode: crate::engine::EngineMode::V3,
+            v3: crate::engine::V3Features::recommended(),
+        };
+        let world = |on: bool, agent: AgentMode, pct: u32| WorldOptions {
+            endpoint: EndpointWorld {
+                on,
+                coverage_pct: pct,
+                agent,
+            },
+            ..Default::default()
+        };
+        let counter =
+            |r: &EpisodeResult, name: &str| r.agg.output.k7.get(name).copied().unwrap_or(0);
+        for id in [3u64, 8] {
+            // svet s agenty, ale prepinac enginu vypnuty = presne v3 bez endpointu
+            let plain = run_episode(&EpisodeConfig {
+                world: world(true, AgentMode::Honest, 100),
+                engine: off_engine,
+                ..cfg_v3(id, 72)
+            });
+            let base = run_episode(&EpisodeConfig {
+                engine: off_engine,
+                ..cfg_v3(id, 72)
+            });
+            assert_eq!(
+                plain.digest, base.digest,
+                "sit {id}: bez prepinace beze zmeny"
+            );
+            for (agent, pct) in [
+                (AgentMode::Honest, 100),
+                (AgentMode::Honest, 30),
+                (AgentMode::Silent, 100),
+                (AgentMode::Ok, 100),
+            ] {
+                let cfg = EpisodeConfig {
+                    world: world(true, agent, pct),
+                    engine: on_engine,
+                    ..cfg_v3(id, 72)
+                };
+                let a = run_episode(&cfg);
+                let b = run_episode(&cfg);
+                assert_eq!(a.digest, b.digest, "sit {id} {agent:?} {pct}");
+                assert!(
+                    a.agg.invariant_violations.is_empty(),
+                    "{:?}",
+                    a.agg.invariant_violations
+                );
+                assert_eq!(counter(&a, "protected_auto_closed"), 0);
+                assert_eq!(counter(&a, "endpoint_protected_closed"), 0);
+                assert!(counter(&a, "endpoint_host_cycles") > 0);
+                if pct == 100 && agent == AgentMode::Honest {
+                    assert!(
+                        counter(&a, "endpoint_covered_host_cycles") > 0,
+                        "agenti musi byt videt"
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn k7_world_mask_and_ops_annotation_invariants() {
         use crate::soak::coverage::CoverageMode;

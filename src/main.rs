@@ -57,6 +57,9 @@ enum Command {
     Broker(BrokerCommand),
     #[command(subcommand)]
     Demo(DemoCommand),
+    /// Krok 8: koncova telemetrie (prijem vystupu Sysmon, Wazuh, osquery).
+    #[command(subcommand)]
+    Endpoint(EndpointCommand),
     /// Dlouhodoby soak/zatezovy beh simulovanych siti (viz docs/diplomka/eval/soak-harness.md).
     #[command(subcommand)]
     Soak(SoakCommand),
@@ -69,6 +72,23 @@ enum SoakCommand {
     Run(SoakRunArgs),
     Verify(SoakVerifyArgs),
     Report(SoakReportArgs),
+}
+
+#[derive(Subcommand, Debug)]
+enum EndpointCommand {
+    /// Nacte soubor JSONL (jeden JSON objekt na radek) a ulozi nove udalosti do workspace.
+    Ingest(EndpointIngestArgs),
+}
+
+#[derive(Args, Debug)]
+struct EndpointIngestArgs {
+    #[arg(long)]
+    workspace: PathBuf,
+    /// sysmon | wazuh | osquery
+    #[arg(long)]
+    format: String,
+    #[arg(long)]
+    file: PathBuf,
 }
 
 #[derive(Args, Debug)]
@@ -113,6 +133,15 @@ struct SoakRunArgs {
     /// `beacon_periodic,suricata_alert,egress_ids_alert`.
     #[arg(long, default_value = "")]
     v3_mask: String,
+    /// Krok 8: koncova telemetrie `on` (zapne i prepinac `endpoint` ve v3) nebo `off`.
+    #[arg(long, default_value = "off")]
+    endpoint: String,
+    /// Krok 8: podil hostu s agentem v procentech.
+    #[arg(long, default_value_t = 100)]
+    endpoint_coverage: u32,
+    /// Krok 8: agenti na hostech utoku: `honest`, `silent` (nic neposila) nebo `ok` (vse v poradku).
+    #[arg(long, default_value = "honest")]
+    endpoint_agent: String,
     /// Parove A/B: zasahy enginu nezpetnuji generator provozu (stejny provoz v ramenech).
     #[arg(long, default_value_t = false)]
     no_feedback: bool,
@@ -944,6 +973,51 @@ fn main() -> anyhow::Result<()> {
             let message = broker::claim_one(&config, &args.node_id, 500, min_idle_ms)?;
             println!("{}", serde_json::to_string_pretty(&message)?);
         }
+        Command::Endpoint(EndpointCommand::Ingest(args)) => {
+            let format: bakula_program::endpoint::Format =
+                args.format.parse().map_err(anyhow::Error::msg)?;
+            let limits = bakula_program::endpoint::correlate::Limits::default();
+            let meta = std::fs::metadata(&args.file)?;
+            anyhow::ensure!(
+                meta.len() <= (limits.max_batch_bytes as u64) * 64,
+                "soubor je prilis velky ({} B)",
+                meta.len()
+            );
+            // velky soubor se cte po davkach do limitu, aby neslo vycerpat pamet
+            let text = std::fs::read_to_string(&args.file)?;
+            std::fs::create_dir_all(&args.workspace)?;
+            let mut store = bakula_program::engine_state::EngineStateStore::open(
+                &args.workspace.join("engine-state.sqlite"),
+            )?;
+            let mut total = bakula_program::endpoint::persist::IngestSummary::default();
+            let mut start = 0usize;
+            while start < text.len() {
+                let mut end = (start + limits.max_batch_bytes).min(text.len());
+                while end < text.len() && !text.is_char_boundary(end) {
+                    end += 1;
+                }
+                // konec davky na hranici radku
+                if end < text.len() {
+                    end = text[start..end].rfind('\n').map_or(end, |i| start + i + 1);
+                }
+                let part = bakula_program::endpoint::persist::ingest_text(
+                    store.conn_mut(),
+                    format,
+                    &text[start..end],
+                    chrono::Utc::now(),
+                    &limits,
+                )?;
+                total.parsed += part.parsed;
+                total.stored += part.stored;
+                total.duplicates += part.duplicates;
+                total.rejected_time += part.rejected_time;
+                total.skipped += part.skipped;
+                total.errors += part.errors;
+                total.truncated |= part.truncated;
+                start = end.max(start + 1);
+            }
+            println!("{}", serde_json::to_string_pretty(&total)?);
+        }
         Command::Soak(SoakCommand::Run(args)) => {
             let mut cfg = bakula_program::soak::runner::SoakConfig::with_defaults(args.out.clone());
             cfg.wall_hours = args.wall_hours;
@@ -964,6 +1038,17 @@ fn main() -> anyhow::Result<()> {
                     .and_then(|v| v.enable_list(&args.v3_on))
                     .map_err(anyhow::Error::msg)?,
             };
+            match args.endpoint.as_str() {
+                "off" => {}
+                "on" => {
+                    cfg.engine.v3.endpoint = true;
+                    cfg.world.endpoint.on = true;
+                    cfg.world.endpoint.coverage_pct = args.endpoint_coverage.min(100);
+                    cfg.world.endpoint.agent =
+                        args.endpoint_agent.parse().map_err(anyhow::Error::msg)?;
+                }
+                other => anyhow::bail!("--endpoint: on | off, ne {other}"),
+            }
             cfg.feedback = !args.no_feedback;
             cfg.counterfactual = args.counterfactual;
             cfg.cf_loo = args.cf_loo;
