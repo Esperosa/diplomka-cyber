@@ -57,7 +57,16 @@ Rozhodnutí: když E1 až E14 projdou, vrstva je „připravena na držený běh
 
 ## C) Implementace
 
-(doplní se po implementaci)
+| blok | soubory | co |
+|---|---|---|
+| model, parsery | `src/endpoint/{mod,model,sysmon,wazuh,osquery}.rs` | `EndpointEvent` (9 druhů), parsery Sysmon (ID 1, 3, 10, 11, 13; Security 4624, 4625, 4688, 7045; rozložení Event/System, winlogbeat, ploché), Wazuh alerts (vnořené Windows události, syscheck, selhání SSH, úroveň pravidla), osquery results (sockets, procesy, perzistence, přihlášení, file_events). Pole se ořezávají na 512 znaků, IP se ověřují, `Ok(None)` pro ID, které nás nezajímá. auditd a Velociraptor: neimplementováno (jen návrh adaptéru ve studii 08). |
+| korelace | `src/endpoint/correlate.rs` | `HostDirectory` (identita Unique, Ambiguous, Unknown), `EndpointStore` (deduplikace otiskem, řazení podle času události, limity: události na host 4 096, hostů 20 000, 2 000 událostí na host a cyklus, budoucnost +1 h, stáří 24 h), `assess` (verdikt hosta z indikátorů s vahami, neškodné vzory jen pro známý podepsaný proces s pravidelností a stářím, smazané při jakémkoli podezření), `EndpointView::signal` (Suspicious, Benign, NoSignal, NoCoverage), pokrytí (`EndpointCoverage`), `link_flows` (Community ID nebo trojice + tolerance 120 s), `estimate_skew` (medián aspoň z 5 dvojic, ořez ±600 s), `alert_finding`. |
+| perzistence a příjem | `src/endpoint/persist.rs`, `server.rs`, `main.rs` | tabulka `endpoint_events` v `engine-state.sqlite` (UNIQUE otisk, strop 500 000 řádků, stáří), `POST /api/endpoint/ingest?format=` (`findings.write`, CSRF, tělo ≤ 8 MiB), CLI `endpoint ingest --workspace --format --file` (po dávkách). |
+| jádro | `engine.rs`, `verify_ladder.rs`, `protection.rs`, `pipeline/v3.rs`, `model.rs` | `V3Features::endpoint` (mimo `recommended()`, platí jen s `protect` a `memory`), `CheckId::Endpoint` (L1, cena 0,1; LR 12 podezřelé, 0,3 neškodné), nedostupné (`Unavailable`) bez pokrytí, u chráněného případu neškodný signál = `Undetermined`; typ `endpoint_alert` v chráněných typech; `RunReport.endpointCoverage`; produkce načte události, přiřadí identitu proti inventáři, přidá nálezy a předá pohled žebříku. |
+| simulace | `src/soak/endpoint_sim.rs`, `episode.rs`, `ladder_env.rs`, `main.rs` | `--endpoint on|off`, `--endpoint-coverage %`, `--endpoint-agent honest|silent|ok`; generátor odvozený z rodin a benigních vzorů (viz A4), počítadla `endpoint_*` v `k7`. |
+| vyhodnocení | `tools/soak_k8.py` | párové rozdíly s bootstrapem po sítích, prahy E1 až E11. |
+
+**Testy.** Jednotkové (`endpoint::correlate::tests`: identita, sklad, shell z web serveru, neškodný vzor jen starý a čistý, chybějící telemetrie není neškodná, spojení s toky a posun hodin; `endpoint::tests`: vzorové záznamy, neplatné záznamy, limity dávky, ořez polí, UTF-8; `endpoint::persist::tests`), ladder (`endpoint_benign_never_refutes_protected_case`, `endpoint_benign_alone_does_not_refute_unprotected_case`, `endpoint_benign_with_other_benign_evidence_can_refute_with_audit_reason`, `endpoint_suspicious_raises_belief_and_missing_coverage_changes_nothing`), fuzz parserů (`fuzz_parsers_never_panic`, 20 000 průchodů na formát, v měření 100 000 přes `BAKULA_FUZZ_N`), soak (`endpoint_world_is_inert_without_switch_deterministic_and_keeps_protection`: svět s agenty bez přepínače je bit po bitu v3, determinismus, 0 chráněných zavření a 0 zavření chráněného koncovým signálem v režimech honest 100 %, honest 30 %, silent a ok).
 
 ## D) Měření
 

@@ -59,6 +59,8 @@ pub struct EndpointWorld {
     /// Podíl hostů s agentem v procentech.
     pub coverage_pct: u32,
     pub agent: AgentMode,
+    /// Násobek šumu správcovských nástrojů (citlivostní osa; výchozí 1).
+    pub noise: f64,
 }
 
 impl Default for EndpointWorld {
@@ -67,6 +69,7 @@ impl Default for EndpointWorld {
             on: false,
             coverage_pct: 100,
             agent: AgentMode::Honest,
+            noise: 1.0,
         }
     }
 }
@@ -74,8 +77,8 @@ impl Default for EndpointWorld {
 /// Parametry šumu (volba autora; zapsané v impl-krok8.md).
 const SPOOF_P: f64 = 0.01;
 const DUP_P: f64 = 0.02;
-const ADMIN_TOOL_P: f64 = 0.0006;
-const ENC_SCRIPT_P: f64 = 0.0004;
+const ADMIN_TOOL_P: f64 = 0.00005;
+const ENC_SCRIPT_P: f64 = 0.00003;
 const OUTAGE_HOST_P: f64 = 0.15;
 
 fn visible_share(family: Family) -> f64 {
@@ -104,7 +107,7 @@ pub struct EndpointSim {
     outages: Vec<Vec<(u32, u32)>>,
     visible: HashMap<u32, bool>,
     /// Zařízení -> (protistrana, benigní vzor) pro celý běh (i pro pozadí).
-    regular: Vec<(u32, String, bool)>,
+    regular: Vec<(u32, String, bool, u16)>,
 }
 
 fn name_of(device: u32) -> String {
@@ -161,14 +164,26 @@ impl EndpointSim {
             }
         }
         // benigni pravidelne vzory: pravidelne instance a lookalike (zdroj, protistrana)
-        let mut pairs: Vec<(u32, String, bool)> = Vec::new();
+        let mut pairs: Vec<(u32, String, bool, u16)> = Vec::new();
+        // port vzoru: sluzba protistrany (zarizeni), jinak 443
+        let port_of = |ip: &str| -> u16 {
+            ips.iter()
+                .position(|x| x == ip)
+                .and_then(|d| model.devices[d].services.first())
+                .map_or(443, |s| s.port)
+        };
         for inst in regular {
             for peer in inst.peers.iter().take(3) {
                 let ip = match peer {
                     Peer::Device(d) => ips[*d as usize].clone(),
                     Peer::External(ip) => ip.clone(),
                 };
-                pairs.push((inst.src, ip, true));
+                let port = if inst.port != 0 {
+                    inst.port
+                } else {
+                    port_of(&ip)
+                };
+                pairs.push((inst.src, ip, true, port));
             }
         }
         for t in truths {
@@ -200,7 +215,7 @@ impl EndpointSim {
             for d in &devices {
                 for p in &peers {
                     if *p != ips[*d as usize] && count < 6 {
-                        pairs.push((*d, p.clone(), signed));
+                        pairs.push((*d, p.clone(), signed, port_of(p)));
                         count += 1;
                     }
                 }
@@ -273,7 +288,7 @@ impl EndpointSim {
             kind,
         };
         // --- benigni pozadi: podepsane pravidelne vzory a sum ---
-        for (device, peer, signed) in &self.regular {
+        for (device, peer, signed, port) in &self.regular {
             if !self.alive(*device, cycle)
                 || self.compromised[*device as usize] && self.world.agent == AgentMode::Silent
             {
@@ -304,7 +319,7 @@ impl EndpointSim {
                     src_ip: Some(ips[*device as usize].clone()),
                     src_port: None,
                     dst_ip: peer.clone(),
-                    dst_port: 443,
+                    dst_port: *port,
                     vendor: vendor.map(str::to_string),
                     signed: sig,
                 }),
@@ -336,7 +351,7 @@ impl EndpointSim {
                 ));
             }
             // spravcovsky nastroj (falesne podezreni): PsExec po vzdalenem prihlaseni
-            if r.chance(ADMIN_TOOL_P) {
+            if r.chance(ADMIN_TOOL_P * self.world.noise) {
                 let host = self.host(device, ips, &mut r, model);
                 let ts = at(&mut r, device);
                 out.push(mk(
@@ -363,7 +378,7 @@ impl EndpointSim {
                 ));
             }
             // spravcovsky skript s kodovanym prikazem
-            if r.chance(ENC_SCRIPT_P) {
+            if r.chance(ENC_SCRIPT_P * self.world.noise) {
                 let host = self.host(device, ips, &mut r, model);
                 let ts = at(&mut r, device);
                 out.push(mk(

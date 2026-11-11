@@ -1101,7 +1101,13 @@ impl Ladder {
         let executed = case
             .steps
             .iter()
-            .filter(|s| !matches!(s.outcome, Outcome::Unavailable(_)))
+            // krok 8: koncova kontrola bez nalezu nespotrebuje strop kontrol (jinak by
+            // vytlacila posledni kontrolu planu a zmenila rozhodnuti i bez dukazu)
+            .filter(|s| {
+                !matches!(s.outcome, Outcome::Unavailable(_))
+                    && !(s.check == CheckId::Endpoint
+                        && matches!(s.outcome, Outcome::Undetermined(_)))
+            })
             .count();
         let refute_at = if case.input.high_impact {
             self.policy.p_refute_high_impact
@@ -1641,6 +1647,37 @@ mod tests {
         );
         let without = decide(ep_policy(false), "inductive_volume_anomaly", &mut mk());
         assert_ne!(without.status, Status::Refuted, "{}", without.reason);
+    }
+
+    /// Koncova kontrola bez nalezu (NoSignal) nespotrebuje strop kontrol: rozhodnuti i
+    /// vira jsou stejne jako bez kontroly.
+    #[test]
+    fn endpoint_without_finding_does_not_consume_check_cap() {
+        use crate::endpoint::correlate::EndpointSignal;
+        for kind in [
+            "unexpected_traffic",
+            "beacon_periodic",
+            "inductive_volume_anomaly",
+        ] {
+            let mut on = Env {
+                endpoint: Some(EndpointSignal::NoSignal("nic".into())),
+                recurrence: Some(Recurrence::New { history_days: 5 }),
+                ..Env::default()
+            };
+            let mut off = Env {
+                recurrence: Some(Recurrence::New { history_days: 5 }),
+                ..Env::default()
+            };
+            let a = decide(ep_policy(true), kind, &mut on);
+            let b = decide(ep_policy(false), kind, &mut off);
+            assert_eq!(a.status, b.status, "{kind}");
+            assert!((a.posterior - b.posterior).abs() < 1e-9, "{kind}");
+            assert_eq!(
+                a.checks,
+                b.checks + 1,
+                "{kind}: jedna kontrola navic, bez vlivu"
+            );
+        }
     }
 
     #[test]

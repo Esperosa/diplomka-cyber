@@ -139,6 +139,9 @@ struct SoakRunArgs {
     /// Krok 8: podil hostu s agentem v procentech.
     #[arg(long, default_value_t = 100)]
     endpoint_coverage: u32,
+    /// Krok 8: nasobek sumu spravcovskych nastroju (citlivostni osa, vychozi 1).
+    #[arg(long, default_value_t = 1.0)]
+    endpoint_noise: f64,
     /// Krok 8: agenti na hostech utoku: `honest`, `silent` (nic neposila) nebo `ok` (vse v poradku).
     #[arg(long, default_value = "honest")]
     endpoint_agent: String,
@@ -1044,6 +1047,7 @@ fn main() -> anyhow::Result<()> {
                     cfg.engine.v3.endpoint = true;
                     cfg.world.endpoint.on = true;
                     cfg.world.endpoint.coverage_pct = args.endpoint_coverage.min(100);
+                    cfg.world.endpoint.noise = args.endpoint_noise.clamp(0.0, 1000.0);
                     cfg.world.endpoint.agent =
                         args.endpoint_agent.parse().map_err(anyhow::Error::msg)?;
                 }

@@ -1453,6 +1453,10 @@ fn run_episode_inner(
                 );
                 run_report.findings.push(finding);
                 agg.output.k7_add("endpoint_alerts", 1);
+                for indicator in &a.indicators {
+                    agg.output
+                        .k7_add(&format!("endpoint_ind_{}", indicator.code), 1);
+                }
             }
             run_report
                 .findings
@@ -3824,6 +3828,7 @@ mod engine_v3_tests {
                 on,
                 coverage_pct: pct,
                 agent,
+                noise: 1.0,
             },
             ..Default::default()
         };

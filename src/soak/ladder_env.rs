@@ -262,7 +262,7 @@ impl LadderEvidence for SoakEvidence<'_> {
 
     fn endpoint(&self, case: &CaseInput) -> crate::endpoint::correlate::EndpointSignal {
         match self.endpoint {
-            Some(view) => view.signal(&case.host_ip, &case.sources),
+            Some(view) => view.signal(&case.host_ip, case.port, &case.sources),
             None => crate::endpoint::correlate::EndpointSignal::NoCoverage(
                 "koncova telemetrie vypnuta".into(),
             ),

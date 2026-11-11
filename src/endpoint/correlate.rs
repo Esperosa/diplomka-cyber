@@ -98,6 +98,11 @@ impl HostDirectory {
         self.keys.is_empty()
     }
 
+    /// Host je v inventáři (události hostů, které z něj zmizely, se nehodnotí).
+    pub fn contains(&self, key: &str) -> bool {
+        self.keys.contains(key)
+    }
+
     pub fn keys(&self) -> impl Iterator<Item = &String> {
         self.keys.iter()
     }
@@ -442,7 +447,7 @@ pub struct HostAssessment {
     pub score: u32,
     pub indicators: Vec<Indicator>,
     /// Protistrana -> důvod: pravidelné spojení známého podepsaného procesu.
-    pub benign_peers: BTreeMap<String, String>,
+    pub benign_peers: BTreeMap<(String, u16), String>,
     pub events: usize,
     pub last_event: i64,
 }
@@ -712,7 +717,7 @@ pub fn assess(
         if known {
             if span >= policy.pattern_age_s {
                 out.benign_peers.insert(
-                    dst.clone(),
+                    (dst.clone(), dport),
                     format!(
                         "{} spojuje pravidelne ({} vzorku za {} h)",
                         base(&image),
@@ -786,6 +791,9 @@ impl EndpointView {
         let mut covered = HashSet::new();
         let mut silent = 0usize;
         for host in store.hosts() {
+            if !directory.contains(host) {
+                continue;
+            }
             let a = assess(host, store.events_of(host), now, policy);
             if now - a.last_event <= policy.alive_s && a.events > 0 {
                 covered.insert(host.clone());
@@ -838,7 +846,7 @@ impl EndpointView {
     }
 
     /// Signál pro případ: host nálezu a dominantní zdroje.
-    pub fn signal(&self, host_ip: &str, sources: &[String]) -> EndpointSignal {
+    pub fn signal(&self, host_ip: &str, port: Option<u16>, sources: &[String]) -> EndpointSignal {
         let mut hosts: Vec<&str> = vec![host_ip];
         hosts.extend(sources.iter().map(String::as_str));
         // podezřelý proces kdekoli na souvisejícím pokrytém hostu zvyšuje jistotu
@@ -857,6 +865,10 @@ impl EndpointView {
         }
         // neškodné: každý zdroj má vysvětlení (vlastní agent nebo agent cíle)
         if !sources.is_empty() {
+            // neškodný vzor musí sedět na port nálezu (jiná služba téhož páru není vysvětlení)
+            let Some(port) = port else {
+                return EndpointSignal::NoSignal("nalez bez portu, vzor nelze porovnat".into());
+            };
             let target = self
                 .assessments
                 .get(host_ip)
@@ -867,8 +879,8 @@ impl EndpointView {
                     .assessments
                     .get(s)
                     .filter(|_| self.covered.contains(s))
-                    .and_then(|a| a.benign_peers.get(host_ip));
-                let via_target = target.and_then(|a| a.benign_peers.get(s));
+                    .and_then(|a| a.benign_peers.get(&(host_ip.to_string(), port)));
+                let via_target = target.and_then(|a| a.benign_peers.get(&(s.clone(), port)));
                 match own.or(via_target) {
                     Some(reason) => reasons.push(format!("{s}: {reason}")),
                     None => {
@@ -1149,7 +1161,10 @@ mod tests {
             .collect();
         let now = T0 + 16 * 1800;
         let a = assess("h", regular.iter(), now, &p);
-        assert!(a.benign_peers.contains_key("8.8.8.8"), "{a:?}");
+        assert!(
+            a.benign_peers.contains_key(&("8.8.8.8".to_string(), 443)),
+            "{a:?}"
+        );
         assert_eq!(a.score, 0);
         // stejné spojení z nepodepsaného procesu v dočasné složce = podezření, ne neškodné
         let bad: Vec<EndpointEvent> = (0..16)
@@ -1197,7 +1212,7 @@ mod tests {
         dir.add("10.0.0.5", Some("h"), &[], None);
         let view = EndpointView::build(&store, &dir, T0, &p);
         assert!(matches!(
-            view.signal("10.0.0.5", &["8.8.8.8".into()]),
+            view.signal("10.0.0.5", Some(443), &["8.8.8.8".into()]),
             EndpointSignal::NoCoverage(_)
         ));
         assert_eq!(view.coverage.hosts_total, 1);
