@@ -10,7 +10,7 @@ use crate::{
 
 mod anomaly;
 pub(crate) mod anomaly_v3;
-mod community_id;
+pub(crate) mod community_id;
 pub(crate) mod detector;
 pub(crate) mod egress;
 mod suricata;

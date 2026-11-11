@@ -90,15 +90,20 @@ pub enum CheckId {
     Pivot,
     /// L0: naučený profil hostu (obvyklý cíl a port, flotila; krok 3E).
     Profile,
+    /// L1: koncová telemetrie hostu (krok 8): podezřelý proces zvyšuje jistotu, známý
+    /// podepsaný proces s pravidelným vzorem je slabý neškodný důkaz (nikdy sám nezavře).
+    Endpoint,
 }
 
 impl CheckId {
     pub fn level(self) -> Level {
         match self {
             CheckId::History | CheckId::Profile => Level::L0,
-            CheckId::Context | CheckId::Reputation | CheckId::Intel | CheckId::DeviceProfile => {
-                Level::L1
-            }
+            CheckId::Context
+            | CheckId::Reputation
+            | CheckId::Intel
+            | CheckId::DeviceProfile
+            | CheckId::Endpoint => Level::L1,
             CheckId::Peers | CheckId::Persistence => Level::L2,
             CheckId::Liveness => Level::L3,
             CheckId::Pivot => Level::L4,
@@ -117,6 +122,7 @@ impl CheckId {
             CheckId::Liveness => "liveness",
             CheckId::Pivot => "pivot",
             CheckId::Profile => "profile",
+            CheckId::Endpoint => "endpoint",
         }
     }
 }
@@ -367,6 +373,9 @@ pub struct LrTable {
     pub profile_host: f64,
     pub profile_fleet: f64,
     pub profile_new: f64,
+    /// Krok 8: podezřelý proces na hostu případu, pravidelný známý podepsaný proces.
+    pub endpoint_suspicious: f64,
+    pub endpoint_benign: f64,
 }
 
 impl Default for LrTable {
@@ -390,6 +399,8 @@ impl Default for LrTable {
             profile_host: 0.2,
             profile_fleet: 0.35,
             profile_new: 1.5,
+            endpoint_suspicious: 12.0,
+            endpoint_benign: 0.3,
         }
     }
 }
@@ -425,6 +436,8 @@ pub struct LadderPolicy {
     pub profile_new_evidence: bool,
     /// Krok 7 (A1): chráněný případ se nevyvrací (rozhodnutí jde člověku).
     pub protect: bool,
+    /// Krok 8: kontrola koncové telemetrie v plánu.
+    pub endpoint: bool,
 }
 
 impl Default for LadderPolicy {
@@ -446,6 +459,7 @@ impl Default for LadderPolicy {
             profile: false,
             profile_new_evidence: false,
             protect: false,
+            endpoint: false,
         }
     }
 }
@@ -477,6 +491,10 @@ pub trait LadderEvidence {
     /// Naučený profil hostu pro případ (krok 3E); výchozí = nic neplyne.
     fn profile(&self, _case: &CaseInput) -> crate::behavior::profile::ProfileVerdict {
         crate::behavior::profile::ProfileVerdict::Unknown("profil neni k dispozici".into())
+    }
+    /// Koncová telemetrie hosta případu (krok 8); výchozí = bez pokrytí.
+    fn endpoint(&self, _case: &CaseInput) -> crate::endpoint::correlate::EndpointSignal {
+        crate::endpoint::correlate::EndpointSignal::NoCoverage("koncova telemetrie neni".into())
     }
 }
 
@@ -535,6 +553,9 @@ fn checks_for(input: &CaseInput, policy: &LadderPolicy) -> Vec<CheckId> {
         checks.push(CheckId::Profile);
     }
     checks.push(CheckId::Context);
+    if policy.endpoint {
+        checks.push(CheckId::Endpoint);
+    }
     if !input.sources.is_empty() {
         checks.push(CheckId::Reputation);
     }
@@ -1217,6 +1238,28 @@ fn evaluate(
             },
             None => Outcome::Undetermined("zadny zaznam kontextu".into()),
         },
+        CheckId::Endpoint => {
+            use crate::endpoint::correlate::EndpointSignal;
+            match env.endpoint(input) {
+                EndpointSignal::Suspicious(detail) => Outcome::Evidence {
+                    lr: lr.endpoint_suspicious,
+                    detail: format!("koncova telemetrie: {detail}"),
+                },
+                // krok 8 (A2, 1): u chraneneho pripadu neni koncovy signal neskodny dukaz
+                EndpointSignal::Benign(_) if policy.protect && input.is_protected() => {
+                    Outcome::Undetermined(
+                        "chraneny nalez: koncova telemetrie neni dukaz neskodnosti".into(),
+                    )
+                }
+                EndpointSignal::Benign(detail) => Outcome::Evidence {
+                    lr: lr.endpoint_benign,
+                    detail: format!("koncova telemetrie: {detail}"),
+                },
+                EndpointSignal::NoSignal(why) => Outcome::Undetermined(why),
+                // host bez agenta: nedostupne (nepocita se do stropu kontrol, neni neskodne)
+                EndpointSignal::NoCoverage(why) => Outcome::Unavailable(why),
+            }
+        }
         CheckId::Reputation => {
             let mut good = None;
             for source in &input.sources {
@@ -1470,6 +1513,7 @@ mod tests {
         liveness_calls: usize,
         kev: bool,
         profile: Option<crate::behavior::profile::ProfileVerdict>,
+        endpoint: Option<crate::endpoint::correlate::EndpointSignal>,
     }
 
     impl LadderEvidence for Env {
@@ -1520,6 +1564,106 @@ mod tests {
                     "test".into(),
                 ))
         }
+        fn endpoint(&self, _: &CaseInput) -> crate::endpoint::correlate::EndpointSignal {
+            self.endpoint
+                .clone()
+                .unwrap_or(crate::endpoint::correlate::EndpointSignal::NoCoverage(
+                    "test".into(),
+                ))
+        }
+    }
+
+    fn ep_policy(endpoint: bool) -> LadderPolicy {
+        LadderPolicy {
+            endpoint,
+            protect: true,
+            ..Default::default()
+        }
+    }
+
+    fn decide(policy: LadderPolicy, kind: &str, env: &mut Env) -> Decision {
+        let mut ladder = Ladder::new(policy, 7);
+        ladder.open(input(kind, "10.0.0.5", &["203.0.113.9"]), 0);
+        run_until_decided(&mut ladder, env)
+    }
+
+    /// Krok 8 (A2, 1): neskodny koncovy signal nikdy nevyvrati chraneny pripad, ani kdyz
+    /// k nemu pristoupi dalsi neskodny dukaz.
+    #[test]
+    fn endpoint_benign_never_refutes_protected_case() {
+        use crate::endpoint::correlate::EndpointSignal;
+        for kind in ["suricata_alert", "novel_persistent_peer", "endpoint_alert"] {
+            let mut env = Env {
+                recurrence: Some(Recurrence::Seen { days: 9 }),
+                peers: Some((5, 6)),
+                endpoint: Some(EndpointSignal::Benign("podepsany updater".into())),
+                ..Env::default()
+            };
+            let d = decide(ep_policy(true), kind, &mut env);
+            assert_ne!(d.status, Status::Refuted, "{kind}: {}", d.reason);
+            assert!(
+                !d.steps
+                    .iter()
+                    .any(|(c, t)| *c == CheckId::Endpoint && *t == "benign"),
+                "{kind}: koncovy signal u chraneneho nesmi byt neskodny dukaz"
+            );
+        }
+    }
+
+    /// Neskodny koncovy signal sam (bez dalsiho neskodneho dukazu) nezavira ani nechraneny nalez.
+    #[test]
+    fn endpoint_benign_alone_does_not_refute_unprotected_case() {
+        use crate::endpoint::correlate::EndpointSignal;
+        let mut env = Env {
+            endpoint: Some(EndpointSignal::Benign("podepsany updater".into())),
+            ..Env::default()
+        };
+        let d = decide(ep_policy(true), "inductive_volume_anomaly", &mut env);
+        assert_ne!(d.status, Status::Refuted, "{}", d.reason);
+        assert!(d.reason.contains("koncova telemetrie"));
+    }
+
+    /// Spolu s dalsim doslozenym neskodnym dukazem muze koncovy signal snizit prioritu
+    /// (vyvraceni s auditni stopou v duvodu); bez kontroly ve planu totez nevyvrati.
+    #[test]
+    fn endpoint_benign_with_other_benign_evidence_can_refute_with_audit_reason() {
+        use crate::endpoint::correlate::EndpointSignal;
+        let mk = || Env {
+            recurrence: Some(Recurrence::Seen { days: 4 }),
+            endpoint: Some(EndpointSignal::Benign("podepsany updater".into())),
+            ..Env::default()
+        };
+        let with = decide(ep_policy(true), "inductive_volume_anomaly", &mut mk());
+        assert_eq!(with.status, Status::Refuted, "{}", with.reason);
+        assert!(
+            with.reason
+                .contains("endpoint [LR 0.30: koncova telemetrie")
+        );
+        let without = decide(ep_policy(false), "inductive_volume_anomaly", &mut mk());
+        assert_ne!(without.status, Status::Refuted, "{}", without.reason);
+    }
+
+    #[test]
+    fn endpoint_suspicious_raises_belief_and_missing_coverage_changes_nothing() {
+        use crate::endpoint::correlate::EndpointSignal;
+        let base = decide(ep_policy(true), "beacon_periodic", &mut Env::default());
+        let mut sus = Env {
+            endpoint: Some(EndpointSignal::Suspicious("w3wp spousti cmd".into())),
+            ..Env::default()
+        };
+        let up = decide(ep_policy(true), "beacon_periodic", &mut sus);
+        assert!(
+            up.posterior > base.posterior + 0.3,
+            "{} {}",
+            up.posterior,
+            base.posterior
+        );
+        let off = decide(ep_policy(false), "beacon_periodic", &mut Env::default());
+        assert!(
+            (off.posterior - base.posterior).abs() < 1e-9,
+            "bez pokryti se viera nemeni"
+        );
+        assert!(base.reason.contains("neprovedeno"));
     }
 
     /// Krok 4: nový cíl zralého profilu je rys bez vlivu na víru (empirické LR 1,03),

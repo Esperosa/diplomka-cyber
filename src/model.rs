@@ -151,6 +151,13 @@ pub struct RunReport {
         skip_serializing_if = "Option::is_none"
     )]
     pub coverage_status: Option<crate::coverage_status::CoverageStatus>,
+    /// Krok 8: pokrytí hostů koncovou telemetrií (kryté, tiché, nejednoznačné). Jen s `endpoint`.
+    #[serde(
+        default,
+        rename = "endpointCoverage",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub endpoint_coverage: Option<crate::endpoint::correlate::EndpointCoverage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -17,6 +17,7 @@ pub mod cpe;
 pub mod decision;
 pub mod device_class;
 pub mod diff;
+pub mod endpoint;
 pub mod enforcement;
 pub mod engine;
 pub mod engine_state;

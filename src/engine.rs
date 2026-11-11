@@ -121,6 +121,10 @@ pub struct V3Features {
     /// Krok 7 (B5): opakovaná upozornění na novou vazbu ven jako jeden incident.
     #[serde(default)]
     pub saas_group: bool,
+    /// Krok 8: koncová telemetrie (Sysmon, Wazuh, osquery) jako nezávislý druh důkazu.
+    /// Platí jen s `protect` a `memory`; výchozí vypnuto (impl-krok8.md).
+    #[serde(default)]
+    pub endpoint: bool,
 }
 
 impl Default for V3Features {
@@ -130,7 +134,7 @@ impl Default for V3Features {
 }
 
 impl V3Features {
-    pub const NAMES: [&'static str; 27] = [
+    pub const NAMES: [&'static str; 28] = [
         "memory",
         "rate",
         "volume",
@@ -158,6 +162,7 @@ impl V3Features {
         "fanout2",
         "cross_source",
         "saas_group",
+        "endpoint",
     ];
 
     pub fn all() -> Self {
@@ -189,6 +194,7 @@ impl V3Features {
             fanout2: true,
             cross_source: true,
             saas_group: true,
+            endpoint: true,
         }
     }
 
@@ -228,6 +234,7 @@ impl V3Features {
             fanout2: false,
             cross_source: false,
             saas_group: false,
+            endpoint: false,
             ..Self::all()
         }
     }
@@ -270,6 +277,7 @@ impl V3Features {
             fanout2: false,
             cross_source: false,
             saas_group: false,
+            endpoint: false,
         }
     }
 
@@ -326,6 +334,7 @@ impl V3Features {
             "fanout2" => &mut self.fanout2,
             "cross_source" => &mut self.cross_source,
             "saas_group" => &mut self.saas_group,
+            "endpoint" => &mut self.endpoint,
             _ => return None,
         })
     }
@@ -486,6 +495,10 @@ impl EngineConfig {
     /// Krok 7 (B4): agregace přes zdroje (klientela služeb, s pamětí nálezů).
     pub fn cross_source(&self) -> bool {
         self.on(|f| f.cross_source && f.memory)
+    }
+    /// Krok 8: koncová telemetrie (potřebuje ochranu a paměť nálezů).
+    pub fn endpoint(&self) -> bool {
+        self.on(|f| f.endpoint && f.protect && f.memory)
     }
     /// Krok 7 (B5): seskupení nové vazby ven (jen s novostí).
     pub fn saas_group(&self) -> bool {

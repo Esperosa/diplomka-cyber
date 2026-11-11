@@ -61,6 +61,8 @@ struct ProdEvidence<'a> {
         &'a crate::behavior::profile::HostProfiles,
         &'a crate::behavior::profile::ProfilePolicy,
     )>,
+    /// Koncová telemetrie běhu (krok 8); `None` = vypnuto.
+    endpoint: Option<&'a crate::endpoint::correlate::EndpointView>,
 }
 
 impl crate::verify_ladder::LadderEvidence for ProdEvidence<'_> {
@@ -190,6 +192,18 @@ impl crate::verify_ladder::LadderEvidence for ProdEvidence<'_> {
                 .copied()
         });
         case_verdict(profiles, policy, case, group, self.now.timestamp())
+    }
+
+    fn endpoint(
+        &self,
+        case: &crate::verify_ladder::CaseInput,
+    ) -> crate::endpoint::correlate::EndpointSignal {
+        match self.endpoint {
+            Some(view) => view.signal(&case.host_ip, &case.sources),
+            None => crate::endpoint::correlate::EndpointSignal::NoCoverage(
+                "koncova telemetrie vypnuta".into(),
+            ),
+        }
     }
 }
 
@@ -397,6 +411,12 @@ impl V3Session {
                 .findings
                 .dedup_by(|l, r| l.finding_id == r.finding_id);
         }
+        // krok 8: koncova telemetrie (identita proti inventari, sklad s limity, verdikty)
+        let endpoint_view = if self.engine.endpoint() {
+            Some(self.endpoint_view(report, &mut behavior_signal, now)?)
+        } else {
+            None
+        };
         if !self.engine.memory() {
             report.coverage_status = Some(self.coverage(report, &behavior_state, false, now));
             if self.engine.behavior() {
@@ -505,6 +525,7 @@ impl V3Session {
         ladder.policy.profile = self.engine.profile();
         // krok 7 (A1): chranene pripady se nevyvraci (plati i pro ulozeny zebrik)
         ladder.policy.protect = self.engine.protect();
+        ladder.policy.endpoint = self.engine.endpoint();
         if self.engine.protect() {
             let reset = ladder.reset_forbidden_novelty_evidence();
             if reset > 0 {
@@ -727,6 +748,7 @@ impl V3Session {
                     .engine
                     .profile()
                     .then_some((&behavior_state.profile, &profile_policy)),
+                endpoint: endpoint_view.as_ref(),
             };
             let decisions = ladder.step(cycle, &mut env);
             for decision in &decisions {
@@ -893,6 +915,52 @@ impl V3Session {
         report.coverage_status = Some(self.coverage(report, &behavior_state, sensor_gap, now));
         report.finding_lifecycle = lifecycle;
         Ok(())
+    }
+
+    /// Krok 8: načte uložené koncové události, přiřadí je hostům podle inventáře
+    /// (nejednoznačné a neznámé se do verdiktu nedostanou), přidá nálezy `endpoint_alert`
+    /// a zapíše pokrytí do reportu.
+    fn endpoint_view(
+        &self,
+        report: &mut RunReport,
+        behavior_signal: &mut std::collections::HashMap<String, (u32, Vec<String>)>,
+        now: DateTime<Utc>,
+    ) -> Result<crate::endpoint::correlate::EndpointView> {
+        use crate::endpoint::correlate::{
+            EndpointStore, EndpointView, HostDirectory, Limits, Policy,
+        };
+        let policy = Policy::default();
+        let limits = Limits::default();
+        let mut directory = HostDirectory::default();
+        for host in self.inventory.hosts().iter().chain(report.hosts.iter()) {
+            directory.add(
+                &host.ip,
+                host.hostname.as_deref(),
+                std::slice::from_ref(&host.ip),
+                host.mac.as_deref(),
+            );
+        }
+        let mut store = EndpointStore::new(limits.clone());
+        let events =
+            crate::endpoint::persist::load_recent(self.store.conn(), now, &policy, &limits)?;
+        for event in events {
+            let resolution = directory.resolve(&event.host);
+            store.ingest(event, &resolution, now.timestamp());
+        }
+        let view = EndpointView::build(&store, &directory, now.timestamp(), &policy);
+        for assessment in view.suspicious_hosts() {
+            let (finding, count, peers) = crate::endpoint::correlate::alert_finding(assessment);
+            behavior_signal.insert(finding.finding_id.clone(), (count, peers));
+            report.findings.push(finding);
+        }
+        report
+            .findings
+            .sort_by(|l, r| l.finding_id.cmp(&r.finding_id));
+        report
+            .findings
+            .dedup_by(|l, r| l.finding_id == r.finding_id);
+        report.endpoint_coverage = Some(view.coverage.clone());
+        Ok(view)
     }
 
     /// Krok 7 (A4): degradace pokrytí z dat běhu.

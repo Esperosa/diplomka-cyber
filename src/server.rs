@@ -135,6 +135,12 @@ pub async fn serve_with_config(addr: SocketAddr, config: AppConfig) -> Result<()
             post(post_closure_enable),
         )
         .route("/novelty/consent", post(post_novelty_consent))
+        .route(
+            "/endpoint/ingest",
+            post(post_endpoint_ingest).layer(axum::extract::DefaultBodyLimit::max(
+                crate::endpoint::correlate::Limits::default().max_batch_bytes,
+            )),
+        )
         .route("/platform/cluster", get(get_platform_cluster))
         .route("/platform/jobs", get(get_platform_jobs))
         .route("/platform/users", get(get_platform_users))
@@ -1257,6 +1263,49 @@ struct ConsentBody {
     days: i64,
     #[serde(default)]
     note: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct EndpointIngestQuery {
+    format: String,
+}
+
+/// Krok 8: příjem koncových událostí (JSONL, `?format=sysmon|wazuh|osquery`). Vstup je
+/// nedůvěryhodný: limity dávky, řádku a stáří, deduplikace; identita se řeší až v enginu.
+async fn post_endpoint_ingest(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<EndpointIngestQuery>,
+    body: String,
+) -> Response {
+    let auth = match authorize_for(&headers, &state, &["findings.write"]) {
+        Ok(auth) => auth,
+        Err(error) => return pair_to_response(error),
+    };
+    if let Err(error) = ensure_csrf_guard_header(&auth, &headers) {
+        return pair_to_response(error);
+    }
+    let format: crate::endpoint::Format = match query.format.parse() {
+        Ok(format) => format,
+        Err(message) => return error_response(StatusCode::BAD_REQUEST, message),
+    };
+    let root = state.workspace_root.clone();
+    match run_blocking(move || {
+        let mut store =
+            crate::engine_state::EngineStateStore::open(&root.join("engine-state.sqlite"))?;
+        crate::endpoint::persist::ingest_text(
+            store.conn_mut(),
+            format,
+            &body,
+            Utc::now(),
+            &crate::endpoint::correlate::Limits::default(),
+        )
+    })
+    .await
+    {
+        Ok(summary) => Json(summary).into_response(),
+        Err(response) => response,
+    }
 }
 
 /// Krok 7 (B5): úzký expirující souhlas s novou vazbou ven (nejvýš 30 dní).

@@ -292,6 +292,7 @@ mod tests {
             verification_decisions: Vec::new(),
             closure_audit: None,
             coverage_status: None,
+            endpoint_coverage: None,
         }
     }
 

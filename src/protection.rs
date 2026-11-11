@@ -25,6 +25,7 @@ pub const PROTECTED_TYPES: &[&str] = &[
     "egress_ids_alert",
     "ids_alert",
     "distributed_sources",
+    "endpoint_alert",
 ];
 
 /// Profil aktéra je pro chráněné pozorování zralý po 48 h (předregistrace A1, P4).
@@ -37,6 +38,7 @@ pub enum Protection {
     Graph,
     Signature,
     Aggregate,
+    Endpoint,
     Degraded,
     Ambiguous,
 }
@@ -48,6 +50,7 @@ impl Protection {
             Protection::Graph => "graph",
             Protection::Signature => "signature",
             Protection::Aggregate => "aggregate",
+            Protection::Endpoint => "endpoint",
             Protection::Degraded => "degraded",
             Protection::Ambiguous => "ambiguous",
         }
@@ -61,6 +64,8 @@ pub fn type_protection(kind: &str) -> Option<Protection> {
         "pivot_chain" => Some(Protection::Graph),
         "suricata_alert" | "egress_ids_alert" | "ids_alert" => Some(Protection::Signature),
         "distributed_sources" => Some(Protection::Aggregate),
+        // krok 8: podezrely koncovy signal se nikdy automaticky nezavre
+        "endpoint_alert" => Some(Protection::Endpoint),
         _ => None,
     }
 }
