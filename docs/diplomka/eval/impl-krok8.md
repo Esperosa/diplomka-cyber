@@ -1,0 +1,68 @@
+# Implementace, krok 8: koncová telemetrie (EDR-like) jako další druh důkazu
+
+Datum 2026-11-11. Výchozí stav: krok 7 (`78ba3e1`), preset `recommended()` = sestava kroku 7, výchozí režim `legacy`. Rešerše: `studie/08-endpoint-telemetrie.md`. Skákavka je síťová detekce, krok 8 přidává vrstvu, která čte VÝSTUPY hotových nástrojů (Sysmon a Windows log v JSON, Wazuh alerts, osquery results). Žádný vlastní agent.
+
+Cíl: slepá místa z registru kroku 7 (exploit_attempt 35,5 %, lateral_movement, pomalé a nenápadné c2 majáky) a bezpečné zavření falešných poplachů známým procesem.
+
+## A) Návrh
+
+### A1. Model a identita
+
+- `EndpointEvent` (`src/endpoint/model.rs`): zdroj, odkaz na host (`HostRef`: hostname, IP, MAC, id agenta), čas události, druh (`ProcessCreate`, `NetConnect`, `Logon`, `FileCreate`, `ServiceInstall`, `Persistence`, `Integrity`, `ProcessAccess`, `Alert`) a otisk obsahu. Všechna textová pole se oříznou na 512 znaků.
+- Identita: `HostDirectory` mapuje hostname, IP a MAC na host z inventáře. Jednoznačná shoda aspoň jednoho identifikátoru bez sporu = `Unique`. Spor nebo víc kandidátů = `Ambiguous`. Neznámý = `Unknown`. Ambiguous a Unknown události se počítají do pokrytí, ale do verdiktu nevstupují (ani jako podezřelé, ani jako neškodné).
+- Spojení s toky: pětice nebo Community ID v1 + čas s tolerancí 120 s; posun hodin agenta se odhaduje mediánem z aspoň 5 jednoznačných dvojic (ořez ±600 s).
+
+### A2. Pravidla (závazná, testovaná)
+
+1. Neškodný koncový signál NIKDY sám nezavře nález. Pro chráněný nález není důkaz vůbec (`Undetermined`). Pro ostatní je to jedna kontrola žebříku (L1, `endpoint`, LR 0,3) a vyvrácení dál vyžaduje posteriori ≤ 0,03 a tedy aspoň jeden další neškodný důkaz.
+2. Chybějící telemetrie z hosta je viditelná: `endpointCoverage` (kryté, tiché, neznámé hosty, podíl) v reportu. Host bez agenta dává `Unavailable`, ne neškodné.
+3. Nedůvěryhodný vstup: řádek ≤ 64 KiB, dávka ≤ 8 MiB a ≤ 50 000 událostí, ≤ 4 096 událostí na host v uložení, ≤ 2 000 událostí na host a cyklus (rate limit), událost z budoucnosti o víc než 1 h a starší než 24 h se odmítne, parser nepanikaří (fuzz test).
+4. Deduplikace podle otisku, řazení podle času události.
+5. Neškodné: známý podepsaný proces (cesta pod systémovou nebo programovou složkou + výrobce ze seznamu, nebo `Signed=true`) s pravidelným spojením na protistranu nálezu (≥ 6 spojení, variační koeficient intervalu < 0,2, vzor starší než 6 h a starší než nález). Může snížit prioritu nechráněného nálezu přes žebřík s auditní stopou (důvod v rozhodnutí, vzorek auditu druhu `ladder`).
+6. Podezřelé: podezřelý proces u hosta nálezu zvýší jistotu (`endpoint`, LR 12) a posune případ k potvrzení. Navíc vzniká samostatný nález `endpoint_alert` (chráněný typ, vždy zobrazen), když host sám má podezřelé indikátory se součtem váhy ≥ 3 (silný 3, střední 2, slabý 1): web server spouští shell, kódovaný příkaz, stažení přes nástroj systému, nepodepsaný proces z dočasné složky, přístup k LSASS, instalace nepodepsané služby, vzdálené přihlášení + vzdálené spuštění, série neúspěšných přihlášení, pravidelné spojení nepodepsaného procesu, změna kritického souboru, Wazuh pravidlo úrovně ≥ 10.
+7. Ochrana: přepínač `endpoint` je platný jen s `protect`. `endpoint_alert` je chráněný typ (nikdy automaticky zavřen ani vyvrácen).
+
+### A3. Zapojení
+
+`V3Features::endpoint` (výchozí vypnuto, mimo `recommended()`), `CheckId::Endpoint` a `LadderEvidence::endpoint` ve `verify_ladder`, typ `endpoint_alert` v `protection`, produkce v `pipeline/v3.rs` (události z `engine-state.sqlite`, tabulka `endpoint_events`), REST `POST /api/endpoint/ingest?format=sysmon|wazuh|osquery` (oprávnění `findings.write`, CSRF, limit těla) a CLI `endpoint ingest`. Bez přepínače je chování bajtově beze změny.
+
+### A4. Simulace
+
+`--endpoint on|off`, `--endpoint-coverage <procenta>`, `--endpoint-agent honest|silent|ok`. Generátor (`soak/endpoint_sim.rs`) odvozuje události z existujících rodin (bez nové techniky): exploit a webexploit (web server spouští shell), lateral (vzdálené přihlášení + služba), c2, fleet_beacon, dns_tunnel a cryptomining (pravidelné spojení nepodepsaného procesu), exfil a insider (velké spojení nepodepsaného procesu), ssh_bruteforce a credential_stuffing (série neúspěšných přihlášení), ransomware (soubory + proces z dočasné složky); benigní: aktualizace, záloha, monitoring a pravidelné vzory (podepsané procesy), správcovské nástroje (PsExec od správce: falešné podezření), šum. Agent: pokrytí hostů, výpadky, posun hodin, duplicity, zpoždění, kompromitovaný agent (`silent` nic neposílá, `ok` posílá jen „vše v pořádku“ z podepsaného procesu na protistranu útoku). Generátor píše autor, takže měří zapojení a invarianty, ne zisk na reálném provozu (viz studie 08, bod 4).
+
+## B) Předregistrace prahů (zamčeno commitem před prvním měřicím během)
+
+Seedy: ladicí 20261102, 20261103, 20261104 (po 40 sítích) a nové 20262201, 20262202 (po 40 sítích). Držené 20261901, 20262001, 20262101, 20262102, 20261201, 20261301 se nepoužijí; mega běh (seed 20261108) také ne. Výsledky proto nejsou držené a nepovolují změnu výchozího režimu, jen rozhodnutí, zda je vrstva za přepínačem připravena na držený běh. Rameno `v3k7` = `recommended()`, svět `--coverage full --families all`, `--no-legs --no-feedback --counterfactual --block-size 2`, 1 rameno najednou, nejvýš 4 vlákna, priorita Idle.
+
+Ramena: `off`, `on100`, `on60`, `on30` (pokrytí agenty 100, 60, 30 % hostů), `comp-silent` a `comp-ok` (pokrytí 100 %, kompromitovaný agent). Párově podle sítí, bootstrap po sítích (B = 2000), Wilsonovy intervaly.
+
+| práh | definice | splněno, když |
+|---|---|---|
+| E1 | recall exploit_attempt, `on100` − `off`, párově | ≥ +10 p. b. a dolní mez intervalu > 0 |
+| E2 | recall lateral_movement, `on100` − `off` | ≥ +8 p. b., dolní mez > 0 |
+| E3 | recall c2_beacon, `on100` − `off` | ≥ +8 p. b., dolní mez > 0 |
+| E4 | detekce souhrnně, `on100` − `off` | ≥ 0 p. b. |
+| E5 | zobrazené FP na síť-den, `on100` / `off` | ≤ 1,10 |
+| E6 | všechny zobrazené položky na síť-den, `on100` / `off` | ≤ 1,15 |
+| E7 | zavřeno omylem, počet útoků s omylem zavřeným nálezem, `on100` | ≤ `off` |
+| E8 | zavřeno omylem, `comp-ok`: počet útoků s omylem zavřeným nálezem | ≤ `off` + 1 % útoků a detekce `comp-ok` − `off` ≥ −1 p. b. |
+| E9 | `comp-silent`: detekce − `off` | ≥ −1 p. b. (mlčící agent nesmí zhoršit síťovou cestu) |
+| E10 | chráněná automatická zavření a zavření chráněného nálezu koncovým signálem | 0 |
+| E11 | monotónnost pokrytí: recall souhrn `on100` ≥ `on60` ≥ `on30` ≥ `off` − 0,5 p. b. | splněno |
+| E12 | fuzz parserů (100 000 náhodných a poškozených řádků na formát) a limity | 0 paniků, limity drženy |
+| E13 | determinismus: stejný seed dvakrát bit po bitu; legacy a v3 bez `endpoint` bajtově beze změny, golden snapshot zelený | shoda |
+| E14 | paniky a porušené invarianty ve všech ramenech | 0 a 0 |
+
+Rozhodnutí: když E1 až E14 projdou, vrstva je „připravena na držený běh“ (výchozí zůstává vypnutý, `recommended()` se nemění). Neúspěšný práh se zapíše poctivě a změna kódu po prvním měřicím běhu se zapíše jako odchylka (sekce D), práh se nemění.
+
+## C) Implementace
+
+(doplní se po implementaci)
+
+## D) Měření
+
+(doplní se)
+
+## E) Registr slepých míst po kroku 8
+
+(doplní se)

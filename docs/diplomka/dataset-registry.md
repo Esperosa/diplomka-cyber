@@ -208,3 +208,12 @@ Odchylka od A9: kategorie útoků se v UNSW-NB15 v čase prolínají, takže roz
 - **Vlna 1 (zbytek):** CSE-CIC-IDS2018, CICIoT2023 — každý jako nová `ScenarioSource` implementace v `src/eval/sources/`. CIC sady vyžadují registrační formulář s osobními údaji, takže jen přes veřejné přegenerované verze (Engelen a kol., CNS 2022), nebo po rozhodnutí uživatele.
 - **Vlna 2:** threat intel enrichment (NVD/KEV/EPSS, URLhaus, ThreatFox, OTX).
 - **Vlna 3:** Mininet/Containerlab generátor syntetických scénářů — zdroj prakticky neomezeného objemu kontrolovaných scénářů (DHCP/NAT churn, vlastní firewall/DNS/IPS politiky), včetně identity-churn scénářů, které IoT-23 ani CTU-13 nepokrývají.
+
+## Vlna 2 (krok 8, 2026-11-11): koncová telemetrie (jen záznam licencí, nic se nestahuje)
+
+| dataset | url | licence podle oficiální stránky | použití v kroku 8 |
+|---|---|---|---|
+| OTRF Security-Datasets | https://github.com/OTRF/Security-Datasets | stránka uvádí zároveň GPL-3.0 a MIT, nerozhodnuto | nepoužit; před použitím ověřit LICENSE |
+| EVTX-ATTACK-SAMPLES | https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES | GPL-3.0 | nepoužit, parser se testuje vlastními syntetickými záznamy |
+| DARPA OpTC | https://github.com/FiveDirections/OpTC-data | public domain, Distribution A, bez záruk | nepoužit (formát eCAR, velikost) |
+| LANL Unified Host and Network | https://csr.lanl.gov/data/cyber1/ | CC0 1.0, žádá citaci DOI 10.17021/1179829, stažení po zadání e-mailu | nepoužit (stažení vyžaduje e-mail, to se neodesílá) |
