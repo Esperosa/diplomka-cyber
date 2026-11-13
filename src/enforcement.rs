@@ -14,7 +14,7 @@
 //! "postav cisty/testovatelny jadro prvni, zapoj pozdeji" postupu, co uz
 //! zabral u `hypothesis.rs`/`verification_planner.rs`.
 //!
-//! Mantinely z kola 2 debaty (skeptik), vsechny vynucene TADY, v rozhodovaci
+//! Mantinely z navrhove revize, vsechny vynucene TADY, v rozhodovaci
 //! logice, ne jen jako doporuceni volajicimu:
 //! 1. **Chraneny rozsah je vynucen i proti explicitnimu pozadavku** - caller
 //!    nemuze blokovat gateway/management/loopback/multicast tim, ze o to

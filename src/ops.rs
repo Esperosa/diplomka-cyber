@@ -2,7 +2,7 @@
 //! audit log s hash-retezem, zivotni cyklus `enforce.block_ip` akci
 //! (proposed -> approved -> applied -> expired / rejected / failed), exekucni
 //! rozhrani `NftExecutor` a nezavisly sweep, ktery porovnava zivy `nft` stav s
-//! databazi (skeptikuv mantinel c. 2 z kola 2 debaty: jedna naplanovana "unblock"
+//! databazi (mantinel c. 2 z navrhove revize: jedna naplanovana "unblock"
 //! uloha nestaci - kernel timeout je prvni vrstva, sweep druha).
 //!
 //! Bezpecnostni invarianty (vsechny testovane):

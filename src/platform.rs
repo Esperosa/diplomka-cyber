@@ -1858,7 +1858,7 @@ mod tests {
     /// sekvencni simulace vyprseleho leasu. 4 OS vlakna soucasne bijou o 20 joby ve
     /// STEJNEM SQLite souboru pres `claim_due_job` (`TransactionBehavior::Immediate`
     /// ma dat vzajemne vyloucenou SELECT+UPDATE dvojici). Overuje presne tu obavu, co
-    /// skeptik v produkcnim auditu vznesl - "atomicita claim-query pod konkurenci
+    /// produkcni audit vznesl - "atomicita claim-query pod konkurenci
     /// nikdy neverena" - jde o vlakna v jednom procesu, ne oddelene OS procesy (ty
     /// jsou dalsi krok, Faze 2 v produkcnim planu), ale SQLite zamykani souboru je
     /// stejny mechanismus, ktery by resil i konkurenci mezi procesy na jednom stroji.

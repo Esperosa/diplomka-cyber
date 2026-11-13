@@ -485,7 +485,7 @@ mod tests {
         );
     }
 
-    /// Audit nalez (skeptik, produkcni gap analyza 30.10.2026): `identity.rs`
+    /// Audit nalez (produkcni gap analyza 30.10.2026): `identity.rs`
     /// nemel zadny produkcni vstupni bod - `IdentityResolver` zil jen v
     /// pameti jednoho testu/labu, nikdy ne pres 2 ODDELENE procesy (coz CLI
     /// invokace vzdy jsou). Tenhle test overuje presne tu cross-run
