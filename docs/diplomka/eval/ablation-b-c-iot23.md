@@ -27,5 +27,5 @@ Test `multi_target_pattern_on_iot23_malware_scenario_is_mostly_ntp_false_positiv
 ## Co to znamená pro další postup
 
 1. **Tento scénář (44-1, 237 flows) je na testování temporal windowingu příliš krátký/kompaktní** — potřeba scénář s delším rozpětím útoku nebo menším `time_window_s`, aby se ukázal rozdíl mezi A a B. Zapsáno jako otevřená otázka pro vlnu 1 datasetů (CTU-13 má delší/vícestupňové C2 scénáře).
-2. **Graph-linking potřebuje baseline-awareness** (odlišit periodický/known-good provoz od skutečného multi-target scanu) dřív, než bude use-ready — přesně shoda s tím, co risk-auditor v debatě o lokálním AI systému nazval "cirkulární past bez baseline".
+2. **Graph-linking potřebuje baseline-awareness** (odlišit periodický/known-good provoz od skutečného multi-target scanu) dřív, než bude use-ready — přesně shoda s dřívějším zjištěním z analýzy rizik lokálního AI systému o „cirkulární pasti bez baseline“.
 3. Žádná z těchto ablací nezasáhla do `correlation.rs`/`decision.rs`/`report.rs` — ablace A zůstává nezměněná referenční cesta.

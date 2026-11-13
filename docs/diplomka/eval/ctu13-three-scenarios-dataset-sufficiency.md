@@ -1,6 +1,6 @@
 # CTU-13: ze 1 na 3 scénáře, 2 malware rodiny (Deliverable 18)
 
-**Status: naměřeno (29. 10. 2026).** Reakce na vlastní limitaci zapsanou v `cross-dataset-ctu13.md`: "CTU-13 strana stojí na jediném scénáři (Botnet-54/Virut) z 13 dostupných — 'cross-dataset' zde fakticky znamená 'druhý capture soubor', ne prokázanou šíři generalizace." Rozšíření bylo v master plánu (`dalsi-postup-master-plan.md`) vědomě odloženo s odůvodněním "klesající návratnost" — uživatel se po předložení plánu rozhodl v tomhle bodě pokračovat dál navzdory doporučení pragmatika/skeptika, proto bylo provedeno.
+**Status: naměřeno (29. 10. 2026).** Reakce na vlastní limitaci zapsanou v `cross-dataset-ctu13.md`: "CTU-13 strana stojí na jediném scénáři (Botnet-54/Virut) z 13 dostupných — 'cross-dataset' zde fakticky znamená 'druhý capture soubor', ne prokázanou šíři generalizace." Rozšíření bylo v master plánu (`dalsi-postup-master-plan.md`) vědomě odloženo s odůvodněním "klesající návratnost" — autor se v tomhle bodě rozhodl pokračovat dál navzdory doporučení revizí rozsahu a metodiky, proto bylo provedeno.
 
 ## Co bylo přidáno
 

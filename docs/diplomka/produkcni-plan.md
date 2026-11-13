@@ -26,7 +26,7 @@
 
 **Multi-tenant/HA-DR**: všechny tři revize souhlasí, že spouštěcí podmínka je konkrétní (2. placený zákazník / enforcement vrstva live v produkci), ne kalendářní — tohle zůstává odloženo bez kontroverze.
 
-**Supply-chain**: levné, bez rizika scope creepu, všechny doporučují udělat brzy (SBOM, pinned deps, signed artifacts) bez ohledu na zbytek debaty.
+**Supply-chain**: levné, bez rizika scope creepu, doporučuji udělat brzy (SBOM, pinned deps, signed artifacts) bez ohledu na ostatní rozhodnutí.
 
 ## Rozhodnutí
 

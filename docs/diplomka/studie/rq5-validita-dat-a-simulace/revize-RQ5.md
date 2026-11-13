@@ -66,7 +66,7 @@ U 020 a 035 revize navíc doplnila nové údaje. Mezi 12 dříve nekontrolovaný
 | Abstrakt 4 | 26–73 p. b. | 26–72 p. b. | RQ5-047 |
 | Abstrakt 5 | „Nerealistický poměr tříd v testu ztrojnásobí F1 z 0,32 na 0,96“ | base rate 1 : 100 (RQ5-030) + podmíněný efekt poměru tříd (0,30 → 0,96 jen při tréninku s 90 %) | RQ5-032 |
 | Abstrakt 6 | „Útočníci a benigní cíle mají oddělené rozsahy veřejných IP“; „Suricata alerty vznikají jen z útoků“ | oddělení jen u běžného odchozího provozu (12 `externals` na síť), příchozí směr sdílený; „platné“ alerty jen z útoků | S1, S2 |
-| Metodika | – | odstavec o nezávislé kontrole a revizi; poznámka, že `mentions_ip` je jen v pracovní kopii a běh v2 mohl počítat starší atribucí; poznámka o rozpadlých tabulkách | protokol §9, bod 4 briefu |
+| Metodika | – | odstavec o nezávislé kontrole a revizi; poznámka, že `mentions_ip` je jen v pracovní kopii a běh v2 mohl počítat starší atribucí; poznámka o rozpadlých tabulkách | protokol §9, bod 4 |
 | (a) CICIDS2017 | „Bot 0,60 → 0,99, Infiltration 0,11 → 0,00“ | Bot, XSS, Infiltration 0,81 → 0,91, SQL 0,11 → 0,00 | RQ5-004 |
 | (a) ToN-IoT | duplicity u ToN-IoT, „kvalitativně“ | duplicity u NF-ToN-IoT; filtrace přibližně 14 % toků | RQ5-060 |
 | (a) OpTC | F1 GAE 0,52 vs 0,24 | + „klient 201; u 501 opačně 0,38 vs 0,60“ | RQ5-023 |
