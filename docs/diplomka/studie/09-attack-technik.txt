@@ -1,0 +1,112 @@
+T1595.001	reconnaissance	Scanning IP Blocks	net
+T1595.002	reconnaissance	Vulnerability Scanning	net
+T1595.003	reconnaissance	Wordlist Scanning	net
+T1190	initial-access	Exploit Public-Facing Application	net
+T1189	initial-access	Drive-by Compromise	both
+T1566.001	initial-access	Spearphishing Attachment	both
+T1566.002	initial-access	Spearphishing Link	both
+T1133	initial-access	External Remote Services	net
+T1078	initial-access	Valid Accounts	both
+T1078.004	initial-access	Cloud Accounts	both
+T1199	initial-access	Trusted Relationship	net
+T1200	initial-access	Hardware Additions	net
+T1659	initial-access	Content Injection	net
+T1205	command-and-control	Traffic Signaling	net
+T1205.001	command-and-control	Port Knocking	net
+T1505.003	persistence	Web Shell	both
+T1071.001	command-and-control	Web Protocols	net
+T1071.002	command-and-control	File Transfer Protocols	net
+T1071.003	command-and-control	Mail Protocols	net
+T1071.004	command-and-control	DNS	net
+T1071.005	command-and-control	Publish/Subscribe Protocols	net
+T1090.001	command-and-control	Internal Proxy	net
+T1090.002	command-and-control	External Proxy	net
+T1090.003	command-and-control	Multi-hop Proxy	net
+T1090.004	command-and-control	Domain Fronting	net
+T1095	command-and-control	Non-Application Layer Protocol	net
+T1102.001	command-and-control	Dead Drop Resolver	net
+T1102.002	command-and-control	Bidirectional Communication	net
+T1102.003	command-and-control	One-Way Communication	net
+T1105	command-and-control	Ingress Tool Transfer	both
+T1132.001	command-and-control	Standard Encoding	net
+T1132.002	command-and-control	Non-Standard Encoding	net
+T1568.001	command-and-control	Fast Flux DNS	net
+T1568.002	command-and-control	Domain Generation Algorithms	net
+T1568.003	command-and-control	DNS Calculation	net
+T1572	command-and-control	Protocol Tunneling	net
+T1573.001	command-and-control	Symmetric Cryptography	net
+T1573.002	command-and-control	Asymmetric Cryptography	net
+T1571	command-and-control	Non-Standard Port	net
+T1008	command-and-control	Fallback Channels	net
+T1219	command-and-control	Remote Access Tools	both
+T1001.001	command-and-control	Junk Data	net
+T1001.002	command-and-control	Steganography	net
+T1001.003	command-and-control	Protocol or Service Impersonation	net
+T1104	command-and-control	Multi-Stage Channels	net
+T1665	command-and-control	Hide Infrastructure	net
+T1030	exfiltration	Data Transfer Size Limits	net
+T1041	exfiltration	Exfiltration Over C2 Channel	net
+T1048.001	exfiltration	Exfiltration Over Symmetric Encrypted Non-C2 Protocol	net
+T1048.002	exfiltration	Exfiltration Over Asymmetric Encrypted Non-C2 Protocol	net
+T1048.003	exfiltration	Exfiltration Over Unencrypted Non-C2 Protocol	net
+T1567.001	exfiltration	Exfiltration to Code Repository	net
+T1567.002	exfiltration	Exfiltration to Cloud Storage	net
+T1567.003	exfiltration	Exfiltration to Text Storage Sites	net
+T1567.004	exfiltration	Exfiltration Over Webhook	net
+T1029	exfiltration	Scheduled Transfer	net
+T1020	exfiltration	Automated Exfiltration	net
+T1537	exfiltration	Transfer Data to Cloud Account	both
+T1046	discovery	Network Service Discovery	net
+T1018	discovery	Remote System Discovery	both
+T1040	credential-access	Network Sniffing	host
+T1049	discovery	System Network Connections Discovery	host
+T1135	discovery	Network Share Discovery	both
+T1087.002	discovery	Domain Account	both
+T1069.002	discovery	Domain Groups	both
+T1482	discovery	Domain Trust Discovery	both
+T1016.001	discovery	Internet Connection Discovery	both
+T1110	credential-access	Brute Force	net
+T1110.001	credential-access	Password Guessing	net
+T1110.003	credential-access	Password Spraying	net
+T1110.004	credential-access	Credential Stuffing	net
+T1558.003	credential-access	Kerberoasting	both
+T1558.004	credential-access	AS-REP Roasting	both
+T1558.001	credential-access	Golden Ticket	both
+T1558.002	credential-access	Silver Ticket	both
+T1003.006	credential-access	DCSync	net
+T1187	credential-access	Forced Authentication	net
+T1557	credential-access	Adversary-in-the-Middle	both
+T1557.001	credential-access	Name Resolution Poisoning and SMB Relay	net
+T1557.002	credential-access	ARP Cache Poisoning	net
+T1557.003	credential-access	DHCP Spoofing	net
+T1528	credential-access	Steal Application Access Token	both
+T1539	credential-access	Steal Web Session Cookie	both
+T1552.005	credential-access	Cloud Instance Metadata API	both
+T1021.001	lateral-movement	Remote Desktop Protocol	net
+T1021.002	lateral-movement	SMB/Windows Admin Shares	net
+T1021.003	lateral-movement	Distributed Component Object Model	net
+T1021.004	lateral-movement	SSH	net
+T1021.005	lateral-movement	VNC	net
+T1021.006	lateral-movement	Windows Remote Management	net
+T1550.002	lateral-movement	Pass the Hash	both
+T1550.003	lateral-movement	Pass the Ticket	both
+T1210	lateral-movement	Exploitation of Remote Services	net
+T1570	lateral-movement	Lateral Tool Transfer	net
+T1563.002	lateral-movement	RDP Hijacking	both
+T1039	collection	Data from Network Shared Drive	net
+T1074.002	collection	Remote Data Staging	net
+T1114.002	collection	Remote Email Collection	both
+T1530	collection	Data from Cloud Storage	both
+T1213	collection	Data from Information Repositories	both
+T1602.001	collection	SNMP (MIB Dump)	net
+T1602.002	collection	Network Device Configuration Dump	both
+T1498.001	impact	Direct Network Flood	net
+T1498.002	impact	Reflection Amplification	net
+T1499.001	impact	OS Exhaustion Flood	net
+T1499.002	impact	Service Exhaustion Flood	net
+T1496	impact	Resource Hijacking	both
+T1486	impact	Data Encrypted for Impact	both
+T1600	defense-impairment	Weaken Encryption	net
+T1542.005	stealth	TFTP Boot	net
+T1197	execution	BITS Jobs	both
+T1091	lateral-movement	Replication Through Removable Media	host
