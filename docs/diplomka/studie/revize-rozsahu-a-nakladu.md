@@ -1,6 +1,6 @@
-# Kritika pragmatika: 00-zaver-jak-vylepsit-core.md (v1.0)
+# Revize rozsahu a nákladů: 00-zaver-jak-vylepsit-core.md (v1.0)
 
-Úhel: realizovatelnost a praktická užitečnost pro správce malé až střední sítě, omezené zdroje (jeden vývojář, jeden stroj, na kterém běží `bakula-soak-*`). Čtu studii celou a audit 01 jen tam, kam studie odkazuje. Závažnost 0 až 4 (4 = zablokuje nebo zcela znehodnotí plán). Nic jsem nespouštěl ani neměnil.
+Zaměření: realizovatelnost a praktická užitečnost pro správce malé až střední sítě, omezené zdroje (jeden vývojář, jeden stroj, na kterém běží `bakula-soak-*`). Studii jsem četl celou, audit 01 jen tam, kam studie odkazuje. Závažnost 0 až 4 (4 = zablokuje nebo zcela znehodnotí plán). Nic jsem nespouštěl ani neměnil.
 
 ## 0. Ověření odkazů v kódu (osm klíčových plus dva doplňkové)
 
@@ -128,7 +128,7 @@ Předpoklad: jeden vývojář, žádný zásah do `bakula-soak-*`, commit po kus
 | 4 | R5: kalibrace prahů na L a CTU-13 (ne podle parametrů generátoru), test `ddos_volume`. A/B běh 1. | tabulka packet_rate FP před/po, ddos recall |
 | 5 | R7-lite: historie klíče, medián/MAD, minimální počet toků a pozorování místo průřezového z-skóre. | commit + testy |
 | 6 | R7-lite: gating při otevřeném nálezu, A/B běh 2, kontrola recallu po rodinách. | tabulka inductive FP před/po |
-| 7 | Rezerva/oprava, zápis do `kritika`-deníku (co selhalo). Pokud pokles FP < 50 %, zastavit a zjistit proč, než se jde dál. | rozhodnutí go/no-go |
+| 7 | Rezerva/oprava, zápis do deníku neúspěchů (co selhalo). Pokud pokles FP < 50 %, zastavit a zjistit proč, než se jde dál. | rozhodnutí go/no-go |
 | 8 | R4-lite: pole `first_seen/last_seen/occurrences` v `Finding` (`serde(default)`), migrace uložených nálezů, test. | commit |
 | 9 | R4-lite: stavový modul, znovuvydání při změně stadia, Δp, nové zdrojové IP nebo nového typu, po klidu. Strop kardinality a TTL. | testy zábradlí (útok na otevřený nález) |
 | 10 | R4-lite: agregace `unmapped` podle (cíl, port, typ, den); R3 `classify_signature` podle kategorie a prefixu, zrušit větev portu 80, pravidlo `ids_alert` v `SERVICE_RULES`. | commit |

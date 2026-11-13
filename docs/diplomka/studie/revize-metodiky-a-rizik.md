@@ -1,13 +1,13 @@
-# Kritika (skeptik a metodolog): `00-zaver-jak-vylepsit-core.md` v1.0
+# Revize metodiky a rizik: `00-zaver-jak-vylepsit-core.md` v1.0
 
-Datum 2026-11-01. Nezávislé adversariální čtení. Studii ani jiné soubory jsem neměnil, nic jsem nespouštěl (kromě čtení CSV skriptem) a procesů `bakula-soak-*` jsem se nedotkl.
+Datum 2026-11-01. Zaměření: metodika, statistika a rizika závěrů. Studii ani jiné soubory jsem neměnil, nic jsem nespouštěl (kromě čtení CSV skriptem) a procesů `bakula-soak-*` jsem se nedotkl.
 
 Závažnost: 0 = kosmetika, 1 = drobnost, 2 = zkresluje dílčí závěr, 3 = ohrožuje doporučení nebo plán, 4 = zneplatňuje studii.
 
 ## 0. Co jsem ověřoval a co ne
 
 - **Řádky extrakce proti textu tvrzení (24 řádků):** RQ1-001, -017, -018, -019, -024, -038, -039, -040, -048; RQ2-019, -043; RQ3-001, -015, -020, -021, -025; RQ4-002, -012, -014, -023, -024, -039, -040, -047; RQ5-030; RQ6-001, -002, -003, -009, -031, -046. Nesoulad textu s řádkem jsem našel u 4 z nich (RQ3-025, RQ6-002, RQ1-024, RQ2-019), viz K1 až K4.
-- **Zdroje přes veřejnou URL: neověřoval jsem.** Na pokyn koordinátora (šetřit, žádná další široká rešerše) jsem tento bod vypustil. Pět ověření zdroje, které zadání požadovalo, tedy chybí. Kandidáti na doplnění: RQ6-002 (arXiv 2610.10608), RQ3-025 (Stoll ACSAC09 PDF), RQ1-024 (USENIX LISA07 PDF), RQ4-039 (arXiv 2607.29390), RQ1-038 (arXiv 2609.02465).
+- **Zdroje přes veřejnou URL: neověřoval jsem.** Kvůli rozsahu (bez další široké rešerše) jsem tento bod vynechal. Plánovaných pět ověření zdrojů tedy chybí. Kandidáti na doplnění: RQ6-002 (arXiv 2610.10608), RQ3-025 (Stoll ACSAC09 PDF), RQ1-024 (USENIX LISA07 PDF), RQ4-039 (arXiv 2607.29390), RQ1-038 (arXiv 2609.02465).
 - **Čísla z měření:** všech 14 čísel z [v1] sedí se `soak-findings.md` (210,7; 75 %; 22 %; 68 % z 74,1 M; 68,8/0,0 %; 2 301 z 5 061; 0,0 → 42,1 %; 4,7/0,3 %; 0,2 %; 12,5 %; Brier 0,0107; 8,7/1,7 %; 6 z 20; halda bez trendu). **`F:\Projekty\bakula-soak\run-v2b\status.md` se mezitím přepsal**: teď je to snímek po 1,25 h, 234 sítí a 1 955 síť-dnů, studie čerpala ze snímku po 1,00 h (190 sítí, 1 586 síť-dnů). Proto jsem u 18 čísel z [v2b] kontroloval konzistenci, ne přesnou shodu. 16 z nich je konzistentních (podíly FP typů 45,7/36,5/10,3/5,0 %, mimo rozpočet 89,7 %, exploit 67,5/0,0 % a IDS 185/461, exfil 0,0 → 35,1 %, c2 11,7 %, lateral 54,2 %, lookalike 98,2/94,5/89,4/75,8/74,3/0/0/0 %, Brier 0,0213, koš [0,9; 1) 83,0 %, identita 32,2/21,0 %, 6 z 20, halda +61 MiB/h). Dvě čísla konzistentní nejsou, viz K5 a K6.
 
 ---
@@ -164,4 +164,4 @@ Předregistrace soaku v3 se v současné podobě nesmí zamrazit.
 7. **K1:** opravit výklad nerozhodnutosti (BotProbe 15,4 % je se stropem 3 kol) a z toho odvozené kritérium V3-H23.
 8. **K2:** u LLM uvést jeden preprint a jeden model, doplnit protichůdný údaj AIDA 3,1 % FNR a doporučení opřít o injection riziko a chybějící replikaci.
 9. **K3 a K9:** ATLANTIDES neopravňuje efekt degradace podle inventáře (H12 přesunout do P3). D5 přeřadit ze „strukturální chyby jádra“ na smíšený jev s A32.
-10. **K7 a K10:** sjednotit jistoty v §6 podle pravidla 2.2 (RQ4 Z9 je střední) a v §8.1 přiznat odhadovanou chybovost interpretace kolem 15 %. Před použitím v diplomce projít všechna tvrzení s jistotou střední a vyšší a ověřit 5 zdrojů přes URL, což tato kritika nestihla.
+10. **K7 a K10:** sjednotit jistoty v §6 podle pravidla 2.2 (RQ4 Z9 je střední) a v §8.1 přiznat odhadovanou chybovost interpretace kolem 15 %. Před použitím v diplomce projít všechna tvrzení s jistotou střední a vyšší a ověřit 5 zdrojů přes URL, což tato revize nestihla.
