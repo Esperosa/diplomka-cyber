@@ -222,7 +222,7 @@ fn bump_reclaim_count(
 /// Presune zpravu, ktera prekrocila `max_delivery_attempts`, z hlavniho streamu do
 /// DLQ: zapsat do DLQ streamu, ACK na puvodnim streamu (odstrani z PEL, jinak by se
 /// XAUTOCLAIM pokusel prevzit ji znovu), a smazat jeji citac pokusu.
-/// Audit nalez (Haiku, 30.10.2026): drive 3 oddelene round-tripy (XADD, XACK, HDEL) -
+/// Audit nalez (30.10.2026): drive 3 oddelene round-tripy (XADD, XACK, HDEL) -
 /// kdyby spojeni spadlo mezi XADD a XACK, zprava by skoncila v DLQ I SOUCASNE
 /// zustala v PEL puvodniho streamu (dalsi reclaim by ji zkusil znovu, pripadne vytvoril
 /// duplicitni DLQ zaznam). `redis::pipe().atomic()` (MULTI/EXEC) zajisti, ze vsechny
@@ -285,7 +285,7 @@ pub fn dead_letter_messages(config: &RedisBrokerConfig) -> Result<Vec<BrokerMess
     Ok(messages)
 }
 
-/// Audit nalez (Haiku, 30.10.2026): drive mazalo jen XACK, nikdy ne `reclaim-counts`
+/// Audit nalez (30.10.2026): drive mazalo jen XACK, nikdy ne `reclaim-counts`
 /// HASH zaznam pro `stream_id` - kazda zprava, ktera byla alespon jednou reklaimovana
 /// a POTE uspesne potvrzena, by navzdy zustala jako "zapomenute" pole v HASH (neomezeny
 /// rust v Redisu v case). Ted se oba zaznamy mazaji spolecne v jedne (atomicke) pipeline.
@@ -558,7 +558,7 @@ mod tests {
         cleanup(&config);
     }
 
-    /// Regresni test na audit nalez (Haiku, 30.10.2026): `ack()` drive mazalo jen
+    /// Regresni test na audit nalez (30.10.2026): `ack()` drive mazalo jen
     /// XACK, nikdy ne `reclaim-counts` HASH zaznam - zprava, ktera byla alespon 1x
     /// reklaimovana a POTE uspesne potvrzena, by navzdy zustala jako zapomenute pole
     /// v HASH (neomezeny rust v Redisu v case). Primo cte hash pres `redis` klienta

@@ -10,7 +10,7 @@
 //!
 //! **OPRAVA 29.10.2026 (puvodne mapovano chybne):** prvni verze tohoto parseru
 //! mapovala `Background` na `label="Benign"` - zduvodnene jako "zjednoduseni", ale
-//! nezavisla kontrola (Opus Plan agent) na realnych datech ukazala, ze z 26 212
+//! nezavisla kontrola na realnych datech ukazala, ze z 26 212
 //! (dst_ip,proto,port) klicu v CTU-13 vyrezu je 25 317 (96,6 %) "Background-only".
 //! Pocitat vsechny tyhle klice jako potvrzene benigni v confusion matrix NENI
 //! "zjednoduseni s dokumentovanou limitaci" - je to chyba, ktera sama o sobe

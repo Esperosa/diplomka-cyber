@@ -1,6 +1,6 @@
 //! `enforce.block_ip` (`docs/diplomka/produkcni-plan.md`, Faze C) - orchestrace
-//! EXISTUJICIHO `nftables`, ne vlastni packet-path engine. Shoda vsech 3 agentu
-//! (Opus comprehensive, pragmatik, skeptik) po 2-kolove debate 31.10.2026: vlastni
+//! EXISTUJICIHO `nftables`, ne vlastni packet-path engine. Shoda vsech tri
+//! nezavislych revizi po dvou kolech 31.10.2026: vlastni
 //! firewall/IPS engine je nebezpecny pro solo vyvojare bez zadneho ostreho
 //! nasazeni (blast radius: uzamceni operatora z vlastni site, vypadek DNS,
 //! falesny block na kriticke infrastrukture).

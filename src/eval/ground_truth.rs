@@ -7,7 +7,7 @@ use crate::passive::ConnectionObservation;
 /// Tri hodnoty `label`, ne dve: "Malicious" / "Benign" / "Unknown". Puvodne (do 29.10.2026)
 /// mel CTU-13 jen binarni Malicious/Benign a "Background" (neoverenej provoz, ne
 /// potvrzene benigni - CTU-13 metodologie sama tak Background definuje) se mapoval na
-/// "Benign". Nezavisla kontrola (Opus Plan agent) na realnych datech ukazala, ze z
+/// "Benign". Nezavisla kontrola na realnych datech ukazala, ze z
 /// 26 212 (dst_ip,proto,port) klicu v CTU-13 vyrezu je 25 317 (96,6 %) "Background-only",
 /// a tahle chyba sama zpusobila hlasenou precision 0.083 namisto realistictejsich 0.77
 /// po vyrazeni neznamych klicu. `is_unknown()` umoznuje `dataset_replay.rs` VYRADIT

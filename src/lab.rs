@@ -574,7 +574,7 @@ mod tests {
 
     /// Cesty k realnym ProjectDiscovery binarkam (ne systemovy PATH - viz modulova
     /// dokumentace k mismatchi s jinym `httpx`). Prepsatelne env promennymi pro CI/jine
-    /// stroje; vychozi odpovida tomu, kam byly binarky pro tuto session nainstalovany.
+    /// stroje; vychozi odpovida tomu, kam byly binarky pro toto prostredi nainstalovany.
     fn httpx_bin() -> PathBuf {
         std::env::var("BAKULA_TEST_HTTPX_BIN")
             .map(PathBuf::from)
@@ -990,7 +990,7 @@ mod tests {
         );
     }
 
-    /// PUVODNI PREDPOKLAD (moje i nezavisleho Plan-agent review pred implementaci) byl,
+    /// PUVODNI PREDPOKLAD (i nezavisle revize pred implementaci) byl,
     /// ze z 8 kurátorovanych sablon (`resources/nuclei-templates/controlled/`, cilenych
     /// na exposed admin panely) nic na Juice Shopu nesedne, a 0 nalezu bude spravny
     /// nulovy vysledek. REALNE MERENI to vyvratilo: tahle verze Juice Shopu vystavuje

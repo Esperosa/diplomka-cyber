@@ -41,7 +41,7 @@ use crate::{
 /// `default_value` atributy fungujou nezavisle (jen pri `--help`/parsovani
 /// CLI), takze `BehArgs::default()` dava JINE hodnoty nez skutecne CLI
 /// defaulty (`ports=[]` misto `[21,22,23,80,443,8080]`, `provider=""` misto
-/// `"demo"` atd.) - overeno auditem (haiku, 30.10.2026).
+/// `"demo"` atd.) - overeno auditem (30.10.2026).
 #[derive(Args, Debug, Clone, Default)]
 pub struct BehArgs {
     #[arg(long)]
@@ -1630,7 +1630,7 @@ mod tests {
 
     use super::*;
 
-    /// Retrospektivni audit (2 nezavisle haiku review, 29.10.2026) spravne
+    /// Retrospektivni audit (2 nezavisle revize, 29.10.2026) spravne
     /// odhalil, ze golden-snapshot test NEPOKRYVA chybove vetve
     /// `validate_pipeline_args`/`validate_monitor_args` (fixtura je vzdy
     /// platna) - golden pouziva jen `--pentest`/`--production`/vadne cesty
@@ -1768,7 +1768,7 @@ mod tests {
         args.suricata_eve = Some(suricata.path().to_path_buf());
         args.nmap_xml = None;
         args.spustit_nmap = false;
-        // Audit nalez (haiku, 30.10.2026): `..Default::default()` v
+        // Audit nalez (30.10.2026): `..Default::default()` v
         // `minimal_valid_args` uz davalo `disable_circl=false`, takze puvodni
         // `assert!(!prepared.disable_circl)` by prosel i kdyby
         // `apply_production_profile`'s `args.disable_circl = false;` (radek

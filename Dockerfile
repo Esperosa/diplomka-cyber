@@ -3,7 +3,7 @@
 # bylo doslovne pravda. Multi-stage build: UI bundle (Node/esbuild), Rust
 # binarka (--release), a nakonec minimalni runtime image.
 #
-# Lokalne neoverene (Docker Desktop na vyvojovem stroji teto session nejde
+# Lokalne neoverene (Docker Desktop na vyvojovem stroji nejde
 # nastartovat), ale CI `docker` job (.github/workflows/ci.yml) skutecne
 # sestavi tenhle image, spusti kontejner a overi odpoved na /api/health na
 # realnem Linuxu - prvni beh po pridani tohoto Dockerfile prosel (zelene CI,

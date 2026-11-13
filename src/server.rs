@@ -688,7 +688,7 @@ fn authorize_for(
     }
 }
 
-/// Audit nalez (31.10.2026, 3-agentni produkcni audit): `token == expected`
+/// Audit nalez (31.10.2026, produkcni audit se tremi nezavislymi revizemi): `token == expected`
 /// pouzivalo `String::eq`, ktere konci na prvnim ruznem bajtu - timing
 /// side-channel proti statickemu API tokenu (vzdalenost odezvy koreluje s
 /// poctem spravne uhodnutych prefix-bajtu). Konstantni-casove porovnani bez

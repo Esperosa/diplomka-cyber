@@ -595,7 +595,7 @@ pub(crate) fn rank_finding(
     }
     if is_multi_sensor_confirmed(finding) {
         // H2 krok 4 (produkcni-plan.md): presne tvrzeni, zpresneno po auditu
-        // (Haiku, 30.10.2026) - tenhle bonus TOHLE JEDNO skore ZVYSUJE (neni to
+        // (30.10.2026) - tenhle bonus TOHLE JEDNO skore ZVYSUJE (neni to
         // "nulovy efekt"). Co bonus NENI: fusion.rs uz predtim zabranilo tomu, aby
         // stejny tok od 2 senzoru existoval jako 2 ODDELENE eventy/findings - bez
         // tohohle kroku by `rank_finding` bezelo 2x (jednou na kazdy) a jejich skore

@@ -30,8 +30,7 @@ mod tests {
 
     /// Regresni test na konkretni bug (29.10.2026): vsechny 3 hashe v
     /// `docs/diplomka/dataset-registry.md` byly useknute o 1 hex znak pri rucnim
-    /// prepisu ze `sha256sum` vystupu - odhaleno nezavislou kontrolou (Opus Plan
-    /// agent). Ted se hash committed souboru pocita a porovnava automaticky, ne
+    /// prepisu ze `sha256sum` vystupu - odhaleno nezavislou kontrolou. Ted se hash committed souboru pocita a porovnava automaticky, ne
     /// znovu rucne prepisuje - zadny budouci prepis uz nemuze tise rozejit kod a
     /// dokumentaci.
     fn sha256_hex(path: &Path) -> String {

@@ -67,7 +67,7 @@ impl ConfusionMatrix {
     /// Triviální "klasifikuj vse jako malicious" na STEJNE (known, ne-unknown) mnozine
     /// klicu - recall je vzdy 1.0, precision = prevalence. Bez tohoto srovnani neni
     /// jasne, jestli detektor skutecne neco umi, nebo jen kopíruje prevalenci - presne
-    /// pitfall "missing baseline", ktery nezavisla kontrola (Opus Plan agent, 29.10.2026)
+    /// pitfall "missing baseline", ktery nezavisla kontrola
     /// u puvodnich tabulek oznacila. `(precision, recall, f1)`.
     pub(crate) fn trivial_always_positive_baseline(&self) -> (f64, f64, f64) {
         let total_known =

@@ -142,7 +142,7 @@ fn mask_epoch_seconds(text: &str) -> String {
 /// aplikuji jen na CISLO hned za markerem, ne na cely retezec kolem nej -
 /// puvodni verze nahrazovala celou hodnotu "<VOLATILE_TIMING_TEXT>", coz by
 /// schovalo i zmenu neceho DETERMINISTICKEHO ve stejnem retezci (napr.
-/// nazvu role agenta) - nezavisle odhaleno 2 review (Fable + Haiku),
+/// nazvu role agenta) - nezavisle odhaleno 2 revizemi,
 /// 29.10.2026.
 const VOLATILE_TIMING_MARKERS: &[&str] = &[
     "runtime_ms=",
@@ -173,7 +173,7 @@ fn mask_numbers_after_markers(text: &str) -> String {
                 .bytes()
                 .take_while(|byte| byte.is_ascii_digit() || *byte == b'.')
                 .count();
-            // Audit nalez (haiku, 30.10.2026): bez teto podminky by "<N>" vznikl
+            // Audit nalez (30.10.2026): bez teto podminky by "<N>" vznikl
             // i kdyz za markerem ZADNE cislo neni (prazdna/chybejici hodnota) -
             // takovou regresi by test tise prehledl. Nic se nemaskuje, pokud
             // zadne cislo nenasledovalo - zbytek retezce zustava nedotceny a

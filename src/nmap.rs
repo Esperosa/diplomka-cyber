@@ -430,8 +430,8 @@ fn sanitize_nmap_xml(xml: &str) -> String {
         .join("\n")
 }
 
-/// Audit nalez (31.10.2026, 3-agentni produkcni audit - Opus/pragmatik/skeptik
-/// nezavisle nasli stejnou veci): `run_forensic_followup_nmap` nikdy nekontrolovalo
+/// Audit nalez (31.10.2026, produkcni audit - tri nezavisle revize
+/// nasly stejnou veci): `run_forensic_followup_nmap` nikdy nekontrolovalo
 /// cile proti `--scope` - pokud operator kombinuje `--nmap-xml <soubor>` (externe
 /// vytvorena inventura, muze obsahovat libovolne IP) s `--spustit-nmap
 /// --hloubkove-overeni`, `nmap_path` se vezme z XML (ma prioritu), ale forenzni

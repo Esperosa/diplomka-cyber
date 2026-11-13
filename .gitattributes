@@ -1,5 +1,5 @@
 # Golden-snapshot soubory (tests/golden_snapshot.rs) se porovnávají bajtově
 # (serde_json::to_string_pretty, vždy LF). Bez tohohle by `core.autocrlf=true`
 # na Windows checkoutu převedlo commitnutý LF na CRLF, test by pak spadl i
-# beze skutečné změny chování - nezávisle odhaleno 2 review agenty 29.10.2026.
+# beze skutečné změny chování - nezávisle odhaleno 2 revizemi 29.10.2026.
 tests/golden/*.json text eol=lf

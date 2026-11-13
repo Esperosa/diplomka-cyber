@@ -122,7 +122,7 @@ fn severity_from_score(score: f64) -> Severity {
 /// Community ID nema casovou slozku (jen 5-tuple) - bez tohoto stropu by znovu-
 /// pouziti efemerniho portu po dlouhe dobe (ruzne, nesouvisejici spojeni se
 /// STEJNYM 5-tuple) mohlo sloucit 2 eventy, ktere spolu fakticky nesouvisi. Audit
-/// nalez (Haiku, 30.10.2026). 900s (15 min) je vedomy, konzervativni odhad - realny
+/// nalez (30.10.2026). 900s (15 min) je vedomy, konzervativni odhad - realny
 /// dual-senzor capture (Deliverable 25) mel rozdil v radu sekund mezi senzory.
 const MAX_FUSION_TIME_GAP_S: i64 = 900;
 
@@ -212,7 +212,7 @@ fn merge_cross_sensor_group(group: Vec<NormalizedEvent>) -> NormalizedEvent {
     sensors.sort();
     sensors.dedup();
 
-    // Audit nalez (Haiku, 30.10.2026): drive se zprava vzala jen z JEDNOHO (nejvyssi
+    // Audit nalez (30.10.2026): drive se zprava vzala jen z JEDNOHO (nejvyssi
     // severity) vybraneho eventu - text ostatnich (napr. CVE/plaintext klicove slovo
     // u jineho senzoru s nizsi severity) se tise zahodil, cimz mohl zmizet signal, na
     // ktery `decision.rs::is_cve_signal`/`is_plaintext_signal` spoleha (ctou text
@@ -562,7 +562,7 @@ mod tests {
         assert_eq!(fused[0].severity, Severity::High);
     }
 
-    /// Regresni test na audit nalez (Haiku, 30.10.2026): merge drive vzal `message`
+    /// Regresni test na audit nalez (30.10.2026): merge drive vzal `message`
     /// jen z reprezentativniho (nejvyssi severity) eventu - text ostatnich senzoru
     /// (tady CVE klicove slovo u Low-severity Zeek eventu) se tise zahodil, cimz by
     /// `decision.rs::is_cve_signal` (string-match na evidence) prestalo fungovat pro
