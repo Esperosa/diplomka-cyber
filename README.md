@@ -4,7 +4,7 @@ Skákavka je program pro síťovou detekci a vyhodnocení hrozeb. Spojuje aktivn
 
 Název balíčku, binárky (`bakula-program`), konfigurace (`bakula.toml`) a proměnných prostředí zůstává z dřívějšího pracovního názvu *Bakula*. Jde o tentýž projekt.
 
-Veřejná softwarová příloha prací na FIM UHK. Kód je v `src/`, testy v `tests/`, webové UI v `ui/` (zdroje v `ui-src/`), dokumentace v `docs/`.
+Veřejná softwarová příloha diplomové práce na FIM UHK (navazuje na dřívější bakalářskou práci, ze které zůstal pracovní název Bakula). Kód je v `src/`, testy v `tests/`, webové UI v `ui/` (zdroje v `ui-src/`), dokumentace v `docs/`.
 
 ## Co program dělá
 

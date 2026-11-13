@@ -84,16 +84,16 @@ Aktualni verze je vyrazne provoznejsi nez puvodni prototyp, ale porad z ni pocti
 - multi-tenant prostredi a rozsahle provozni governance,
 - nastroj, ktery by nahrazoval SIEM/IDS/VM ekosystem v plnem rozsahu.
 
-## Soulad s bakalarskou praci
+## Soulad s puvodni praci (Bakula)
 
-Tato vrstva je v souladu s textem bakalarske prace v tom, ze:
+Tato vrstva je v souladu s textem puvodni prace (Bakula) v tom, ze:
 
 - zachovava auditovatelny report a zdrojove artefakty,
 - nepretvari heuristiky za jiste vysledky,
 - rozviji prototyp smerem k realnejsimu provozu,
 - ale netvrdi, ze tim byl prokazan univerzalni enterprise-grade provoz bez dalsi validace.
 
-Primarni myslenka bakalarske prace zustava stejna:
+Primarni myslenka puvodni prace (Bakula) zustava stejna:
 
 - aktivni inventar,
 - vulnerability enrichment,

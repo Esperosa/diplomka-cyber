@@ -1,10 +1,10 @@
-# Soulad s primarni myslenkou bakalarske prace
+# Soulad s primarni myslenkou puvodni prace (Bakula)
 
-Tento dokument shrnuje, zda aktualni program odpovida primarni myslence bakalarske prace:
+Tento dokument shrnuje, zda aktualni program odpovida primarni myslence puvodni prace (Bakula):
 
 > fingerprinting sluzeb a pasivni analyza sitoveho provozu pro detekci bezpecnostnich hrozeb v lokalni siti, s jednotnym auditovatelnym reportem a poctivym vymezenim nejistoty.
 
-## Primarni osa bakalarske prace
+## Primarni osa puvodni prace (Bakula)
 
 Z LaTeX textu vyplyva, ze jadro reseni ma byt:
 
@@ -47,7 +47,7 @@ Program oddeluje fingerprinting od enrichmentu a uklada zdroj, cas stazeni, kand
 
 ### 3. Pasivni cast
 
-Splneno v rozsahu bakalarskeho prototypu.
+Splneno v rozsahu puvodniho prototypu (Bakula).
 
 - `src/passive/*`
 - `src/correlation.rs`
@@ -81,7 +81,7 @@ Splneno jako pomocna vrstva nad reportem.
 - `src/server.rs`
 - `ui/*`
 
-UI je nadstavba nad reportem, ne samostatny zdroj pravdy. To je v souladu s bakalarskou praci, kde je hlavnim artefaktem auditovatelny report.
+UI je nadstavba nad reportem, ne samostatny zdroj pravdy. To je v souladu s puvodni praci (Bakula), kde je hlavnim artefaktem auditovatelny report.
 
 ## Co bylo potreba vycistit
 
@@ -93,7 +93,7 @@ Proto bylo upraveno:
 - dokumentace explicitne oddeluje jadro prototypu od volitelnych provoznich rozsireni,
 - spousteci postup pro reprezentativni thesis-aligned beh je uveden samostatne.
 
-## Co je navic oproti bakalarske praci
+## Co je navic oproti puvodni praci
 
 Nad ramec jadra jsou k dispozici:
 
@@ -104,11 +104,11 @@ Nad ramec jadra jsou k dispozici:
 - externi PostgreSQL control-plane backend,
 - rolling upgrade policy a cluster metadata.
 
-Tato vrstva neni v rozporu s bakalarskou praci, pokud je interpretovana jako navazujici rozsireni a ne jako nova hlavni osa projektu.
+Tato vrstva neni v rozporu s puvodni praci (Bakula), pokud je interpretovana jako navazujici rozsireni a ne jako nova hlavni osa projektu.
 
 ## Zavěr
 
-Aktualni program odpovida primarni myslence bakalarske prace tehdy, kdyz je pouzivan predevsim jako:
+Aktualni program odpovida primarni myslence puvodni prace (Bakula) tehdy, kdyz je pouzivan predevsim jako:
 
 - aktivni inventar + vulnerability enrichment + pasivni korelace + jednotny report + overeni scenaru.
 
@@ -120,4 +120,4 @@ cargo run -- overeni spust --workspace .\workspace --scenare .\workspace\simulac
 cargo run -- server spust --workspace .\workspace
 ```
 
-Pokud by byl program prezentovan hlavne jako cluster orchestrator nebo univerzalni network manager, s bakalarskou praci by se rozchazel. V aktualnim stavu tomu tak neni; thesis core je zachovano a v dokumentaci je znovu postaveno na prvni misto.
+Pokud by byl program prezentovan hlavne jako cluster orchestrator nebo univerzalni network manager, s puvodni praci (Bakula) by se rozchazel. V aktualnim stavu tomu tak neni; thesis core je zachovano a v dokumentaci je znovu postaveno na prvni misto.

@@ -8,7 +8,7 @@ https://github.com/Esperosa/service-fingerprinting-passive-analysis
 
 Purpose:
 
-- public source-code appendix for the bachelor thesis,
+- public source-code appendix for the master's (diploma) thesis,
 - reproducible reference for the implemented prototype,
 - documentation of the verification workspace and executable workflow.
 

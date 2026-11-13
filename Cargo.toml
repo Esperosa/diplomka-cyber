@@ -2,7 +2,7 @@
 name = "bakula-program"
 version = "0.1.0"
 edition = "2024"
-description = "Prototyp pro fingerprinting sluzeb a pasivni analyzu sitoveho provozu."
+description = "Skakavka: sitova detekce a vyhodnoceni hrozeb (pasivni a aktivni korelace, hypotezy, overovani, pamet pripadu)."
 license-file = "LICENSE"
 publish = false
 
