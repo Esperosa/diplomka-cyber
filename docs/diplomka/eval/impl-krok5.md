@@ -156,7 +156,7 @@ U každého slepého místa se uvádí, jaký obecný signál by ho mohl zachyti
 
 - **CIC-IDS2017:** oficiální stažení (UNB CIC) vyžaduje registrační formulář se jménem a e-mailem. Podle pravidel práce se osobní údaje do externích služeb neposílají, proto se použije veřejně stažitelná přegenerovaná verze Engelen a kol. (WTMC 2021, opravené toky a štítky téhož záznamu), soubor `dataset.zip` po jednotlivých dnech přes HTTP Range.
 - **UNSW-NB15:** oficiální sdílená složka UNSW. Bez přihlášení se stahuje jen tehdy, když to jde. Jinak se zapíše jako otevřený bod a nic se neobchází.
-- Do repa se nic nestahuje. Výřezy leží v `F:\bakula-datasets\` s SHA-256 v `dataset-registry.md`. Kód je čte z cesty v proměnné `BAKULA_EXTERNAL_DATASETS`.
+- Do repa se nic nestahuje. Výřezy leží v `F:\Projekty\bakula-datasets\` s SHA-256 v `dataset-registry.md`. Kód je čte z cesty v proměnné `BAKULA_EXTERNAL_DATASETS`.
 - **Výřez** = všechny toky v okně [první tok skupiny štítků − 30 min, poslední tok + 30 min], nejvýš 3 h od začátku okna. Neškodné výřezy jsou dvě hodinová okna pondělí CIC-IDS2017. Rozdělení je pevné po skupinách štítků (ne po tocích):
   - vývojová část: CIC `tue-ftp-patator`, `wed-dos-slow` (slowloris, Slowhttptest), `fri-botnet`, `mon-benign-am`; UNSW první výřez s kategoriemi Reconnaissance a Exploits;
   - testovací část (zamčená, otevře se jednou v G): CIC `tue-ssh-patator`, `wed-dos-hulk-goldeneye`, `thu-web`, `thu-infiltration`, `fri-portscan`, `fri-ddos`, `mon-benign-pm`; UNSW druhý výřez s ostatními kategoriemi.

@@ -2,7 +2,7 @@
 
 Datum 2026-11-01 až 2026-11-04. Kód: commity `333329a` a `2ef75f8` (detektory, z dřívějška), `08efd59` až `HEAD` tohoto kroku (větev `main`, nepushnuto). Měření: ladicí seedy 20261102, 20261103, 20261104, každý 40 sítí, `--block-size 2 --no-legs --no-feedback --counterfactual`, šum neškodných vzorů 1× (výchozí). Držené seedy (20261201, 20261301) ani testovací část kotvy se nespustily. Všechna soak čísla jsou ze simulace.
 
-Commity: `08efd59` (bod 1), `06d77bc` (body 2 až 4 v generátoru: šum, XXXL a rodiny sdílejí stejné konfigurační struktury, proto jeden commit), `33d967c` (bod 4, kotva), `05af7f5` (měření pro bod 5), dokumentace zvlášť. Surové výstupy: `F:\bakula-soak\ab\k3\reports\`. Přepočet: `python tools/soak_ab.py --a <dirs> --b <dirs>`.
+Commity: `08efd59` (bod 1), `06d77bc` (body 2 až 4 v generátoru: šum, XXXL a rodiny sdílejí stejné konfigurační struktury, proto jeden commit), `33d967c` (bod 4, kotva), `05af7f5` (měření pro bod 5), dokumentace zvlášť. Surové výstupy: `F:\Projekty\bakula-soak\ab\k3\reports\`. Přepočet: `python tools/soak_ab.py --a <dirs> --b <dirs>`.
 
 Ramena (stejný harness, stejný svět včetně neškodných vzorů 1×, párově po sítích, 120 sítí, 1 236 virtuálních síť-dnů):
 
@@ -62,7 +62,7 @@ Modul `src/soak/benign_regular.rs`, přepínač `--noise <k>` (výchozí 1, 0 = 
 
 **Nezávislost světa:** každá instance má vlastní náhodný proud, vzory se emitují po všech ostatních tocích a před degradací telemetrie (ztráta, duplicita podle otisku toku). Test `regular_benign_noise_only_adds_flows` ověřuje na 12 sítích × 3 cyklech, že zapnutí šumu 10× žádný jiný tok nezmění ani neodstraní. Falešné poplachy na vzorech se počítají zvlášť (`regular_fp`, `vzor|typ nálezu`): nepřipsaný nález, jehož host a protistrana tvoří dvojici vzoru v tomto cyklu.
 
-**Kontrola proti reálným datům** (vývojová část kotvy, `empirical_benign`): pravidelné dvojice (≥ 8 toků, CV mezer < 0,2) jsou i v reálném neškodném provozu. V CTU-13 je to 1 až 3 z 13 až 50 dvojic na scénář s mezerou 20 až 31 s a 234 s, v IoT-23 hodinová (3600 s) a dvouhodinová (7209 s) periodicita. Generátor tedy pravidelný neškodný provoz nepřehání. Ruční konstanty generátoru jsem empirickými kvantily nenahradil: vyřezy CTU-13 jsou krátké (1 až 6 půlhodinových oken) a IoT-23 má jeden až dva hosty na záznam, takže rozdělení velikostí a délek z nich nereprezentuje podnikovou síť. Kvantily jsou v `F:\bakula-soak\ab\k3\reports\anchor-dev.txt`.
+**Kontrola proti reálným datům** (vývojová část kotvy, `empirical_benign`): pravidelné dvojice (≥ 8 toků, CV mezer < 0,2) jsou i v reálném neškodném provozu. V CTU-13 je to 1 až 3 z 13 až 50 dvojic na scénář s mezerou 20 až 31 s a 234 s, v IoT-23 hodinová (3600 s) a dvouhodinová (7209 s) periodicita. Generátor tedy pravidelný neškodný provoz nepřehání. Ruční konstanty generátoru jsem empirickými kvantily nenahradil: vyřezy CTU-13 jsou krátké (1 až 6 půlhodinových oken) a IoT-23 má jeden až dva hosty na záznam, takže rozdělení velikostí a délek z nich nereprezentuje podnikovou síť. Kvantily jsou v `F:\Projekty\bakula-soak\ab\k3\reports\anchor-dev.txt`.
 
 ## 3) Velké sítě (XXXL)
 

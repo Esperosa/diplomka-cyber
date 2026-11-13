@@ -1,6 +1,6 @@
 # Studie 04: syntéza dat, datová intuice a dedukce/abdukce ve Skákavce
 
-Stav: 2026-10-31. Autor: výzkumná studie (bez zásahu do kódu). Čísla o Skákavce pocházejí z `docs/diplomka/eval/soak-findings.md` (soak v1, 15 664 sítí) a z průběžného `F:\bakula-soak\run-v2-72h\status.md` (566 sítí, 3,5 h, čteno jen pro čtení). Jsou to výsledky simulace, ne měření živých sítí.
+Stav: 2026-10-31. Autor: výzkumná studie (bez zásahu do kódu). Čísla o Skákavce pocházejí z `docs/diplomka/eval/soak-findings.md` (soak v1, 15 664 sítí) a z průběžného `F:\Projekty\bakula-soak\run-v2-72h\status.md` (566 sítí, 3,5 h, čteno jen pro čtení). Jsou to výsledky simulace, ne měření živých sítí.
 Hranice: o kódu, rešerši FP a pokrytí útoků píší jiné studie ve stejném adresáři; tady je jen odkazuji (viz kapitola Odkazy na ostatní studie).
 Poctivost zdrojů: u každého tvrzení je URL a rok. Co jsem nečetl celé (jen abstrakt/výsledek vyhledávání), je označeno „nečteno celé“. Co je moje úvaha bez zdroje, je označeno „odhad“ nebo „úvaha“.
 

@@ -1,6 +1,6 @@
 # Soak v1: nalezy (3 h, 15 664 siti, 31 079 virtualnich sit-dnu)
 
-Zdroj: `F:\bakula-soak\run80h\final-report.md`, commit `995ec76`, seed 20260131, 18 vlaken, legs zapnute.
+Zdroj: `F:\Projekty\bakula-soak\run80h\final-report.md`, commit `995ec76`, seed 20260131, 18 vlaken, legs zapnute.
 Beh byl cisty (STOP po 3,03 h). `soak verify --samples 30`: **30/30 bloku bit po bitu shodnych**.
 Cisla jsou z modelu (simulace) a kotvy na realnych datech; nejsou meranim zivych siti.
 

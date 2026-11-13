@@ -335,4 +335,4 @@ Postup: (1) FP baseline na LANL a vlastních datech, (2) recall C2 na CTU-13 a M
 | CISA Volt Typhoon, LOTL | https://cisa.gov/news-events/alerts/2024/02/07/cisa-and-partners-release-advisory-prc-sponsored-volt-typhoon-activity-and-supplemental-living-land | 2024 | z vyhledávání, ověřit přímo |
 | Přehled datasetů | https://github.com/shramos/Awesome-Cybersecurity-Datasets | různé | rozcestník |
 | arXiv 2609.19091 (RITA vs. LN mezičasy) | https://arxiv.org/pdf/2609.19091 | 2026 | jen ve výsledcích, nečteno |
-| Interní měření | docs/diplomka/eval/soak-findings.md; F:\bakula-soak\run-v2-72h\status.md | 2026 | přečteno (status průběžný) |
+| Interní měření | docs/diplomka/eval/soak-findings.md; F:\Projekty\bakula-soak\run-v2-72h\status.md | 2026 | přečteno (status průběžný) |

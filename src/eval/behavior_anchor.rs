@@ -141,11 +141,11 @@ pub fn scenarios_k5(part: Part, unlock: bool) -> Result<&'static [&'static str]>
     }
 }
 
-/// Kořen externích datasetů (mimo git): `BAKULA_EXTERNAL_DATASETS`, jinak `F:/bakula-datasets`.
+/// Kořen externích datasetů (mimo git): `BAKULA_EXTERNAL_DATASETS`, jinak `F:/Projekty/bakula-datasets`.
 pub fn external_root() -> std::path::PathBuf {
     std::env::var_os("BAKULA_EXTERNAL_DATASETS")
         .map(Into::into)
-        .unwrap_or_else(|| "F:/bakula-datasets".into())
+        .unwrap_or_else(|| "F:/Projekty/bakula-datasets".into())
 }
 
 /// Načte scénář `ctu13/<dir>` nebo `iot23/<dir>` z `repo_root/labs/datasets`,

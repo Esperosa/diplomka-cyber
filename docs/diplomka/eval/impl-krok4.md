@@ -66,7 +66,7 @@ Poznámka k měření času (G4): stroj sdílí jiné úlohy mimo tuto práci (l
 
 ## C) Výsledky slepého testu
 
-Binárka z commitu `eea4060` (zapsáno ve všech `final-report.md`), skript `F:\bakula-soak\ab\k4\blind\run-blind.ps1`, běh 2026-11-04 18:45 až 20:10, vše s nízkou prioritou. Všech 16 soak běhů doběhlo (log `blind.log`), v logech není žádná panika, `ERROR` ani `WARN`. Jediná hlášení `VAROVANI ... nelze naparsovat JSON` patří k záměrně poškozeným řádkům alertů ze simulátoru (`src/soak/episode.rs`), mají ve všech ramenech stejného seedu stejný počet a zpracují se bez pádu. Vyhodnocení `tools/soak_gates.py` beze změny prahů, plný výstup v `F:\bakula-soak\ab\k4\blind\gates.txt`.
+Binárka z commitu `eea4060` (zapsáno ve všech `final-report.md`), skript `F:\Projekty\bakula-soak\ab\k4\blind\run-blind.ps1`, běh 2026-11-04 18:45 až 20:10, vše s nízkou prioritou. Všech 16 soak běhů doběhlo (log `blind.log`), v logech není žádná panika, `ERROR` ani `WARN`. Jediná hlášení `VAROVANI ... nelze naparsovat JSON` patří k záměrně poškozeným řádkům alertů ze simulátoru (`src/soak/episode.rs`), mají ve všech ramenech stejného seedu stejný počet a zpracují se bez pádu. Vyhodnocení `tools/soak_gates.py` beze změny prahů, plný výstup v `F:\Projekty\bakula-soak\ab\k4\blind\gates.txt`.
 
 ### G1: zobrazené FP na síť-den
 
@@ -115,7 +115,7 @@ G2a splněno (všech 6 rodin s n ≥ 100 nad −5 p. b.), G2b splněno. Pod prah
 
 ### G6: zamčená testovací část kotvy (bez prahu)
 
-Spuštěno jednou (krok skriptu slepého testu, 20:08 až 20:10, `cargo test --release --lib behavior_anchor_test_once -- --ignored`, výstup `F:\bakula-soak\ab\k4\blind\anchor.out`). Podruhé jsem ji nespouštěl. Hosté s libovolným behaviorálním nálezem (škodliví / neškodní):
+Spuštěno jednou (krok skriptu slepého testu, 20:08 až 20:10, `cargo test --release --lib behavior_anchor_test_once -- --ignored`, výstup `F:\Projekty\bakula-soak\ab\k4\blind\anchor.out`). Podruhé jsem ji nespouštěl. Hosté s libovolným behaviorálním nálezem (škodliví / neškodní):
 
 | scénář | toků | škodliví s nálezem | neškodní s nálezem | typy |
 |---|---:|---:|---:|---|
@@ -144,8 +144,8 @@ Proč G4 selhal: měřil jsem podle předregistrace (jedno vlákno, jedna síť 
 
 Uživatel chce dlouhý komplexní běh v3 bez ohledu na G4. Výchozí režim zůstává `legacy`, běh tedy měří v3 jako volitelný režim.
 
-- Binárka z commitu `b3a6dd0` (kód shodný s `eea4060` slepého testu), kopie `F:\bakula-soak\bin\bakula-soak-v3-k4-b3a6dd0.exe`. Spuštěno 2026-11-04 20:12:17, PID 7212, priorita BelowNormal, výstup `F:\bakula-soak\run-v3-72h`, stdout a stderr `F:\bakula-soak\run-v3-72h.out` a `.err`, příkaz v `F:\bakula-soak\run-v3-72h.cmd.txt`.
-- Příkaz: `soak run --out F:\bakula-soak\run-v3-72h --seed 20261105 --wall-hours 72 --threads 12 --engine v3 --noise-mix 1:0.6,10:0.3,50:0.1 --xxxl-share 0.015 --cf-share 0.2 --families all`. Výchozí preset v3 je bez grafu (A), nohy jsou zapnuté (kotva jen vývojová část, `is_dev` v `src/eval/anchor.rs`), zpětná vazba zapnutá, blok 16 sítí.
+- Binárka z commitu `b3a6dd0` (kód shodný s `eea4060` slepého testu), kopie `F:\Projekty\bakula-soak\bin\bakula-soak-v3-k4-b3a6dd0.exe`. Spuštěno 2026-11-04 20:12:17, PID 7212, priorita BelowNormal, výstup `F:\Projekty\bakula-soak\run-v3-72h`, stdout a stderr `F:\Projekty\bakula-soak\run-v3-72h.out` a `.err`, příkaz v `F:\Projekty\bakula-soak\run-v3-72h.cmd.txt`.
+- Příkaz: `soak run --out F:\Projekty\bakula-soak\run-v3-72h --seed 20261105 --wall-hours 72 --threads 12 --engine v3 --noise-mix 1:0.6,10:0.3,50:0.1 --xxxl-share 0.015 --cf-share 0.2 --families all`. Výchozí preset v3 je bez grafu (A), nohy jsou zapnuté (kotva jen vývojová část, `is_dev` v `src/eval/anchor.rs`), zpětná vazba zapnutá, blok 16 sítí.
 - Navázání po přerušení: stejný příkaz s `--resume` (zachová seed, velikost bloku i délku epizod).
 - Noha broker (H5) nemá Redis (spojení odmítnuto), hlásí se jako nedostupná. Ostatní nohy běží.
 - Binárka je starší než oprava ve F, takže časy cyklu v tomto běhu jsou zatížené zápisem varování parseru na stderr. Výsledky detekce to neovlivňuje.

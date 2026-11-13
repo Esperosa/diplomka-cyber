@@ -175,7 +175,7 @@ Vysvětlení zvyšují důvěru spolehlivěji než přesnost. Jediná randomizov
 
 ## Překlad do praxe (Skákavka)
 
-Napojení na naše měření (soak v2, `F:\bakula-soak\run-v2-72h\status.md`, 3,5 h, 566 sítí):
+Napojení na naše měření (soak v2, `F:\Projekty\bakula-soak\run-v2-72h\status.md`, 3,5 h, 566 sítí):
 
 - Provozní události generují falešné nálezy téměř vždy: patch_window 99,2 %, collector_replay 97,3 %, log_corruption 94,8 %, sensor_crash 93,0 %, service_crash 91,7 %. To odpovídá nálezu průmyslového hodnocení, že detektory selhávají na stále se měnících benigních aktivitách (Z9, RQ6-043), i tomu, že analytici tytéž případy označují jako „benigní spouštěče“ (RQ6-029). Literatura tu nepřináší detektor, přináší evidenci: spolehlivost senzoru (Z10) a explicitní benigní vysvětlení (Z11).
 - 68 % plánů ověřování ve v1 bylo mimo rozpočet. Alert-Bench ukazuje, že prázdné ověření souvisí se zamítnutím útoku (asociace, Z3). Pomalé rodiny útoků, které nejvíc trpí (c2_beacon detekováno 12,5 %, rogue_device 7,4 %, cryptomining 24,7 %), jsou přesně ty, kde ověření nic nevrátí.

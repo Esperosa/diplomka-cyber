@@ -147,7 +147,7 @@ curl -s -r 0-200 "$URL45" | head -1 > h.tmp; curl -s -r 58000000-89457279 "$URL4
 
 ## Vlna 1 (krok 5, 2026-11-04): CIC-IDS2017 a UNSW-NB15
 
-Obě sady jsou mimo git v `F:\bakula-datasets\` (proměnná `BAKULA_EXTERNAL_DATASETS`). Do repa jde jen kód zdroje, skripty výřezu (`tools/datasets/`) a hashe níže. Rozdělení na vývojovou a zamčenou testovací část je v `docs/diplomka/eval/anchor-split.txt` (`[dev-k5]`, `[test-k5]`, SHA-256 testovací části `b1dbb1ca…`), pravidla jsou v `impl-krok5.md`, A9.
+Obě sady jsou mimo git v `F:\Projekty\bakula-datasets\` (proměnná `BAKULA_EXTERNAL_DATASETS`). Do repa jde jen kód zdroje, skripty výřezu (`tools/datasets/`) a hashe níže. Rozdělení na vývojovou a zamčenou testovací část je v `docs/diplomka/eval/anchor-split.txt` (`[dev-k5]`, `[test-k5]`, SHA-256 testovací části `b1dbb1ca…`), pravidla jsou v `impl-krok5.md`, A9.
 
 ### CIC-IDS2017 (přegenerovaná verze Engelen a kol.)
 

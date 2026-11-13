@@ -131,7 +131,7 @@ Obecný princip, který z obou plyne: test musí obsahovat data, která autor de
 
 ## Co z toho přímo platí pro soak harness
 
-Fakta o kódu jsme ověřili v `src/soak/` (stav 2026-10-31). Čísla jsou z `F:\bakula-soak\run-v2-72h\status.md` (3,5 h, 566 sítí, 4 784 virtuálních síť-dnů) a z `docs/diplomka/eval/soak-findings.md`.
+Fakta o kódu jsme ověřili v `src/soak/` (stav 2026-10-31). Čísla jsou z `F:\Projekty\bakula-soak\run-v2-72h\status.md` (3,5 h, 566 sítí, 4 784 virtuálních síť-dnů) a z `docs/diplomka/eval/soak-findings.md`.
 
 | # | zkreslení v soaku | doklad v kódu | obdoba v literatuře | jak změřit | jak odstranit |
 |---|---|---|---|---|---|

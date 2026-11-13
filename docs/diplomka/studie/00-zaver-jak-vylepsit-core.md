@@ -6,7 +6,7 @@ Konvence:
 - `RQn-xxx` je id řádku v `rqN-*/extrakce.csv`.
 - `RQn Zk` je závěr v tabulce Závěry revidované `rqN-*/studie.md`. Jistota je převzatá beze změny nebo snížená, nikdy zvýšená.
 - `[v1]` = `docs/diplomka/eval/soak-findings.md`.
-- `[v2b]` = `F:\bakula-soak\run-v2b\status.md`, **snímek 2026-11-01 00:03 SEČ** (1,00 h běhu, 190 sítí, 1 586 virtuálních síť-dnů, seed 20261101). Všechna čísla označená [v2b] jsou z tohoto snímku. Soubor se přepisuje: skeptik četl snímek po 1,25 h (234 sítí), při revizi měl soubor 9,50 h. Pozdější snímky jsem do čísel nepřebíral. Snímkové hodnoty nejsou stacionární (K11, bod 5).
+- `[v2b]` = `F:\Projekty\bakula-soak\run-v2b\status.md`, **snímek 2026-11-01 00:03 SEČ** (1,00 h běhu, 190 sítí, 1 586 virtuálních síť-dnů, seed 20261101). Všechna čísla označená [v2b] jsou z tohoto snímku. Soubor se přepisuje: skeptik četl snímek po 1,25 h (234 sítí), při revizi měl soubor 9,50 h. Pozdější snímky jsem do čísel nepřebíral. Snímkové hodnoty nejsou stacionární (K11, bod 5).
 - `[A01]` až `[A35]` jsou nálezy auditu kódu `01-analyza-kodu-a-zdroje-sumu.md`. Ručně jsem je ověřil jen tam, kde je uvedeno „ověřeno“.
 - „vlastní výpočet“ = aritmetika nad uvedeným souborem. „odhad autora“ = číslo bez důkazu, s popsaným postupem. „volba autora“ = parametr návrhu experimentu, ne tvrzení o světě.
 

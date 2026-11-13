@@ -2,7 +2,7 @@
 
 Datum 2026-11-01. Kód: commity `b21d992` až `7a2ac7d` (větev `main`, nepushnuto). Měření: ladicí seedy 20261102, 20261103, 20261104, každý 40 sítí, `--block-size 2 --no-legs --no-feedback`, 120 sítí, 1 236 virtuálních síť-dnů na rameno. Držené seedy (20261201, 20261301) ani kotva CTU-13/IoT-23 se nepoužily. Všechna čísla jsou ze simulace, ne z reálných sítí.
 
-Surové výstupy: `F:\bakula-soak\ab\<rameno>-<seed>\{networks.jsonl, final-report.json, final-report.md}`, souhrny `F:\bakula-soak\ab\reports\` (`ab-main.md` = plná tabulka legacy proti v3, `ablation.md`, `agg-h0.txt`, `agg-r3l.txt`). Přepočet: `python tools/soak_ab.py --a <legacy dirs> --b <v3 dirs>` a `python tools/soak_ablation.py`.
+Surové výstupy: `F:\Projekty\bakula-soak\ab\<rameno>-<seed>\{networks.jsonl, final-report.json, final-report.md}`, souhrny `F:\Projekty\bakula-soak\ab\reports\` (`ab-main.md` = plná tabulka legacy proti v3, `ablation.md`, `agg-h0.txt`, `agg-r3l.txt`). Přepočet: `python tools/soak_ab.py --a <legacy dirs> --b <v3 dirs>` a `python tools/soak_ablation.py`.
 
 ## Shrnutí
 

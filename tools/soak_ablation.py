@@ -2,7 +2,7 @@
 """Souhrnna tabulka ablaci: kazda konfigurace v3 proti stejnemu legacy ramenu.
 
 Pouziti: python tools/soak_ablation.py LEGACY_PREFIX NAZEV=PREFIX [NAZEV=PREFIX ...]
-PREFIX = adresar bez seedu (napr. F:/bakula-soak/ab/r3-v3); seedy 20261102..04.
+PREFIX = adresar bez seedu (napr. F:/Projekty/bakula-soak/ab/r3-v3); seedy 20261102..04.
 """
 import os
 import sys

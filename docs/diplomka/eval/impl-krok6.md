@@ -105,7 +105,7 @@ Na v3 jako výchozí se přepne jen tehdy, když `v3k6` splní prahy G1 až G5 z
 
 Kód: `4a461c1` (kandidáti za přepínači `--v3-on sensor_strict | ops_class | novelty | context_guard`, `graph` existoval), `b5a913c` (měření: fronta podezření a fronta provoz, typy FP poruch, držená lookalike `saas_adoption`), `fecbe66` (nástroj), `bf16fc3` (třída provoz v produkční cestě v3, záznam `ops_reason` v životním cyklu nálezu). Výchozí svět i ladicí svět dávají s novou binárkou bajtově stejný `networks.jsonl` jako binárka kroku 5 (4 sítě seedu 20261611, v3 s kontrafaktuálem, 0 rozdílů po odečtení nových polí). Všechny přepínače jsou mimo preset, `V3Features::recommended()` se nemění.
 
-Běhy: binárka `b5a913c` (první kolo), `22d62af` (úprava novosti) a `8828834` (úprava třídy provoz). Stroj sdílely dva 72h běhy, proto 2 ramena současně, 2 vlákna, priorita Idle, celkové zatížení 43 až 51 %. Párově proti `v3k5`, bootstrap po sítích stratifikovaný po seedech (B = 2000). Výstupy jsou v `F:\bakula-soak\ab\k6\tuning`, plné srovnání vybrané sestavy je v `docs/diplomka/eval/k6/tuning-v3k5-v3k6.md`.
+Běhy: binárka `b5a913c` (první kolo), `22d62af` (úprava novosti) a `8828834` (úprava třídy provoz). Stroj sdílely dva 72h běhy, proto 2 ramena současně, 2 vlákna, priorita Idle, celkové zatížení 43 až 51 %. Párově proti `v3k5`, bootstrap po sítích stratifikovaný po seedech (B = 2000). Výstupy jsou v `F:\Projekty\bakula-soak\ab\k6\tuning`, plné srovnání vybrané sestavy je v `docs/diplomka/eval/k6/tuning-v3k5-v3k6.md`.
 
 Základ `v3k5`: 3 759 útoků, detekce 79,1 %, zobrazené FP 21,3 na síť-den, zavřeno omylem 34 / 2 313 = 1,47 % (horní mez 2,05 %), K3 laděné nové poruchy 70,0 % výskytů se zobrazeným FP, LOFO zobecňuje 2 ze 6 (ssh 54/56, lateral 36/72).
 

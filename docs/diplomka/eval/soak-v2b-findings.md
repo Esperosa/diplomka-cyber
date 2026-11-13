@@ -1,6 +1,6 @@
 # Soak v2b: nálezy (14,56 h, 2 312 sítí, 22 600 virtuálních síť-dnů)
 
-Zdroj: `F:\bakula-soak\run-v2b\final-report.md`. Běh s opraveným měřením (přesné porovnání IP, zaručeně neprázdný seznam obětí, atribuce provozních událostí jen v okně události; commit harnessu `a293d2b`, status uvádí `15e6fd5`, binárka vznikla z necommitnutého stromu). Seed 20261101 (v návrhu studie označen jako ladicí). Engine beze změny: jde o **základní hodnotu (baseline) pro A/B měření**.
+Zdroj: `F:\Projekty\bakula-soak\run-v2b\final-report.md`. Běh s opraveným měřením (přesné porovnání IP, zaručeně neprázdný seznam obětí, atribuce provozních událostí jen v okně události; commit harnessu `a293d2b`, status uvádí `15e6fd5`, binárka vznikla z necommitnutého stromu). Seed 20261101 (v návrhu studie označen jako ladicí). Engine beze změny: jde o **základní hodnotu (baseline) pro A/B měření**.
 Čísla jsou ze simulace; nejsou měřením skutečných sítí. Starší běh v2 (měření se starými chybami) se nepoužívá.
 
 ## Zdraví

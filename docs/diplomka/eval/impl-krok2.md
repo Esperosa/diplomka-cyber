@@ -2,7 +2,7 @@
 
 Datum 2026-11-01. Kód: commity `bf9123c` až `4062941` (větev `main`, nepushnuto). Měření: ladicí seedy 20261102, 20261103, 20261104, každý 40 sítí, `--block-size 2 --no-legs --no-feedback --counterfactual`. Párově se porovnává 118 sítí (1 192 virtuálních síť-dnů), kde doběhla obě ramena; srovnání legacy s krokem 1 má všech 120 sítí (1 236 síť-dnů). Dvě největší sítě seedu 20261104 v posledních ramenech nedoběhly a jsou vynechané v obou ramenech. Držené seedy (20261201, 20261301) ani kotva CTU-13/IoT-23 se nepoužily. Všechna čísla jsou ze simulace.
 
-Surové výstupy: `F:\bakula-soak\ab\k2\reports\` (`ab-<A>-<B>.md` = plné párové tabulky, `calib-*.md` = kalibrace). Přepočet: `python tools/soak_ab.py --a <dirs> --b <dirs>` a `python tools/soak_calib.py <dirs>`.
+Surové výstupy: `F:\Projekty\bakula-soak\ab\k2\reports\` (`ab-<A>-<B>.md` = plné párové tabulky, `calib-*.md` = kalibrace). Přepočet: `python tools/soak_ab.py --a <dirs> --b <dirs>` a `python tools/soak_calib.py <dirs>`.
 
 Ramena (všechna se stejným harnessem a kontrafaktuálem):
 
