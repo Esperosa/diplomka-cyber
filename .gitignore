@@ -37,3 +37,8 @@ dump.rdb
 # Docker nasazeni (README "Nasazeni") - .env nese skutecny BAKULA_API_TOKEN,
 # nikdy nepatri do gitu. .env.example (sablona bez hodnoty) zustava trackovana.
 .env
+
+# Lokální pracovní poznámky a cache
+CLAUDE.md
+__pycache__/
+*.pyc
