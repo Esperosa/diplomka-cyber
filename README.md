@@ -206,4 +206,4 @@ Po každém pushnutí spusťte `python tools/readme_status.py` a výsledek commi
 
 ## Licence
 
-Zdrojový kód je pod licencí MIT, viz [LICENSE](LICENSE). Datasety, písma a externí nástroje mají vlastní licence, viz [NOTICE.md](NOTICE.md).
+Kód, dokumentace a výsledky měření jsou proprietární dílo, všechna práva vyhrazena (viz [LICENSE](LICENSE)). Čtení a akademické posouzení je dovoleno, další užití vyžaduje písemný souhlas autora. Datasety, písma a externí nástroje mají vlastní licence, které touto licencí nejsou dotčeny, viz [NOTICE.md](NOTICE.md).

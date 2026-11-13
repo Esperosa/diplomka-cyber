@@ -3,6 +3,8 @@ name = "bakula-program"
 version = "0.1.0"
 edition = "2024"
 description = "Prototyp pro fingerprinting sluzeb a pasivni analyzu sitoveho provozu."
+license-file = "LICENSE"
+publish = false
 
 [lib]
 name = "bakula_program"

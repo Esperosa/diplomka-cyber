@@ -1,21 +1,53 @@
-MIT License
+Skákavka (bakula-program)
+Copyright (c) 2026 Jiří Pelikán. Všechna práva vyhrazena.
+All rights reserved.
 
-Copyright (c) 2026 Jiří Pelikán
+1. VLASTNICTVÍ
+Tento software, zdrojový kód, dokumentace, simulační nástroje, návrhy, texty a výsledky
+měření v tomto repozitáři (dále jen „Dílo“) jsou autorským dílem Jiřího Pelikána (dále jen
+„Autor“). Autor si vyhrazuje všechna práva, která tato licence výslovně neuděluje.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+2. POVOLENÉ UŽITÍ
+Bez předchozího písemného souhlasu Autora je dovoleno pouze:
+  a) Dílo prohlížet a číst na platformě, na které je zveřejněno, a ve funkcích této
+     platformy, které provozovatel platformy poskytuje všem uživatelům (např. zobrazení
+     a forkování v rámci jejích podmínek služby);
+  b) Dílo studovat a posuzovat pro účely akademického hodnocení (např. oponentura,
+     obhajoba, zkušební komise) a bezpečnostního posouzení se souhlasem Autora;
+  c) citovat krátké části Díla s uvedením autora a zdroje v rozsahu dovoleném zákonem.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+3. ZAKÁZANÉ UŽITÍ
+Bez předchozího písemného souhlasu Autora je zakázáno:
+  a) Dílo nebo jeho část kopírovat mimo rozsah bodu 2, upravovat, překládat, šířit,
+     zveřejňovat, sublicencovat, prodávat, pronajímat nebo jinak zpřístupňovat;
+  b) Dílo nebo jeho část spouštět, nasazovat nebo provozovat v produkčním, komerčním,
+     firemním či jiném než osobně-hodnoticím prostředí, včetně poskytování jako služby;
+  c) Dílo nebo jeho část využít k trénování, doladění nebo vyhodnocování strojových
+     modelů, ke sběru dat nebo k tvorbě odvozených děl;
+  d) odstraňovat nebo měnit oznámení o autorství a tuto licenci;
+  e) používat Dílo k útokům, skenování či zásahům do cizích systémů bez oprávnění
+     jejich provozovatele. Nástroje pro aktivní ověřování smějí směřovat jen proti
+     vlastním nebo výslovně povoleným systémům.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+4. TŘETÍ STRANY
+Datasety, písma, externí nástroje a závislosti (Rust crates) uvedené v NOTICE.md mají vlastní
+licence, které touto licencí nejsou dotčeny a nejsou jí nahrazeny. Pro ně platí podmínky
+jejich autorů (například CC BY-NC-SA 4.0 u datasetů IoT-23 a CTU-13). Tato licence se
+na ně nevztahuje a neuděluje k nim žádná práva.
+
+5. ŽÁDNÁ ZÁRUKA
+DÍLO SE POSKYTUJE „TAK, JAK JE“, BEZ JAKÉKOLI ZÁRUKY, VÝSLOVNÉ ČI MLČKY PŘEDPOKLÁDANÉ,
+VČETNĚ ZÁRUKY OBCHODOVATELNOSTI, VHODNOSTI PRO URČITÝ ÚČEL A NEPORUŠENÍ PRÁV. AUTOR
+NEODPOVÍDÁ ZA ŠKODU VZNIKLOU UŽITÍM DÍLA V ROZPORU S TOUTO LICENCÍ ANEBO S JEJÍM
+POVOLENÍM, V ROZSAHU DOVOLENÉM ZÁKONEM.
+
+6. UKONČENÍ
+Porušení této licence ukončuje všechna oprávnění z ní plynoucí. Žádný souhlas nelze
+dovodit z mlčení Autora ani z umístění Díla na veřejně přístupné platformě.
+
+7. ROZHODNÉ PRÁVO
+Licence se řídí právem České republiky.
+
+8. KONTAKT PRO UDĚLENÍ SOUHLASU
+Žádosti o souhlas s dalším užitím adresujte Autorovi přes jeho profil na platformě, kde je
+Dílo zveřejněno.
