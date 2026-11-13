@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::{Confidence, MonitoringLane, RunReport},
 };
 
@@ -1030,7 +1030,7 @@ pub fn load_runtime_status(workspace_root: &Path) -> Result<RuntimeAutomationSta
         return Ok(idle_runtime_status(workspace_root));
     }
     let bytes = fs::read(path)?;
-    serde_json::from_slice(&bytes).map_err(BakulaError::Json)
+    serde_json::from_slice(&bytes).map_err(SalticusError::Json)
 }
 
 pub fn save_runtime_status(
@@ -1043,7 +1043,7 @@ pub fn save_runtime_status(
     }
     fs::write(
         &path,
-        serde_json::to_vec_pretty(status).map_err(BakulaError::Json)?,
+        serde_json::to_vec_pretty(status).map_err(SalticusError::Json)?,
     )?;
     Ok(path)
 }
@@ -1211,7 +1211,7 @@ pub fn save_automation_report(workspace_root: &Path, report: &AutomationReport) 
     let latest = directory.join("latest.json");
     fs::write(
         &latest,
-        serde_json::to_vec_pretty(report).map_err(BakulaError::Json)?,
+        serde_json::to_vec_pretty(report).map_err(SalticusError::Json)?,
     )?;
     Ok(latest)
 }

@@ -112,10 +112,10 @@ impl Lcg {
 
 /// E12: fuzz parseru. Nahodne mutace vzorovych zaznamu (zmena, vlozeni, smazani bajtu,
 /// useknuti), nahodne bajty a hluboke zanorovani nesmi nikdy zpusobit paniku.
-/// Pocet pruchodu: `BAKULA_FUZZ_N` (vychozi 20 000 na format, v mereni 100 000).
+/// Pocet pruchodu: `SALTICUS_FUZZ_N` (vychozi 20 000 na format, v mereni 100 000).
 #[test]
 fn fuzz_parsers_never_panic() {
-    let n: u64 = std::env::var("BAKULA_FUZZ_N")
+    let n: u64 = std::env::var("SALTICUS_FUZZ_N")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(20_000);

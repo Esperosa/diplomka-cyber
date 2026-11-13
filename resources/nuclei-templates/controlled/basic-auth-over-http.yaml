@@ -1,11 +1,11 @@
-id: bakula-basic-auth-over-http
+id: salticus-basic-auth-over-http
 
 info:
   name: HTTP Basic Authentication over cleartext
-  author: bakula
+  author: salticus
   severity: high
   description: Basic authentication challenge is exposed over plaintext HTTP.
-  tags: bakula,http,auth,plaintext
+  tags: salticus,http,auth,plaintext
 
 http:
   - method: GET

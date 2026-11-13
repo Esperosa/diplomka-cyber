@@ -1,4 +1,4 @@
-# Posouzení LLM / LoRA pro Bakula
+# Posouzení LLM / LoRA pro Salticus
 
 ## Stručný závěr
 
@@ -36,7 +36,7 @@ LLM bez striktního grounding mechanismu tuto vlastnost spolehlivě negarantuje.
 
 ### 3. Detekce není totéž co textové vysvětlení
 
-To, co Bakula potřebuje jako jádro, je:
+To, co Salticus potřebuje jako jádro, je:
 
 - přesná identifikace služby,
 - korelace,

@@ -9,7 +9,7 @@ Reprodukce je skriptem [enterprise-live-proof.ps1](../scripts/enterprise-live-pr
 Backend byl overen proti dockerizovanemu PostgreSQL:
 
 - image: `postgres:16-alpine`
-- connection string: `postgres://bakula:bakula@127.0.0.1:55432/bakula`
+- connection string: `postgres://salticus:salticus@127.0.0.1:55432/salticus`
 
 Provedene kroky:
 

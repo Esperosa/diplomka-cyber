@@ -15,7 +15,7 @@ use std::{
 use chrono::{DateTime, Utc};
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     ops::NftExecutor,
     soak::{rng::Rng, traffic::BlockOracle, traffic::ts},
 };
@@ -146,7 +146,7 @@ impl NftExecutor for SimKernel {
     fn run(&self, args: &[String]) -> Result<()> {
         if self.fail_p > 0.0 && self.fail_rng.lock().unwrap().chance(self.fail_p) {
             self.state.lock().unwrap().commands_failed += 1;
-            return Err(BakulaError::Processing(
+            return Err(SalticusError::Processing(
                 "simulovane selhani nft".to_string(),
             ));
         }
@@ -154,19 +154,19 @@ impl NftExecutor for SimKernel {
         let now = self.now.load(Ordering::SeqCst);
         if !state.table {
             state.commands_failed += 1;
-            return Err(BakulaError::Processing(
-                "tabulka inet bakula neexistuje".to_string(),
+            return Err(SalticusError::Processing(
+                "tabulka inet salticus neexistuje".to_string(),
             ));
         }
         let verb = args.first().map(String::as_str).unwrap_or("");
         let target_set = args.get(4).map(String::as_str).unwrap_or("");
         if !target_set.starts_with("blocked_ips") {
             state.commands_failed += 1;
-            return Err(BakulaError::Processing(format!("neznamy set {target_set}")));
+            return Err(SalticusError::Processing(format!("neznamy set {target_set}")));
         }
         let Some((ip, timeout)) = args.last().and_then(|a| parse_element(a)) else {
             state.commands_failed += 1;
-            return Err(BakulaError::Processing(
+            return Err(SalticusError::Processing(
                 "nelze naparsovat prvek".to_string(),
             ));
         };
@@ -179,7 +179,7 @@ impl NftExecutor for SimKernel {
             }
             other => {
                 state.commands_failed += 1;
-                return Err(BakulaError::Processing(format!(
+                return Err(SalticusError::Processing(format!(
                     "nepodporovany prikaz {other}"
                 )));
             }
@@ -220,7 +220,7 @@ mod tests {
             "add".into(),
             "element".into(),
             "inet".into(),
-            "bakula".into(),
+            "salticus".into(),
             "blocked_ips".into(),
             format!("{{ {ip} timeout {ttl}s }}"),
         ]
@@ -272,7 +272,7 @@ mod tests {
                 "delete".into(),
                 "element".into(),
                 "inet".into(),
-                "bakula".into(),
+                "salticus".into(),
                 "blocked_ips".into(),
                 "{ 203.0.113.5 }".into(),
             ])

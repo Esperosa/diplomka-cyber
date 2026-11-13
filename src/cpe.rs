@@ -3,7 +3,7 @@ use std::{fs, path::Path};
 use serde::Deserialize;
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::{Confidence, CpeCandidate, HostReport},
 };
 
@@ -89,7 +89,7 @@ fn load_rules(data_dir: &Path) -> Result<Vec<CpeRule>> {
     }
     let content = fs::read_to_string(path)?;
     serde_json::from_str(&content)
-        .map_err(|error| BakulaError::Processing(format!("Nelze nacist CPE pravidla: {error}")))
+        .map_err(|error| SalticusError::Processing(format!("Nelze nacist CPE pravidla: {error}")))
 }
 
 fn matches_rule(rule: &CpeRule, service_name: &str, product: &str) -> bool {

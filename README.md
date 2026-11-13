@@ -1,10 +1,10 @@
-# Skákavka
+# Salticus
 
-Skákavka je program pro síťovou detekci a vyhodnocení hrozeb. Spojuje aktivní inventář služeb, kontext zranitelností a pasivní síťové události (Suricata EVE JSON, logy Zeeku) do nálezů, které lze zpětně prověřit. Nález nevzniká jako jediné skóre. Program k němu vede hypotézy o tom, co se děje, ověřuje je v kontrolovaných krocích, pamatuje si, jak dopadly podobné případy, a zásahy do sítě navrhuje, ale provede je jen po schválení.
+Salticus je program pro síťovou detekci a vyhodnocení hrozeb. Spojuje aktivní inventář služeb, kontext zranitelností a pasivní síťové události (Suricata EVE JSON, logy Zeeku) do nálezů, které lze zpětně prověřit. Nález nevzniká jako jediné skóre. Program k němu vede hypotézy o tom, co se děje, ověřuje je v kontrolovaných krocích, pamatuje si, jak dopadly podobné případy, a zásahy do sítě navrhuje, ale provede je jen po schválení.
 
-Název balíčku, binárky (`bakula-program`), konfigurace (`bakula.toml`) a proměnných prostředí zůstává z dřívějšího pracovního názvu *Bakula*. Jde o tentýž projekt.
+Program se dříve jmenoval Skákavka a původně Bakula. Název Salticus je vědecké jméno rodu skákavek (Salticidae), pavouků, kteří nejdřív zhodnotí situaci zrakem a teprve potom skočí. Balíček a binárka se jmenují `salticus-program`, konfigurace `salticus.toml` a proměnné prostředí mají předponu `SALTICUS_`.
 
-Veřejná softwarová příloha diplomové práce na FIM UHK (navazuje na dřívější bakalářskou práci, ze které zůstal pracovní název Bakula). Kód je v `src/`, testy v `tests/`, webové UI v `ui/` (zdroje v `ui-src/`), dokumentace v `docs/`.
+Veřejná softwarová příloha diplomové práce na FIM UHK (navazuje na dřívější bakalářskou práci, projekt Bakula). Kód je v `src/`, testy v `tests/`, webové UI v `ui/` (zdroje v `ui-src/`), dokumentace v `docs/`.
 
 ## Co program dělá
 
@@ -22,7 +22,7 @@ Stručně: ingest (aktivní inventář, Zeek, Suricata, koncová telemetrie) →
 
 Podrobněji:
 
-- [Technický návrh](docs/diplomka/BAKULA_kompletni_technicky_navrh_diplomova_prace.md)
+- [Technický návrh](docs/diplomka/SALTICUS_kompletni_technicky_navrh_diplomova_prace.md)
 - [Model hrozeb](docs/diplomka/threat-model.md)
 - [Produkční plán](docs/diplomka/produkcni-plan.md)
 - [Souhrn výsledků a hypotéz](docs/diplomka/souhrn-vysledku-a-hypotez.md)
@@ -50,16 +50,16 @@ Webové UI se poté otevře na `http://127.0.0.1:8080`. Přehled příkazů vyp�
 ### Docker
 
 ```bash
-cp .env.example .env   # vyplňte BAKULA_API_TOKEN
+cp .env.example .env   # vyplňte SALTICUS_API_TOKEN
 docker compose up --build
 ```
 
-Kompozice sestaví image z [`Dockerfile`](Dockerfile), spustí Redis (broker pro distribuované workery) a server s `--require-api-token`. Bez platného `BAKULA_API_TOKEN` se kompozice zastaví, místo aby běžela bez autentizace. Workspace přežívá restarty v named volume. Aktivní skenování (`--spustit-nmap`) potřebuje `nmap`, který image obsahuje. `httpx` a `nuclei` v image nejsou, připojte je jako volume a nastavte `--httpx-bin` a `--nuclei-bin`.
+Kompozice sestaví image z [`Dockerfile`](Dockerfile), spustí Redis (broker pro distribuované workery) a server s `--require-api-token`. Bez platného `SALTICUS_API_TOKEN` se kompozice zastaví, místo aby běžela bez autentizace. Workspace přežívá restarty v named volume. Aktivní skenování (`--spustit-nmap`) potřebuje `nmap`, který image obsahuje. `httpx` a `nuclei` v image nejsou, připojte je jako volume a nastavte `--httpx-bin` a `--nuclei-bin`.
 
 ## Konfigurace
 
-- Soubor `bakula.toml`: `config init` ho vytvoří, `config validate` zkontroluje.
-- Proměnné prostředí (vzor v [`.env.example`](.env.example)): `BAKULA_API_TOKEN`, `BAKULA_ENFORCEMENT_MODE` (`dry_run` je výchozí, skutečné blokování zapne jen hodnota `enforce`), `BAKULA_PROTECTED_RANGES`, `BAKULA_LOG`, `BAKULA_LOG_FORMAT`.
+- Soubor `salticus.toml`: `config init` ho vytvoří, `config validate` zkontroluje.
+- Proměnné prostředí (vzor v [`.env.example`](.env.example)): `SALTICUS_API_TOKEN`, `SALTICUS_ENFORCEMENT_MODE` (`dry_run` je výchozí, skutečné blokování zapne jen hodnota `enforce`), `SALTICUS_PROTECTED_RANGES`, `SALTICUS_LOG`, `SALTICUS_LOG_FORMAT`.
 - CVE kontext: `--provider nvd` nebo `vulners` s klíčem v `NVD_API_KEY` nebo `VULNERS_API_KEY`; `ABUSEIPDB_API_KEY` pro intel enrichment. Bez nich (`--provider demo`) report používá ukázkový kontext, ne reálný.
 - Logy jdou přes `tracing` na stderr, metriky na `/api/metrics` (Prometheus).
 
@@ -67,7 +67,7 @@ Kompozice sestaví image z [`Dockerfile`](Dockerfile), spustí Redis (broker pro
 
 - Nic neblokuje a nespouští aktivní akci, dokud to provozovatel výslovně nezapne. Plán ověření se vždy jen zapisuje, vykonání kontrol je za `--execute-verification` a kontroly vyžadující schválení se nespustí samy.
 - Rozsah (`--scope`) se kontroluje při plánování i při vykonání. Cíle mimo rozsah se vyřadí a vykážou.
-- Zásahy mění jen vlastní tabulku `inet bakula` v nftables, bloky mají časový limit (strop 24 h) a loopback, link-local, multicast a nakonfigurované chráněné rozsahy nelze zablokovat ani na výslovnou žádost.
+- Zásahy mění jen vlastní tabulku `inet salticus` v nftables, bloky mají časový limit (strop 24 h) a loopback, link-local, multicast a nakonfigurované chráněné rozsahy nelze zablokovat ani na výslovnou žádost.
 - API: výchozí režim bez tokenu je jen pro lokální použití, pro provoz zapněte `--require-api-token`. Mutující endpointy chrání hlavička proti CSRF a token se porovnává v konstantním čase.
 - Audit je append-only a `/api/audit/verify` ověří, že historie nebyla změněna.
 - Aktivní skenování používejte jen v prostředí, ke kterému máte oprávnění. Hlášení zranitelností a pravidla použití jsou v [SECURITY.md](SECURITY.md). Šablony webových kontrol jsou v `resources/nuclei-templates/controlled/`.
@@ -87,7 +87,7 @@ V repozitáři jsou jen malé výřezy IoT-23. Ostatní datasety se nedistribuuj
 
 ## Metodika testování
 
-- **Soak harness:** `bakula-program soak run` spouští dlouhé běhy nad simulovanými sítěmi s ground truth (rodiny útoků, neškodné protějšky, výpadky telemetrie). Běží produkční funkce, ne zjednodušený model. `soak verify` znovu přehraje náhodné bloky a porovná otisky bit po bitu. Popis je v [soak-harness.md](docs/diplomka/eval/soak-harness.md).
+- **Soak harness:** `salticus-program soak run` spouští dlouhé běhy nad simulovanými sítěmi s ground truth (rodiny útoků, neškodné protějšky, výpadky telemetrie). Běží produkční funkce, ne zjednodušený model. `soak verify` znovu přehraje náhodné bloky a porovná otisky bit po bitu. Popis je v [soak-harness.md](docs/diplomka/eval/soak-harness.md).
 - **Deterministické seedy:** síť i epizoda vznikají ze seedu běhu a čísla sítě, takže každé měření jde zopakovat.
 - **Držené sady:** ladění probíhá na ladicích seedech, hodnocení na seedech, které se při ladění nepoužily, a na zamčených testovacích částech veřejných datasetů, spuštěných jednou.
 - **Intervaly:** podíly se uvádějí s 95% Wilsonovým intervalem, srovnání ramen jsou párová po sítích.

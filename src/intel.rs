@@ -184,7 +184,7 @@ pub fn public_intel_sources() -> Vec<IntelSourceCatalog> {
 
 pub fn collect_intel(report: &RunReport, config: &IntelConfig) -> Result<Vec<IntelMatch>> {
     let client = Client::builder()
-        .user_agent("bakula-program/0.1")
+        .user_agent("salticus-program/0.1")
         .timeout(Duration::from_secs(15))
         .build()?;
 

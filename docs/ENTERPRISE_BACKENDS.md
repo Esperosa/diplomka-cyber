@@ -8,7 +8,7 @@ Tato dokumentace shrnuje klicove doplnky nad puvodni platformni vrstvu:
 ## PostgreSQL vrstva: odstranena (31.10.2026)
 
 `external_sql.rs` (452 radku Postgres CRUD pro users/tokens/jobs/nodes/
-ha_policy, plus vlastni `bakula-program external-sql ...` CLI podstrom)
+ha_policy, plus vlastni `salticus-program external-sql ...` CLI podstrom)
 byl **smazan**, ne opraven/otestovan. Rozhodnuto po dvou kolech
 nezavisle revize (`docs/diplomka/produkcni-plan.md`, "Druhe kolo zmeny ramce"):
 modul mel 0 testu, 0 CI coverage, nebyl volan z `server.rs` ani

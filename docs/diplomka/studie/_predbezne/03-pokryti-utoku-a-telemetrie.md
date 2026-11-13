@@ -1,7 +1,7 @@
-# Studie 03: Pokrytí útoků a chování, telemetrie a simulace pro Skákavku
+# Studie 03: Pokrytí útoků a chování, telemetrie a simulace pro Salticus
 
 Stav: návrh ke schválení, bez změn zdrojového kódu. Datum: 2026-10-31.
-Rozsah: co má Skákavka v síti detekovat, z jaké telemetrie, jak to simulovat v soak harnessu a jak měřit.
+Rozsah: co má Salticus v síti detekovat, z jaké telemetrie, jak to simulovat v soak harnessu a jak měřit.
 Označení: **[zdroj]** = ověřeno u citovaného zdroje (přes vyhledávání, ne vždy plným čtením); **[odhad]** = můj odhad bez měření; **[návrh]** = návrh parametru k ladění na datech.
 Pravidlo studie: žádný funkční škodlivý kód ani postup útoku. Popisuji jen to, co je třeba pro detekci a pro syntetické toky v paměti nebo izolovaném labu.
 
@@ -252,7 +252,7 @@ Reportovat zvlášť "jakýkoli nález" a "správný typ + správný host". Pro 
 | Zdroj | Obsah | Použití | Omezení | Rok / stav |
 |---|---|---|---|---|
 | CTU-13 | botnet captures, labely toků | beaconing, C2 | 2011, starý malware, bez moderních shellů | 2011; z přehledové tabulky |
-| Stratosphere / MCFP | pcap vzorků malware | Zeek→Skákavka | kontrola licence | nepotvrzeno v této studii |
+| Stratosphere / MCFP | pcap vzorků malware | Zeek→Salticus | kontrola licence | nepotvrzeno v této studii |
 | Malware-Traffic-Analysis.net | pcap cvičení s popisem | C2, exploit kit, lateral ukázky | bez labelů jako dataset; hesla k archivům | nepotvrzeno v této studii |
 | LANL Unified Host and Network | 90 dní NetFlow v9 + host události, anonymizováno | FP baseline, identita host↔tok | bez označeného útoku | arXiv 1708.07518, 2017 [zdroj] |
 | LANL Comprehensive Multi-Source (2015) | auth + toky + red-team | pivot podle auth | bez payloadu | csr.lanl.gov/data; zmínka v LANL stránce |
@@ -261,7 +261,7 @@ Reportovat zvlášť "jakýkoli nález" a "správný typ + správný host". Pro 
 | CICIDS2017 / CSE-CIC-IDS2018 / UNSW-NB15 | labelované flows | rychlé srovnání | umělé prostředí, známé problémy labelů | nepotvrzeno v této studii |
 | Atomic Red Team + vlastní lab | testy mapované na ATT&CK | jediná cesta ke shellu/tunelu/pivotu s vlastním pcap | nutný izolovaný lab | nepotvrzeno v této studii |
 
-Postup: (1) FP baseline na LANL a vlastních datech, (2) recall C2 na CTU-13 a MTA pcap přes Zeek→Skákavka, (3) pivot/lateral na OpTC a LANL 2015 po převodu na hrany, (4) vlastní lab pro reverse shell, tunely a pivot hloubky 2-5 s ručním ground truth. Výsledky reportovat odděleně od simulace; velký rozdíl proti simulaci znamená úpravu generátoru.
+Postup: (1) FP baseline na LANL a vlastních datech, (2) recall C2 na CTU-13 a MTA pcap přes Zeek→Salticus, (3) pivot/lateral na OpTC a LANL 2015 po převodu na hrany, (4) vlastní lab pro reverse shell, tunely a pivot hloubky 2-5 s ručním ground truth. Výsledky reportovat odděleně od simulace; velký rozdíl proti simulaci znamená úpravu generátoru.
 
 ---
 
@@ -298,7 +298,7 @@ Postup: (1) FP baseline na LANL a vlastních datech, (2) recall C2 na CTU-13 a M
 1. Reálné vzory paketů chisel, ligolo-ng, Sliver, Meterpreter jsem v ověřitelném zdroji nenašel; čísla ve scénářích jsou návrhy.
 2. Odhady v pp a počty FP / síť-den jsou odhady, ne měření.
 3. Ověřil jsem texty T1572 a T1095 a existenci T1090.003; ostatní ID z obecné znalosti.
-4. Chování zápisu `conn.log` u dlouhých spojení (ACM): ověřit v dokumentaci Zeek verze, kterou Skákavka používá.
+4. Chování zápisu `conn.log` u dlouhých spojení (ACM): ověřit v dokumentaci Zeek verze, kterou Salticus používá.
 5. arXiv 2609.19091 (2026, o RITA a lognormálních mezičasech) jsem viděl jen ve výsledcích vyhledávání, nečteno; tvrzení o N20 stavět až po přečtení.
 6. Licence JA4+: JA4 TLS je BSD-3, zbytek FoxIO License 1.1 [zdroj FoxIO]; právní stanovisko nemám.
 7. URL a licence CTU, MTA, CICIDS, Atomic Red Team nepotvrzeny; ověřit před použitím.

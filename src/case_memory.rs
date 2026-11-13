@@ -39,7 +39,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     storage::write_atomic,
     verification_exec::VerificationResult,
 };
@@ -452,7 +452,7 @@ impl CaseMemory {
 
     pub fn save(&self) -> Result<()> {
         let path = self.path.as_ref().ok_or_else(|| {
-            BakulaError::Processing("CaseMemory bez cesty nelze ulozit".to_string())
+            SalticusError::Processing("CaseMemory bez cesty nelze ulozit".to_string())
         })?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -488,11 +488,11 @@ impl CaseMemory {
     /// Obnovi OBSAH snapshotu `version` jako novou, vyssi verzi (monotonie).
     pub fn rollback_to(&mut self, version: u64) -> Result<()> {
         let path = self.path.as_ref().ok_or_else(|| {
-            BakulaError::Processing("CaseMemory bez cesty nelze vratit".to_string())
+            SalticusError::Processing("CaseMemory bez cesty nelze vratit".to_string())
         })?;
         let snapshot = Self::snapshot_dir(path).join(format!("v{version}.json"));
         let text = fs::read_to_string(&snapshot).map_err(|_| {
-            BakulaError::Processing(format!(
+            SalticusError::Processing(format!(
                 "snapshot v{version} neexistuje (drzi se poslednich {SNAPSHOTS_KEPT})"
             ))
         })?;
@@ -628,7 +628,7 @@ pub(crate) fn with_file_lock<T>(path: &Path, work: impl FnOnce() -> Result<T>) -
                     continue;
                 }
                 if started.elapsed() > Duration::from_secs(30) {
-                    return Err(BakulaError::Processing(format!(
+                    return Err(SalticusError::Processing(format!(
                         "zamek {} se nepodarilo ziskat",
                         lock_path.display()
                     )));

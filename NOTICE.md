@@ -30,7 +30,7 @@ Nmap, Suricata, Zeek, ProjectDiscovery `httpx` a `nuclei` se v repozitáři nedi
 
 ## Rust závislosti
 
-Seznam vznikl z `cargo metadata --offline --filter-platform x86_64-pc-windows-msvc` a zahrnuje běžné a sestavovací závislosti dosažitelné z `bakula-program` (vývojové závislosti jsou vynechány). Verze odpovídají `Cargo.lock`. Metadata jiných platforem offline k dispozici nebyla; platformně specifické závislosti pro Linux a macOS proto v seznamu mohou chybět. Všechny uvedené licence jsou permisivní.
+Seznam vznikl z `cargo metadata --offline --filter-platform x86_64-pc-windows-msvc` a zahrnuje běžné a sestavovací závislosti dosažitelné z `salticus-program` (vývojové závislosti jsou vynechány). Verze odpovídají `Cargo.lock`. Metadata jiných platforem offline k dispozici nebyla; platformně specifické závislosti pro Linux a macOS proto v seznamu mohou chybět. Všechny uvedené licence jsou permisivní.
 
 | Crate | Verze | Licence |
 |---|---|---|

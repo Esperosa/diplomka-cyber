@@ -2,7 +2,7 @@
 //! simulovaly vice konzumentu jen jako ruzna JMENA v JEDNOM OS procesu/vlakne -
 //! nikdy nedokazaly, ze crash recovery/no-double-claim drzi i mezi SKUTECNE
 //! oddelenymi OS procesy (zadne sdilene paměťové stavy, zadna shoda v planovani
-//! vlaken jednoho procesu). Tenhle test spousti dve REALNE binarky (`bakula-program
+//! vlaken jednoho procesu). Tenhle test spousti dve REALNE binarky (`salticus-program
 //! broker worker-run`) soucasne a necha je soutezit o stejnou, uz publikovanou
 //! zpravu - Redis je jediny bod synchronizace, presne jak by to fungovalo v realnem
 //! nasazeni na 2 ruznych workerech.
@@ -10,21 +10,21 @@
 use std::env;
 use std::process::{Command, Stdio};
 
-use bakula_program::broker::{self, RedisBrokerConfig};
+use salticus_program::broker::{self, RedisBrokerConfig};
 use serde_json::Value;
 use uuid::Uuid;
 
 fn bin_path() -> &'static str {
-    env!("CARGO_BIN_EXE_bakula-program")
+    env!("CARGO_BIN_EXE_salticus-program")
 }
 
 fn test_config() -> RedisBrokerConfig {
     let uri =
-        env::var("BAKULA_TEST_REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+        env::var("SALTICUS_TEST_REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
     RedisBrokerConfig {
         uri,
-        stream_key: format!("bakula.twoproc.{}", Uuid::new_v4()),
-        group: "bakula-twoproc-workers".to_string(),
+        stream_key: format!("salticus.twoproc.{}", Uuid::new_v4()),
+        group: "salticus-twoproc-workers".to_string(),
         max_delivery_attempts: 5,
     }
 }

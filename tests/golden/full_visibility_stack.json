@@ -2444,7 +2444,7 @@
       "lane_type": "automation",
       "recommended_tools": [
         "nmap",
-        "bakula-internal-pentest",
+        "salticus-internal-pentest",
         "httpx-optional",
         "nuclei-controlled-optional",
         "zeek",
@@ -2470,9 +2470,9 @@
       "lane_id": "lane:validation:safe-pentest:<RUN_ID>",
       "lane_type": "automation",
       "recommended_tools": [
-        "bakula-internal-pentest",
-        "bakula-tcp-probe",
-        "bakula-http-prober",
+        "salticus-internal-pentest",
+        "salticus-tcp-probe",
+        "salticus-http-prober",
         "nmap-safe-scripts",
         "greenbone-authenticated"
       ],

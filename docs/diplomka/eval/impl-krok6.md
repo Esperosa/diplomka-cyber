@@ -261,7 +261,7 @@ Opravy uzavírají cesty, které by v produkci mohly zavřít nebo odklonit úto
 
 Stropy v kódu: `NoveltyState.pairs` ≤ 200 000 (nečinnost 3 dny), `fanout` ≤ 50 000 hostitelů a nově ≤ 256 vazeb na hostitele (S5), `Clientele` ≤ 100 000 služeb × 64 klientů (okno 7 dní), `OpsMarks` ≤ 200 000 (TTL 24 h). Všechny struktury mají strop i stáří.
 
-Měření: diagnostika `BAKULA_SOAK_STATE_TRACE=1` (commit `0ab8c55`) vypisuje každých 48 cyklů velikost složek stavu v3 jako bajty serializovaného JSON. Je to přibližná míra, ne přesná halda. Jedna síť XXXL (9 350 zařízení, seed 20261611), 96 h, šum 10×, `--engine v3 --v3-on sensor_strict,novelty,ops_class`, 1 vlákno:
+Měření: diagnostika `SALTICUS_SOAK_STATE_TRACE=1` (commit `0ab8c55`) vypisuje každých 48 cyklů velikost složek stavu v3 jako bajty serializovaného JSON. Je to přibližná míra, ne přesná halda. Jedna síť XXXL (9 350 zařízení, seed 20261611), 96 h, šum 10×, `--engine v3 --v3-on sensor_strict,novelty,ops_class`, 1 vlákno:
 
 | cyklus | živá halda procesu | SQLite stav | profil hostů | detektor | beacon | inventář | egress | klientela | novost | ops_marks |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|

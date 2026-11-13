@@ -27,7 +27,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     behavior::{BehaviorInput, BehaviorState, BehaviorSwitches, BehaviorThresholds, run_window},
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     eval::{
         ground_truth::LabeledDataset,
         source::ScenarioSource,
@@ -92,11 +92,11 @@ pub fn list_sha256(items: &[&str]) -> String {
 pub fn scenarios(part: Part, unlock: bool) -> Result<&'static [&'static str]> {
     match part {
         Part::Dev => Ok(ANCHOR_DEV),
-        Part::Test if !unlock => Err(BakulaError::Processing(
+        Part::Test if !unlock => Err(SalticusError::Processing(
             "testovaci cast kotvy je zamcena (jen zaverecne mereni)".into(),
         )),
         Part::Test if list_sha256(ANCHOR_TEST) != ANCHOR_TEST_SHA256 => Err(
-            BakulaError::Processing("seznam testovaci casti kotvy nesouhlasi s otiskem".into()),
+            SalticusError::Processing("seznam testovaci casti kotvy nesouhlasi s otiskem".into()),
         ),
         Part::Test => Ok(ANCHOR_TEST),
     }
@@ -131,19 +131,19 @@ pub const ANCHOR_K5_TEST_SHA256: &str =
 pub fn scenarios_k5(part: Part, unlock: bool) -> Result<&'static [&'static str]> {
     match part {
         Part::Dev => Ok(ANCHOR_K5_DEV),
-        Part::Test if !unlock => Err(BakulaError::Processing(
+        Part::Test if !unlock => Err(SalticusError::Processing(
             "testovaci cast kotvy kroku 5 je zamcena (jen zaverecne mereni)".into(),
         )),
         Part::Test if list_sha256(ANCHOR_K5_TEST) != ANCHOR_K5_TEST_SHA256 => Err(
-            BakulaError::Processing("seznam testovaci casti kotvy k5 nesouhlasi s otiskem".into()),
+            SalticusError::Processing("seznam testovaci casti kotvy k5 nesouhlasi s otiskem".into()),
         ),
         Part::Test => Ok(ANCHOR_K5_TEST),
     }
 }
 
-/// Kořen externích datasetů (mimo git): `BAKULA_EXTERNAL_DATASETS`, jinak `F:/Projekty/bakula-datasets`.
+/// Kořen externích datasetů (mimo git): `SALTICUS_EXTERNAL_DATASETS`, jinak `F:/Projekty/bakula-datasets`.
 pub fn external_root() -> std::path::PathBuf {
-    std::env::var_os("BAKULA_EXTERNAL_DATASETS")
+    std::env::var_os("SALTICUS_EXTERNAL_DATASETS")
         .map(Into::into)
         .unwrap_or_else(|| "F:/Projekty/bakula-datasets".into())
 }

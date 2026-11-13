@@ -150,7 +150,7 @@ Rozpory:
 
 ## 5. Závěry
 
-| Z-id | Tvrzení | Důkazy | Jistota | Důvody snížení | Použitelnost pro Skákavku | Doporučená akce |
+| Z-id | Tvrzení | Důkazy | Jistota | Důvody snížení | Použitelnost pro Salticus | Doporučená akce |
 |---|---|---|---|---|---|---|
 | Z1 | Sekvenční test rozhoduje o skeneru po jednotkách až desítkách pozorování: TRW 4,06 až 4,08 distinct IP (Jung 2004) a 10,0 až 18,5 prvních spojení (Jung 2008), RBS+TRW 5,0 až 6,9. Je rychlejší než Bro (21,4 až 36,9), vůči Snortu 1,5× (ICSI) až 3× (LBL). | 001, 002, 011, 015 | nízká až střední (směr vůči Bro: střední; rozsah a výhoda vůči Snortu: nízká) | stejná data pro ladění a test, 2 až 4 sítě, bez CI, hlasité cíle (červi, skenery), různé jednotky (distinct IP vs první spojení) | s úpravou | testovat SPRT nad sérií ověření (H1) |
 | Z2 | Skutečná FPR sekvenčního testu závisí na modelu "neúspěch = skenování": 19 až 50 % FP při Alsalehově přehodnocení na datasetu Class C (v Class B < 1 %, max. 24 % vůči stejnému kritériu); kontext služeb snížil počet FP o 77 % (Class C) a 94 % (Class B, vůči podmnožině FP), souhrn autora uvádí 29 % a 77 %. STRW přitom hlásí o 43 % méně skenerů; ztráta detekce nebyla změřena. | 018, 019, 020, 022, 006 | nízká až střední | jedno nezávislé přehodnocení (disertace), rozsah 19 až 50 % z jednoho datasetu, jiná definice FP (FD rate), 29 % nepřiřazeno, „bez ztráty detekce“ je tvrzení autora | ano | brát znalost služeb jako povinný vstup (H2) |

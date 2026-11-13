@@ -185,7 +185,7 @@ Fakta o kódu jsme ověřili v `src/soak/` (stav 2026-10-31). Čísla jsou z `F:
 | Z-11 | Syntetická augmentace dat spolehlivě nezlepšuje klasifikaci NIDS. | 050 | nízká | workshopový článek, jedna studie | s úpravou | Neučit prahy ze syntetiky bez kontroly na kotvě |
 | Z-12 | Jednoduchá baseline často dorovná nebo překoná složitou metodu (boxplot ≥ Kitsune, allowlist ≥ PIDS). | 007, 028, 053 | střední | rozdílné úlohy | ano | Každá změna enginu proti triviální baseline na stejných seedech |
 
-## Překlad do praxe (Skákavka a soak)
+## Překlad do praxe (Salticus a soak)
 
 1. **Artefaktová baseline jako povinný řádek reportu** (z Z-2, Z-12). Do `report.rs` přidat tři triviální detektory se stejnou atribucí:
    - (a) „odchozí spojení na externí adresu, která není mezi 12 `externals` sítě“ (v současném generátoru ji mají jen útoky a tři řídké lookalike události, viz S1),
@@ -258,7 +258,7 @@ Neúspěšné hypotézy se zveřejní stejně jako úspěšné (protokol §10).
 
 - **Výběr zdrojů.** Hledání přes jeden webový vyhledávač, bez přímého přístupu do IEEE Xplore a ACM DL. Několik klíčových prací (Lanvin, Liu, NetShare, MAWILab, D'hooge 2020) zůstalo bez plného textu. Engelenova skupina je zastoupena třikrát (001–005, 006–012, 063), Larroche dvakrát. Hrozí převaha jedné výzkumné linie.
 - **Extrakce.** Tabulky v PDF se rozpadají. Nezávislá kontrola našla věcnou chybovost 11,8 % (6 z 51 řádků), převážně záměnu řádku nebo detektoru v rozpadlé tabulce a zobecnění hodnoty z jednoho datasetu. Po revizi jsme pořadí ve všech dotčených tabulkách ověřili ze surového textu sloupců a hodnoty u Layeghyho z čitelné Tab. 4. Druhou kontrolu po první revizi dělal tentýž autor, který revizi psal, a její výsledek 0 / 47 neplatil. Druhá nezávislá kontrola (59 z 63 řádků) našla věcnou chybovost 8,5 % (5 / 59), všechny chyby v podmínkách, poznámkách a metadatech, ne v polích `hodnota`; ty jsou opraveny druhou revizí, kterou opět psal tentýž autor jako extrakci, takže opravy samy nejsou nezávisle ověřeny. Arpovu Tab. 1 jsme nepoužili. U Majorczyka máme jen slajdy.
-- **Nepřímost.** Velká část důkazů se týká supervizovaných ML klasifikátorů, Android malwaru (TESSERACT, Arp 4.1) nebo nebezpečnostních časových řad (DoppelGANger). Skákavka je korelační a ověřovací engine, ne flow klasifikátor, takže přenos velikostí efektu je extrapolace.
+- **Nepřímost.** Velká část důkazů se týká supervizovaných ML klasifikátorů, Android malwaru (TESSERACT, Arp 4.1) nebo nebezpečnostních časových řad (DoppelGANger). Salticus je korelační a ověřovací engine, ne flow klasifikátor, takže přenos velikostí efektu je extrapolace.
 - **Publikační zkreslení.** Kritické práce mají motivaci najít vady (audity) a generátorové práce hodnotí konkurenci (NetDiffusion → NetShare). Negativní výsledky jsou vzácnější, našli jsme jen Wolf 2024 a BRIDGE (časový split).
 - **Preprinty.** RQ5-024, 025, 026, 038, 039, 051, 052 a 054 nejsou recenzované a RQ5-050 prošel jen workshopovým recenzním řízením, proto mají v Závěrech nižší jistotu. RQ5-053 byl původně veden jako preprint, ale je přijat na NDSS 2027, a RQ5-022 je recenzovaný (ACSAC Workshops 2025). Závěry, které stojí převážně na preprintech (Z-8, Z-10, Z-11, částečně Z-7, kde 053 je recenzovaný), mají nejvýš střední jistotu.
 - **Soak a stav kódu.** Atribuce s přesnou shodou IP a zkrácené okno lookalike událostí jsou commitnuté v `a293d2b` (2026-10-31 23:40 SEČ). Běh v2 začal v 18:57 SEČ a status uvádí commit `unknown`, takže čísla z něj s velkou pravděpodobností vznikla se starší verzí atribuce.

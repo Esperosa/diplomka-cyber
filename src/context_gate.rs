@@ -25,7 +25,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::Severity,
 };
 
@@ -214,7 +214,7 @@ impl StaticCalendar {
             return Ok(Self::default());
         }
         let text = std::fs::read_to_string(path)?;
-        let entries: Vec<ContextEntry> = serde_json::from_str(&text).map_err(BakulaError::Json)?;
+        let entries: Vec<ContextEntry> = serde_json::from_str(&text).map_err(SalticusError::Json)?;
         Ok(Self::new(entries))
     }
 }

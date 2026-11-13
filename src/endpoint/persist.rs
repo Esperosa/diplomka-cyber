@@ -13,13 +13,13 @@ use super::{
     correlate::{Limits, Policy},
     parse_batch,
 };
-use crate::error::{BakulaError, Result};
+use crate::error::{SalticusError, Result};
 
 /// Nejvíc řádků v tabulce; starší se mažou (krok 8, A2 bod 3).
 pub const MAX_ROWS: i64 = 500_000;
 
-fn db_error(error: rusqlite::Error) -> BakulaError {
-    BakulaError::Processing(format!("endpoint_events SQLite chyba: {error}"))
+fn db_error(error: rusqlite::Error) -> SalticusError {
+    SalticusError::Processing(format!("endpoint_events SQLite chyba: {error}"))
 }
 
 pub fn migrate(conn: &Connection) -> Result<()> {
@@ -84,7 +84,7 @@ pub fn ingest_text(
                 summary.rejected_time += 1;
                 continue;
             }
-            let body = serde_json::to_string(event).map_err(BakulaError::Json)?;
+            let body = serde_json::to_string(event).map_err(SalticusError::Json)?;
             let changed = stmt
                 .execute(params![
                     format!("{:016x}", event.fingerprint()),

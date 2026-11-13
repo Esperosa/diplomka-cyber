@@ -4,7 +4,7 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 fn bin_path() -> &'static str {
-    env!("CARGO_BIN_EXE_bakula-program")
+    env!("CARGO_BIN_EXE_salticus-program")
 }
 
 fn scenario_dir_count(root: &Path) -> usize {

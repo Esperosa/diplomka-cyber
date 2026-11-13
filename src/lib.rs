@@ -65,4 +65,4 @@ pub mod verify_ladder;
 pub mod vuln;
 pub mod webscan;
 
-pub use error::{BakulaError, Result};
+pub use error::{SalticusError, Result};

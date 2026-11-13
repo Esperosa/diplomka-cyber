@@ -55,7 +55,7 @@ Expand-Archive -LiteralPath $HttpxArchivePath -DestinationPath $HttpxDir -Force
 Expand-Archive -LiteralPath $NucleiArchivePath -DestinationPath $NucleiDir -Force
 
 $ControlledTemplatesSource = Join-Path $Root 'resources\nuclei-templates\controlled'
-$ControlledTemplatesTarget = Join-Path $env:USERPROFILE 'nuclei-templates\bakula-controlled'
+$ControlledTemplatesTarget = Join-Path $env:USERPROFILE 'nuclei-templates\salticus-controlled'
 New-Item -ItemType Directory -Force -Path $ControlledTemplatesTarget | Out-Null
 Copy-Item -Path (Join-Path $ControlledTemplatesSource '*') -Destination $ControlledTemplatesTarget -Force
 

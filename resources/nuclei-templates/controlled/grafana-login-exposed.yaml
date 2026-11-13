@@ -1,11 +1,11 @@
-id: bakula-grafana-login-exposed
+id: salticus-grafana-login-exposed
 
 info:
   name: Grafana login page exposed
-  author: bakula
+  author: salticus
   severity: medium
   description: Grafana login endpoint is publicly reachable.
-  tags: bakula,http,grafana,login
+  tags: salticus,http,grafana,login
 
 http:
   - method: GET

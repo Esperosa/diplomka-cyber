@@ -1,13 +1,13 @@
 [package]
-name = "bakula-program"
+name = "salticus-program"
 version = "0.1.0"
 edition = "2024"
-description = "Skakavka: sitova detekce a vyhodnoceni hrozeb (pasivni a aktivni korelace, hypotezy, overovani, pamet pripadu)."
+description = "Salticus: sitova detekce a vyhodnoceni hrozeb (pasivni a aktivni korelace, hypotezy, overovani, pamet pripadu)."
 license-file = "LICENSE"
 publish = false
 
 [lib]
-name = "bakula_program"
+name = "salticus_program"
 path = "src/lib.rs"
 
 [dependencies]

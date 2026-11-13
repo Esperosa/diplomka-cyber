@@ -104,7 +104,7 @@ impl V3Runtime {
         })
     }
 
-    /// Ruční diagnostika paměti (`BAKULA_SOAK_STATE_TRACE=1`): velikost složek stavu
+    /// Ruční diagnostika paměti (`SALTICUS_SOAK_STATE_TRACE=1`): velikost složek stavu
     /// v bajtech serializovaného JSON (přibližná míra, ne přesná halda). Výsledky
     /// soaku nemění, jen vypisuje na stderr.
     pub fn state_sizes(&self) -> Vec<(&'static str, usize)> {

@@ -173,13 +173,13 @@ Odpovídá literatuře: nízká detekce beaconu při omezeném FPR, rozdíl „d
 
 ## 5. Závěry
 
-| Z-id | Tvrzení | Důkazy | Jistota | Důvody snížení | Pro Skákavku | Doporučená akce |
+| Z-id | Tvrzení | Důkazy | Jistota | Důvody snížení | Pro Salticus | Doporučená akce |
 |---|---|---|---|---|---|---|
 | Z1 | Vysoké AUC periodických detektorů beaconingu (0,85-0,97) neimplikuje použitelnost: při FPR 1 % dvě ze tří testovaných metod nenajdou nic, MORTON 77 %. | RQ4-001, 002 | nízká | jeden dataset, injektovaný útok, bez CI, DNS místo toků | ano | hodnotit TPR při pevném FPR (1e-3, 1e-4), ne AUC |
 | Z2 | Na reálném provozu bez labelů je podíl ověřitelně maliciózních detekcí z periodicity 19 % (Baywatch-100) až 62 % (MORTON); detekcí jsou desítky až stovky za týden na ~20 tis. uživatelů. | RQ4-003 | nízká | proxy ground truth (VT), jeden běh | ano | počítat precision proti nezávislému ground truth, počítat alerty/týden |
 | Z3 | Laboratorní studie šifrovaného C2 uvádějí přesnost 99 % a F1 0,78-1 (RQ4-004, 006), ale provozní bod FPR 1 % v nich nebyl měřen. V jedné preprintové studii na 62 reálných capturech (RQ4-010 až 013) odpovídá F1 0,86-0,88 záchytu 13,2 % (RF fúze; pozdní průměrování 0 %) při FPR 1 % a po podvržení příznaků jsou modely pod triviální baseline; chybné předzpracování tam zvýšilo F1 o 0,28 (v autorově záměrně chybné kontrolní variantě, ne obecný efekt). | RQ4-004, 006, 010-013 | nízká | jediná preprintová studie pro provozní bod a evasi, lab data u zbytku, nepřímost | ano | split po cíli/zachycení, ne po toku; evaluace s evasí a při pevném FPR |
 | Z4 | Kryptografické metadata (JA3-like, velikosti záznamů) rozlišují malware od podniku, ale otisk sám nestačí (stovky procesů na jeden otisk) a v TLS 1.3 se musí příznaky odvodit; na neoznačeném kampusu je 0,87-3,65 % TLS 1.3 toků označeno C2 (skutečné TNR nelze určit). | RQ4-008, 009, 016-019 | střední | sandbox bias, TNR bez ground truth | s úpravou | otisk brát jako rys s kontextem cíle, ne alert |
-| Z5 | Aktivní otisk TLS serveru dosáhl precision >99 % na nových C2 serverech z blocklistů (30 týdnů, 28 mil. serverů). | RQ4-020 | střední | blocklist jako ground truth, FP u sdílených serverů | ano | kandidát pro ověřovací krok Skákavky |
+| Z5 | Aktivní otisk TLS serveru dosáhl precision >99 % na nových C2 serverech z blocklistů (30 týdnů, 28 mil. serverů). | RQ4-020 | střední | blocklist jako ground truth, FP u sdílených serverů | ano | kandidát pro ověřovací krok Salticus |
 | Z6a | DNS tunel: lexikální detektor (RQ4-025) dosáhl na vyváženém lab vzorku (94 % tunelových domén bez určeného nástroje) TPR 92 % při FPR 0,52 %; detektor nad prvními bajty (RQ4-026) TPR 96,5-100 % při FPR 5,8 % na reálném benigním provozu jedné firmy a veřejných PCAP tunelů. | RQ4-025, 026 | nízká | vyvážené lab vzorky, benigní a maliciózní data z různých zdrojů, jedna firma, bez CI | s úpravou | kontextová agregace, ne rozhodnutí po doméně |
 | Z6b | DGA: na vyvážených datech TPR 99,7-99,98 % při FPR 0,15-0,22 % (RQ4-027); v jedné síti (Siemens) v provozu 69 FP/hod, FPR 0,18 % (RQ4-028); po odstranění zkreslení 67-78 % TPR při FPR 0,1-0,2 % (RQ4-030). | RQ4-027 až 030 | střední | jedna reálná síť pro provozní bod, různé zdroje benigních a maliciózních dat | ano | kontextová agregace, ne rozhodnutí po doméně |
 | Z7 | Většina FP u DNS exfiltrace/tunelů jsou legitimní bezpečnostní služby (12 z 18 FP domén); počet nových distinktních FP domén za den klesl u modelu bez whitelistu na nejvýše 1 po dvou dnech (Fig. 5). Whitelist autoři jen navrhují, zdroj jeho efekt neměřil. | RQ4-023, 024 | střední | jedna sada, reálná, málo útoků, whitelist neměřen | ano | whitelist AV/bezp. služeb a CDN vzorů ověřit jako hypotézu (H4-3), ne jako doložený postup |
@@ -193,7 +193,7 @@ Odpovídá literatuře: nízká detekce beaconu při omezeném FPR, rozdíl „d
 | Z14 | Skeny a SSH brute-force jsou nejlépe zmapované; 3 potvrzené FP detektoru NEMEA byly legitimní monitorovací SSH klienti, 2 potvrzené FP nového ML detektoru byly nejednoznační klienti (ne monitoring); ground truth u skenů je heuristický. | RQ4-052 až 055 | střední | stáří (2004, 2013), AbuseIPDB jako ground truth | ano | reference pro srovnání |
 | Z15 | Čísla různých studií nejsou srovnatelná: poměr útok:benign sahá od 1:1 (RQ4-025, 027) po 1:526 000 (RQ4-039) a 1:747 500 (RQ4-043, 044); při malém podílu pozitivních vychází nízká precision i při malém FPR (CyberGraph: 635 TP a 107 960 FP, precision ~0,6 %, odhad autora studie z RQ4-035). | RQ4-025, 027, 035, 039, 043, 044 | vysoká | – | ano | vždy uvádět poměr a precision |
 
-## 6. Překlad do praxe pro Skákavku
+## 6. Překlad do praxe pro Salticus
 
 Označení: [D] přímo z důkazu, [E] extrapolace.
 

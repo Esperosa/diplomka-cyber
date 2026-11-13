@@ -581,7 +581,7 @@ fn push_security(checks: &mut Vec<ReadinessCheck>, auth_required: bool) {
             "platform",
             "Ochrana API/UI",
             vec!["api_token_required=false".to_string()],
-            "Pro produkční server spusť UI s --require-api-token a tokenem v BAKULA_API_TOKEN.",
+            "Pro produkční server spusť UI s --require-api-token a tokenem v SALTICUS_API_TOKEN.",
             0.66,
         ));
     }
@@ -668,7 +668,7 @@ fn push_verification(checks: &mut Vec<ReadinessCheck>, verification: Option<&Ver
             "quality",
             "Regresní ověření scénářů",
             vec!["verification/latest.json=missing".to_string()],
-            "Spusť cargo test a případně bakula overeni spust nad scénáři, aby byla uložená auditní verifikace.",
+            "Spusť cargo test a případně salticus overeni spust nad scénáři, aby byla uložená auditní verifikace.",
             0.55,
         )),
     }

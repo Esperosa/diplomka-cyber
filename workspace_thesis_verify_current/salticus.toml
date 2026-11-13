@@ -9,7 +9,7 @@ keep_raw = true
 
 [security]
 require_api_token = false
-api_token_env = "BAKULA_API_TOKEN"
+api_token_env = "SALTICUS_API_TOKEN"
 
 [platform]
 enabled = false

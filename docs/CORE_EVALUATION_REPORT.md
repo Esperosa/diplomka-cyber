@@ -4,7 +4,7 @@ Datum: `2026-04-09`
 
 ## Co bylo přidáno
 
-- nový příkaz `bakula evaluace spust`
+- nový příkaz `salticus evaluace spust`
 - paralelní benchmark nad generovanými scénáři se skupinováním závislých běhů
 - metriky přesnosti jádra:
   - `core_precision`
@@ -30,7 +30,7 @@ Datum: `2026-04-09`
 Příkaz:
 
 ```powershell
-.\target\debug\bakula-program.exe evaluace spust `
+.\target\debug\salticus-program.exe evaluace spust `
   --workspace .\workspace_eval_mass3 `
   --seed 17 `
   --nahodnych 120 `

@@ -46,7 +46,7 @@ function renderShell() {
   <a class="skip" href="#stage">Přeskočit na obsah</a>
   <div class="shell">
     <header class="bar">
-      <span class="wordmark">Skákavka</span>
+      <span class="wordmark">Salticus</span>
       <label class="run-pick"><span class="sr-only">Běh</span><select id="runSelect" aria-label="Běh"></select></label>
       <span class="status" id="status" role="status"><span class="pulse" data-state="idle"></span><span class="status-text"></span></span>
       <section class="infoband" id="infoband" aria-label="Kde jsem"></section>
@@ -266,7 +266,7 @@ function applyRoute(focusStage: boolean) {
     void refreshAudit();
   }
   if (section === "zasahy" && previous !== "zasahy") void refreshEnforcement();
-  document.title = `${currentView().label} · Skákavka`;
+  document.title = `${currentView().label} · Salticus`;
   const changed = previous !== section;
   const commit = () => {
     renderAll();
@@ -462,7 +462,7 @@ async function runGlobal(el: HTMLElement) {
   switch (el.dataset.global) {
     case "theme":
       state.theme = effectiveDark() ? "light" : "dark";
-      window.localStorage.setItem("bakulaTheme", state.theme);
+      window.localStorage.setItem("salticusTheme", state.theme);
       applyTheme();
       break;
     case "assistant-toggle":
@@ -547,9 +547,9 @@ document.addEventListener("visibilitychange", () => {
 
 // ---------- start ----------
 async function init() {
-  const storedTheme = window.localStorage.getItem("bakulaTheme");
+  const storedTheme = window.localStorage.getItem("salticusTheme");
   if (storedTheme === "light" || storedTheme === "dark") state.theme = storedTheme;
-  const storedPentest = window.localStorage.getItem("bakulaPentestMode");
+  const storedPentest = window.localStorage.getItem("salticusPentestMode");
   if (storedPentest === "off" || storedPentest === "smart" || storedPentest === "aggressive") state.pentestMode = storedPentest as PentestMode;
 
   // Vice soubeznych pozadavku muze dostat 401 naraz - dialog se ale ukaze jen jednou.

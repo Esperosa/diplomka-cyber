@@ -1,10 +1,10 @@
-# BAKULA — kompletní koncepce, technický návrh a výzkumný plán
+# SALTICUS — kompletní koncepce, technický návrh a výzkumný plán
 
-**Typ dokumentu:** sjednocený záznam celého brainstormingu o projektu Bakula, návrh cílové architektury a podklad pro diplomovou práci  
+**Typ dokumentu:** sjednocený záznam celého brainstormingu o projektu Salticus, návrh cílové architektury a podklad pro diplomovou práci  
 **Datum:** 28. října 2026  
 **Projekt:** [`Esperosa/service-fingerprinting-passive-analysis`](https://github.com/Esperosa/service-fingerprinting-passive-analysis)  
 **Status:** koncepční návrh; neznamená, že popsané nové funkce už existují v kódu  
-**Rozsah:** pouze Bakula; nesouvisející témata z konverzace nejsou zahrnuta.
+**Rozsah:** pouze Salticus; nesouvisející témata z konverzace nejsou zahrnuta.
 
 > **Jak dokument číst:** Oddíly „Současný stav“ popisují poznatky ze statického auditu repozitáře diskutovaného v chatu. Oddíly „Cílový stav“ jsou návrhy toho, co chceme vybudovat. Oddíly „Ověření“ říkají, čím budeme prokazovat, že daná vlastnost opravdu funguje. Číselné výkonnostní hodnoty jsou *návrhové cíle*, nikoliv naměřené výsledky.
 
@@ -12,7 +12,7 @@
 
 ## 1. Záměr a ambice
 
-Bakula má vyrůst z původního bakalářského proof of conceptu zaměřeného na fingerprinting služeb a pasivní analýzu v **distribuovanou, bezpečnou, self-hosted platformu pro inventarizaci, detekci, ověřování, prevenci a řízenou reakci na síťové hrozby**. Projekt bude zároveň technickým a experimentálním základem diplomové práce.
+Salticus má vyrůst z původního bakalářského proof of conceptu zaměřeného na fingerprinting služeb a pasivní analýzu v **distribuovanou, bezpečnou, self-hosted platformu pro inventarizaci, detekci, ověřování, prevenci a řízenou reakci na síťové hrozby**. Projekt bude zároveň technickým a experimentálním základem diplomové práce.
 
 Nejde jen o spojení Nmapu a Suricaty s hezkým dashboardem. Hlavní přidaná hodnota má být **korelační a rozhodovací engine řízený nejistotou**: ze všech dostupných signálů vytváří hypotézy, měří jejich důkazní sílu a nejistotu, volí nejefektivnější další ověření, aktualizuje závěr a dlouhodobě se z výsledků kontrol učí.
 
@@ -28,7 +28,7 @@ Cílové vlastnosti:
 8. Umožnit zlepšování detekcí a šablon na základě ověřených výsledků bez nekontrolovaného automatického přepisování produkčních pravidel.
 9. Ověřit analytiku na rozsáhlých globálních datech a aktivní bezpečnostní funkce v izolované autorizované laboratoři.
 
-**Významné omezení:** síťová ochrana bez agentů v koncových OS nemůže vidět všechny lokální procesy, offline aktivity, šifrovaný obsah ani některé útoky uvnitř hosta. Bakula může velmi významně doplnit endpoint ochranu, ale nelze poctivě slíbit, že v každém prostředí plně nahradí antivirus/EDR.
+**Významné omezení:** síťová ochrana bez agentů v koncových OS nemůže vidět všechny lokální procesy, offline aktivity, šifrovaný obsah ani některé útoky uvnitř hosta. Salticus může velmi významně doplnit endpoint ochranu, ale nelze poctivě slíbit, že v každém prostředí plně nahradí antivirus/EDR.
 
 ---
 
@@ -79,7 +79,7 @@ Oddělit **data plane**, **control plane**, **analytics plane** a **management p
 
 ```text
                          ┌───────────────────────────────┐
-                         │      BAKULA CONTROL PLANE     │
+                         │      SALTICUS CONTROL PLANE     │
                          │ Policies / RBAC / Scheduler   │
                          │ Rules / Template Registry     │
                          │ Config / Audit / Orchestration│
@@ -170,7 +170,7 @@ Identita hosta není IP. IP/MAC/hostname/DHCP/controller ID/certifikát/account/
 
 ### 4.1 Firewall
 
-Bakula má obsahovat spravovanou distribuovanou firewallovou rovinu. Návrh pro Linux gateway: **nftables/conntrack** jako výchozí enforcement, případně eBPF/XDP pro vybrané rychlé cesty (až po profilu a benchmarku). Rozhodování v paketové cestě musí být lokální a deterministické. Rust control agent sestavuje, kontroluje, podepisuje a atomicky aplikuje verzovanou politiku; nikdy nečeká na LLM či vzdálenou DB pro každý paket.
+Salticus má obsahovat spravovanou distribuovanou firewallovou rovinu. Návrh pro Linux gateway: **nftables/conntrack** jako výchozí enforcement, případně eBPF/XDP pro vybrané rychlé cesty (až po profilu a benchmarku). Rozhodování v paketové cestě musí být lokální a deterministické. Rust control agent sestavuje, kontroluje, podepisuje a atomicky aplikuje verzovanou politiku; nikdy nečeká na LLM či vzdálenou DB pro každý paket.
 
 Schopnosti: stateful L3/L4 ACL, zónové politiky, VLAN/segmenty, NAT, bezpečné address/domain sets, IPv4/IPv6, rate limits, logging, předvídatelný fail-open/fail-closed **podle služby a rizika**, HA failover, test vlastních pravidel, dry-run/canary/rollback.
 
@@ -188,7 +188,7 @@ Suricata v IPS režimu je možný blokovací modul, ale její provozní integrac
 
 ### 4.5 Kdy jsme konkurent Fortinet/FortiGate a kdy ne
 
-FortiGate je především síťové bezpečnostní zařízení/gateway; Bakula má být širší analytická a řídicí platforma se samostatným enforcement modulem. Výhoda může vzniknout v vendor-neutral korelaci, vysvětlitelnosti a adaptivním ověřování, nikoliv pouze tím, že přidáme vlastní firewall. Přímé tvrzení „lepší než Fortinet/Microsoft/Vectra/Splunk/Wazuh“ vyžaduje srovnatelné nezávislé testy. Produkt musí mít jasně deklarované pokrytí a slepá místa.
+FortiGate je především síťové bezpečnostní zařízení/gateway; Salticus má být širší analytická a řídicí platforma se samostatným enforcement modulem. Výhoda může vzniknout v vendor-neutral korelaci, vysvětlitelnosti a adaptivním ověřování, nikoliv pouze tím, že přidáme vlastní firewall. Přímé tvrzení „lepší než Fortinet/Microsoft/Vectra/Splunk/Wazuh“ vyžaduje srovnatelné nezávislé testy. Produkt musí mít jasně deklarované pokrytí a slepá místa.
 
 ---
 
@@ -264,18 +264,18 @@ Zaznamenávat každou hypotézu, její předchozí stav, podpůrné/rozporné d�
 Navrhovat Rust workspace s menšími `crates`; crate není automaticky server:
 
 ```text
-bakula/
+salticus/
 ├── crates/
-│   ├── bakula-schema/         # verzované eventy, hypotézy, evidence, policy
-│   ├── bakula-ingest/         # konektory, parsery, checkpointy, dedup
-│   ├── bakula-identity/       # asset resolution, historické ID a topologie
-│   ├── bakula-correlation/    # temporal / graph / CEP / pravidla
-│   ├── bakula-hypothesis/     # pravděpodobnosti a nejistoty
-│   ├── bakula-verification/   # VOI, agent contracts, scope a budgets
-│   ├── bakula-learning/       # Case Memory, kalibrace, templates
-│   ├── bakula-policy/         # firewall/DNS/IPS policies, verze, rollout
-│   ├── bakula-storage/        # repository interfaces, DB a objects
-│   └── bakula-evaluation/     # offline replay, metriky, porovnávání
+│   ├── salticus-schema/         # verzované eventy, hypotézy, evidence, policy
+│   ├── salticus-ingest/         # konektory, parsery, checkpointy, dedup
+│   ├── salticus-identity/       # asset resolution, historické ID a topologie
+│   ├── salticus-correlation/    # temporal / graph / CEP / pravidla
+│   ├── salticus-hypothesis/     # pravděpodobnosti a nejistoty
+│   ├── salticus-verification/   # VOI, agent contracts, scope a budgets
+│   ├── salticus-learning/       # Case Memory, kalibrace, templates
+│   ├── salticus-policy/         # firewall/DNS/IPS policies, verze, rollout
+│   ├── salticus-storage/        # repository interfaces, DB a objects
+│   └── salticus-evaluation/     # offline replay, metriky, porovnávání
 ├── services/
 │   ├── ingest-gateway/
 │   ├── correlation-worker/
@@ -468,7 +468,7 @@ Neplánujeme produkt jako jednoduchou jednoserverovou aplikaci, kterou později 
 - Hypothesis engine s rozlišenými nejistotami, kalibrovanými výstupy.
 - Verification Planner s VOI, hard safety/authorization constraints.
 - Multiagent orchestrace s jasnými kontrakty a sdíleným stavem.
-- Reprodukovatelný `bakula-evaluation` a dataset registry.
+- Reprodukovatelný `salticus-evaluation` a dataset registry.
 
 **P2 — distribuovaná ochrana a reakce**
 
@@ -529,7 +529,7 @@ Alternativně: *Uncertainty-Driven Active–Passive Security Correlation in Dist
 
 1. Zamrazit revizi Bakuly a vytvořit automatický import aktuálních integračních testů a event schémat.
 2. Vytvořit metadata registry globálních datasetů; stáhnout pouze reprezentativní veřejné výřezy s dostupnou licencí a dokumentovanými štítky.
-3. Postavit `bakula-evaluation`: replay, ablation konfigurace, labeling adaptery a měření p95/p99/quality/cost.
+3. Postavit `salticus-evaluation`: replay, ablation konfigurace, labeling adaptery a měření p95/p99/quality/cost.
 4. Spustit reprodukovatelný baseline experiment současného `src/correlation.rs` a `src/decision.rs` (to je pevná referenční úroveň).
 5. Vyvinout nový schema/identity/temporal correlation modul a porovnávat proti baseline.
 6. Přidat hypotézy a měření nejistoty; nejdříve s transparentními pravidly, následně s kalibrovanými modely.
@@ -566,7 +566,7 @@ Alternativně: *Uncertainty-Driven Active–Passive Security Correlation in Dist
 
 ## 15. Závěrečné rozhodnutí brainstormingu
 
-**Bakula se má dál vyvíjet jako bezpečnostní platforma postavená kolem adaptivního korelačního enginu řízeného nejistotou.** Jejím cílem není produkovat maximum alertů nebo spouštět maximum skenů, ale **maximalizovat počet správných a včasných bezpečnostních rozhodnutí při co nejnižších nákladech, síťové zátěži a riziku chybného zásahu**.
+**Salticus se má dál vyvíjet jako bezpečnostní platforma postavená kolem adaptivního korelačního enginu řízeného nejistotou.** Jejím cílem není produkovat maximum alertů nebo spouštět maximum skenů, ale **maximalizovat počet správných a včasných bezpečnostních rozhodnutí při co nejnižších nákladech, síťové zátěži a riziku chybného zásahu**.
 
 Distribuovaný firewall, DNS, IPS a reakční playbooky tvoří provozní ochranu. Globální datasety, reprodukovatelné replaye, virtuální testbedy a kontrolované experimenty tvoří způsob, jak prokázat kvalitu a zlepšování. Všechny větší změny musí být měřitelné proti stávající baseline, nikoliv jen přidané podle pocitu.
 

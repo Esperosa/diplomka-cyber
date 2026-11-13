@@ -7,12 +7,12 @@
 //!
 //! Bezpecnostni invarianty (vsechny testovane):
 //! - **Dry-run je vychozi.** Skutecny `nft` se zavola jen kdyz `EnforcementMode::Enforce`
-//!   (explicitni `BAKULA_ENFORCEMENT_MODE=enforce`); cokoliv jineho/preklep = dry-run.
+//!   (explicitni `SALTICUS_ENFORCEMENT_MODE=enforce`); cokoliv jineho/preklep = dry-run.
 //! - **Schvaleni je povinne** - akce nejde aplikovat bez stavu `approved`.
 //! - **Chranene rozsahy se kontroluji znovu pri aplikaci**, ne jen pri navrhu.
 //! - **Audit log je append-only** (SQLite triggery blokuji UPDATE/DELETE) a
 //!   tamper-evident (`hash = sha256(prev_hash | pole zaznamu)`, `verify_audit_chain`).
-//! - `bakula` meni vyhradne vlastni `table inet bakula`, nikdy cizi pravidla.
+//! - `salticus` meni vyhradne vlastni `table inet salticus`, nikdy cizi pravidla.
 
 use std::{path::Path, process::Command, time::Duration};
 
@@ -27,7 +27,7 @@ use crate::{
         BlockIpRequest, EnforcementRejection, ProtectedRanges, plan_block,
         render_nft_delete_element, render_setup_ruleset,
     },
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,8 +56,8 @@ pub struct OpsConfig {
 
 impl OpsConfig {
     pub fn from_env() -> Self {
-        let mode = EnforcementMode::parse(std::env::var("BAKULA_ENFORCEMENT_MODE").ok().as_deref());
-        let additional = std::env::var("BAKULA_PROTECTED_RANGES")
+        let mode = EnforcementMode::parse(std::env::var("SALTICUS_ENFORCEMENT_MODE").ok().as_deref());
+        let additional = std::env::var("SALTICUS_PROTECTED_RANGES")
             .unwrap_or_default()
             .split(',')
             .filter_map(|item| item.trim().parse::<IpNet>().ok())
@@ -65,7 +65,7 @@ impl OpsConfig {
         Self {
             mode,
             protected: ProtectedRanges::with_additional(additional),
-            nft_bin: std::env::var("BAKULA_NFT_BIN").unwrap_or_else(|_| "nft".to_string()),
+            nft_bin: std::env::var("SALTICUS_NFT_BIN").unwrap_or_else(|_| "nft".to_string()),
         }
     }
 }
@@ -86,14 +86,14 @@ pub struct SystemNft {
 impl NftExecutor for SystemNft {
     fn table_exists(&self) -> Result<bool> {
         let status = Command::new(&self.bin)
-            .args(["list", "table", "inet", "bakula"])
+            .args(["list", "table", "inet", "salticus"])
             .output()?
             .status;
         Ok(status.success())
     }
 
     fn apply_ruleset(&self, text: &str) -> Result<()> {
-        let path = std::env::temp_dir().join(format!("bakula-nft-{}.nft", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("salticus-nft-{}.nft", uuid::Uuid::new_v4()));
         std::fs::write(&path, text)?;
         let output = Command::new(&self.bin).arg("-f").arg(&path).output();
         let _ = std::fs::remove_file(&path);
@@ -101,7 +101,7 @@ impl NftExecutor for SystemNft {
         if output.status.success() {
             Ok(())
         } else {
-            Err(BakulaError::Processing(format!(
+            Err(SalticusError::Processing(format!(
                 "nft -f selhal: {}",
                 String::from_utf8_lossy(&output.stderr).trim()
             )))
@@ -113,7 +113,7 @@ impl NftExecutor for SystemNft {
         if output.status.success() {
             Ok(())
         } else {
-            Err(BakulaError::Processing(format!(
+            Err(SalticusError::Processing(format!(
                 "nft {} selhal: {}",
                 args.join(" "),
                 String::from_utf8_lossy(&output.stderr).trim()
@@ -123,7 +123,7 @@ impl NftExecutor for SystemNft {
 
     fn list_elements(&self, set: &str) -> Result<Vec<String>> {
         let output = Command::new(&self.bin)
-            .args(["-j", "list", "set", "inet", "bakula", set])
+            .args(["-j", "list", "set", "inet", "salticus", set])
             .output()?;
         if !output.status.success() {
             return Ok(Vec::new());
@@ -225,8 +225,8 @@ pub struct OpsStore {
     clock: Option<Clock>,
 }
 
-fn db_error(error: rusqlite::Error) -> BakulaError {
-    BakulaError::Processing(format!("ops SQLite chyba: {error}"))
+fn db_error(error: rusqlite::Error) -> SalticusError {
+    SalticusError::Processing(format!("ops SQLite chyba: {error}"))
 }
 
 fn hash_entry(
@@ -324,7 +324,7 @@ impl OpsStore {
     fn conn(&self) -> Result<std::sync::MutexGuard<'_, Connection>> {
         self.conn
             .lock()
-            .map_err(|_| BakulaError::Processing("ops SQLite zamek je poskozeny".to_string()))
+            .map_err(|_| SalticusError::Processing("ops SQLite zamek je poskozeny".to_string()))
     }
 
     // --- audit ---
@@ -364,7 +364,7 @@ impl OpsStore {
             .map_err(db_error)?
             .unwrap_or_default();
         let hash = hash_entry(&prev, at, actor, action, subject, detail);
-        tracing::info!(target: "bakula::audit", %actor, %action, %subject, %detail, %hash);
+        tracing::info!(target: "salticus::audit", %actor, %action, %subject, %detail, %hash);
         tx.execute(
             "INSERT INTO audit_log (at, actor, action, subject, detail, prev_hash, hash)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -569,9 +569,9 @@ impl OpsStore {
     pub fn decide(&self, id: i64, approve: bool, actor: &str) -> Result<EnforcementAction> {
         let action = self
             .get_action(id)?
-            .ok_or_else(|| BakulaError::Processing(format!("akce {id} neexistuje")))?;
+            .ok_or_else(|| SalticusError::Processing(format!("akce {id} neexistuje")))?;
         if action.status != "proposed" {
-            return Err(BakulaError::Processing(format!(
+            return Err(SalticusError::Processing(format!(
                 "akce {id} je ve stavu {}, rozhodnout lze jen 'proposed'",
                 action.status
             )));
@@ -616,9 +616,9 @@ impl OpsStore {
     ) -> Result<EnforcementAction> {
         let action = self
             .get_action(id)?
-            .ok_or_else(|| BakulaError::Processing(format!("akce {id} neexistuje")))?;
+            .ok_or_else(|| SalticusError::Processing(format!("akce {id} neexistuje")))?;
         if action.status != "approved" {
-            return Err(BakulaError::Processing(format!(
+            return Err(SalticusError::Processing(format!(
                 "akce {id} je ve stavu {}, aplikovat lze jen 'approved'",
                 action.status
             )));
@@ -889,7 +889,7 @@ mod tests {
         }
         fn run(&self, args: &[String]) -> Result<()> {
             if self.fail_run {
-                return Err(BakulaError::Processing(
+                return Err(SalticusError::Processing(
                     "nft simulovane selhani".to_string(),
                 ));
             }

@@ -20,7 +20,7 @@
 //! automaticky, ne za specialni flag.
 //!
 //! Aktualizace zlateho souboru po VEDOME zmene chovani:
-//! `BAKULA_UPDATE_GOLDEN=1 cargo test --test golden_snapshot`
+//! `SALTICUS_UPDATE_GOLDEN=1 cargo test --test golden_snapshot`
 
 use std::{fs, path::Path, process::Command};
 
@@ -28,7 +28,7 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 fn bin_path() -> &'static str {
-    env!("CARGO_BIN_EXE_bakula-program")
+    env!("CARGO_BIN_EXE_salticus-program")
 }
 
 fn golden_path() -> std::path::PathBuf {
@@ -404,7 +404,7 @@ fn full_visibility_stack_report_matches_golden_snapshot() {
 
     let actual = serde_json::to_string_pretty(&report).expect("serializace reportu");
 
-    if std::env::var("BAKULA_UPDATE_GOLDEN").is_ok() {
+    if std::env::var("SALTICUS_UPDATE_GOLDEN").is_ok() {
         fs::create_dir_all(golden_path().parent().expect("golden dir")).expect("mkdir golden");
         fs::write(golden_path(), &actual).expect("zapis zlateho souboru");
         return;
@@ -418,7 +418,7 @@ fn full_visibility_stack_report_matches_golden_snapshot() {
         .unwrap_or_else(|error| {
             panic!(
                 "zlaty soubor {:?} chybi nebo se neda cist ({error}) - vygeneruj ho: \
-                 BAKULA_UPDATE_GOLDEN=1 cargo test --test golden_snapshot",
+                 SALTICUS_UPDATE_GOLDEN=1 cargo test --test golden_snapshot",
                 golden_path()
             )
         })
@@ -431,7 +431,7 @@ fn full_visibility_stack_report_matches_golden_snapshot() {
             "report.json se zmenil oproti zlatemu snapshotu.\n\
              Skutecny vystup ulozen do {actual_path:?} - over diffem proti {:?}.\n\
              Pokud je zmena VEDOMA (napr. nova vrstva jadra zapojena do pipeline), \
-             aktualizuj zlaty soubor: BAKULA_UPDATE_GOLDEN=1 cargo test --test golden_snapshot",
+             aktualizuj zlaty soubor: SALTICUS_UPDATE_GOLDEN=1 cargo test --test golden_snapshot",
             golden_path()
         );
     }

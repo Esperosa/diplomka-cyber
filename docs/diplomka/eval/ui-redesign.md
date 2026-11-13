@@ -29,7 +29,7 @@ UI nic nedopočítává. Pole, která server nepošle, se ukážou jako "neznám
 ## Bezpečnostní drobnosti
 
 - Token se drží v `sessionStorage` (starý z `localStorage` se jednorázově převezme a smaže).
-- Všechny mutace posílají `X-Bakula-Csrf: 1`. Starý `ui-src` tuhle hlavičku nikdy neposílal (opravu dělal jen sestavený `ui/app.js`).
+- Všechny mutace posílají `X-Salticus-Csrf: 1`. Starý `ui-src` tuhle hlavičku nikdy neposílal (opravu dělal jen sestavený `ui/app.js`).
 - Souběžné 401 otevřou jediný dialog pro token.
 - Schválení zásahu a spuštění agresivního běhu jdou přes potvrzovací dialog.
 
@@ -39,7 +39,7 @@ Kontrast tokenů se počítá v `scripts/ui-smoke.mjs` (AA, oba režimy). Celé 
 
 ## Co se vědomě nedělalo
 
-- Žádné logo ani maskot. Název je text "Bakula".
+- Žádné logo ani maskot. Název je text "Salticus".
 - Žádný framework, žádný Tailwind (`tailwind.config.cjs` zůstává jako prázdný stub jen kvůli `COPY` v `Dockerfile`).
 - Role se neodhaduje předem. UI se dozví o chybějícím oprávnění až z 403 a tlačítka vypne.
 

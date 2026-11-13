@@ -24,7 +24,7 @@ use chrono::Utc;
 use serde::Serialize;
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     platform,
 };
 
@@ -47,8 +47,8 @@ impl RedisBrokerConfig {
     pub fn for_uri(uri: &str) -> Self {
         Self {
             uri: uri.to_string(),
-            stream_key: "bakula.jobs".to_string(),
-            group: "bakula-workers".to_string(),
+            stream_key: "salticus.jobs".to_string(),
+            group: "salticus-workers".to_string(),
             max_delivery_attempts: 5,
         }
     }
@@ -56,10 +56,10 @@ impl RedisBrokerConfig {
 
 fn open_connection(config: &RedisBrokerConfig) -> Result<redis::Connection> {
     let client = redis::Client::open(config.uri.as_str())
-        .map_err(|error| BakulaError::Processing(format!("Redis client chyba: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("Redis client chyba: {error}")))?;
     client
         .get_connection()
-        .map_err(|error| BakulaError::Processing(format!("Redis connection chyba: {error}")))
+        .map_err(|error| SalticusError::Processing(format!("Redis connection chyba: {error}")))
 }
 
 fn ensure_group_on(conn: &mut redis::Connection, config: &RedisBrokerConfig) -> Result<()> {
@@ -73,7 +73,7 @@ fn ensure_group_on(conn: &mut redis::Connection, config: &RedisBrokerConfig) -> 
     match result {
         Ok(_) => Ok(()),
         Err(error) if error.to_string().contains("BUSYGROUP") => Ok(()),
-        Err(error) => Err(BakulaError::Processing(format!(
+        Err(error) => Err(SalticusError::Processing(format!(
             "Nelze vytvorit Redis consumer group: {error}"
         ))),
     }
@@ -94,7 +94,7 @@ pub fn publish_job(config: &RedisBrokerConfig, job_id: i64) -> Result<String> {
         .arg("queued_at")
         .arg(Utc::now().to_rfc3339())
         .query(&mut conn)
-        .map_err(|error| BakulaError::Processing(format!("Redis XADD chyba: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("Redis XADD chyba: {error}")))?;
     Ok(message_id)
 }
 
@@ -140,7 +140,7 @@ pub fn claim_one(
         .arg(&config.stream_key)
         .arg(">")
         .query(&mut conn)
-        .map_err(|error| BakulaError::Processing(format!("Redis XREADGROUP chyba: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("Redis XREADGROUP chyba: {error}")))?;
 
     parse_claimed_message(response)
 }
@@ -183,7 +183,7 @@ fn reclaim_stale_on(
         .arg("COUNT")
         .arg(count)
         .query(conn)
-        .map_err(|error| BakulaError::Processing(format!("Redis XAUTOCLAIM chyba: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("Redis XAUTOCLAIM chyba: {error}")))?;
 
     let claimed = parse_autoclaim_entries(response)?;
     let mut deliverable = Vec::with_capacity(claimed.len());
@@ -216,7 +216,7 @@ fn bump_reclaim_count(
         .arg(stream_id)
         .arg(1)
         .query(conn)
-        .map_err(|error| BakulaError::Processing(format!("Redis HINCRBY chyba: {error}")))
+        .map_err(|error| SalticusError::Processing(format!("Redis HINCRBY chyba: {error}")))
 }
 
 /// Presune zpravu, ktera prekrocila `max_delivery_attempts`, z hlavniho streamu do
@@ -257,7 +257,7 @@ fn move_to_dead_letter(
         .arg(&message.stream_id)
         .ignore()
         .query(conn)
-        .map_err(|error| BakulaError::Processing(format!("Redis presun do DLQ chyba: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("Redis presun do DLQ chyba: {error}")))?;
 
     Ok(())
 }
@@ -272,7 +272,7 @@ pub fn dead_letter_messages(config: &RedisBrokerConfig) -> Result<Vec<BrokerMess
         .arg("-")
         .arg("+")
         .query(&mut conn)
-        .map_err(|error| BakulaError::Processing(format!("Redis XRANGE (DLQ) chyba: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("Redis XRANGE (DLQ) chyba: {error}")))?;
     let Some(entries) = response.as_sequence() else {
         return Ok(Vec::new());
     };
@@ -303,7 +303,7 @@ pub fn ack(config: &RedisBrokerConfig, stream_id: &str) -> Result<()> {
         .arg(stream_id)
         .ignore()
         .query(&mut conn)
-        .map_err(|error| BakulaError::Processing(format!("Redis XACK/HDEL chyba: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("Redis XACK/HDEL chyba: {error}")))?;
     Ok(())
 }
 
@@ -321,7 +321,7 @@ fn parse_entry(entry: &redis::Value) -> Result<Option<BrokerMessage>> {
     let fields = entry
         .get(1)
         .and_then(|item| item.as_sequence())
-        .ok_or_else(|| BakulaError::Processing("Redis zaznam nema fields.".to_string()))?;
+        .ok_or_else(|| SalticusError::Processing("Redis zaznam nema fields.".to_string()))?;
     let mut job_id = None;
     let mut index = 0;
     while index + 1 < fields.len() {
@@ -329,7 +329,7 @@ fn parse_entry(entry: &redis::Value) -> Result<Option<BrokerMessage>> {
         let value = redis_value_as_string(&fields[index + 1]).unwrap_or_default();
         if key == "job_id" {
             job_id = Some(value.parse::<i64>().map_err(|error| {
-                BakulaError::Processing(format!("Neplatne job_id z Redis zaznamu: {error}"))
+                SalticusError::Processing(format!("Neplatne job_id z Redis zaznamu: {error}"))
             })?);
         }
         index += 2;
@@ -384,17 +384,17 @@ mod tests {
     use super::*;
 
     /// `redis://127.0.0.1:6379` odpovida Redis service kontejneru v CI (`.github/
-    /// workflows/ci.yml`); lokalne lze prepsat `BAKULA_TEST_REDIS_URL`, napr. kdyz
+    /// workflows/ci.yml`); lokalne lze prepsat `SALTICUS_TEST_REDIS_URL`, napr. kdyz
     /// bezi docasny kontejner na jinem portu.
     fn test_config() -> RedisBrokerConfig {
-        let uri = std::env::var("BAKULA_TEST_REDIS_URL")
+        let uri = std::env::var("SALTICUS_TEST_REDIS_URL")
             .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
         // Kazdy test potrebuje vlastni stream/group, aby se navzajem neovlivnovaly
         // (testy mohou bezet paralelne v ramci jednoho `cargo test`).
         RedisBrokerConfig {
             uri,
-            stream_key: format!("bakula.test.{}", uuid::Uuid::new_v4()),
-            group: "bakula-test-workers".to_string(),
+            stream_key: format!("salticus.test.{}", uuid::Uuid::new_v4()),
+            group: "salticus-test-workers".to_string(),
             max_delivery_attempts: 5,
         }
     }

@@ -1,11 +1,11 @@
-id: bakula-actuator-health-exposed
+id: salticus-actuator-health-exposed
 
 info:
   name: Spring actuator health endpoint exposed
-  author: bakula
+  author: salticus
   severity: low
   description: Health endpoint can disclose service status and stack hints.
-  tags: bakula,http,actuator,spring
+  tags: salticus,http,actuator,spring
 
 http:
   - method: GET

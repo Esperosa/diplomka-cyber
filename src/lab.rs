@@ -30,7 +30,7 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 
-use crate::error::{BakulaError, Result};
+use crate::error::{SalticusError, Result};
 use crate::findings::generate_findings;
 use crate::hypothesis::{SecurityHypothesis, build_hypothesis};
 use crate::identity::IdentityMatch;
@@ -105,7 +105,7 @@ pub fn start_passive_capture(
     target_container_name: &str,
     workspace: &Path,
 ) -> Result<PassiveCaptureHandle> {
-    let capture_name = format!("bakula-lab-tcpdump-{}", uuid::Uuid::new_v4());
+    let capture_name = format!("salticus-lab-tcpdump-{}", uuid::Uuid::new_v4());
     let volume = format!("{}:/cap", workspace.display());
     let status = Command::new("docker")
         .args([
@@ -125,13 +125,13 @@ pub fn start_passive_capture(
         ])
         .status()
         .map_err(|error| {
-            BakulaError::Processing(format!("docker run (tcpdump) selhal: {error}"))
+            SalticusError::Processing(format!("docker run (tcpdump) selhal: {error}"))
         })?;
     if !status.success() {
         let _ = Command::new("docker")
             .args(["rm", "-f", &capture_name])
             .status();
-        return Err(BakulaError::Processing(
+        return Err(SalticusError::Processing(
             "docker run pro tcpdump sidecar se nepodarilo spustit.".to_string(),
         ));
     }
@@ -176,9 +176,9 @@ pub fn stop_passive_capture_and_parse(
             "passive.pcap",
         ])
         .status()
-        .map_err(|error| BakulaError::Processing(format!("docker run (zeek) selhal: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("docker run (zeek) selhal: {error}")))?;
     if !status.success() {
-        return Err(BakulaError::Processing(
+        return Err(SalticusError::Processing(
             "zeek offline analyza pcap souboru se nepodarila.".to_string(),
         ));
     }
@@ -218,7 +218,7 @@ pub fn stop_lab(handle: LabHandle) {
 /// nebo spoustet jednotlive) - jinak si dva testy soutezi o stejny host port. To je
 /// zdokumentovane omezeni, ne skryty predpoklad.
 pub fn start_juice_shop_lab() -> Result<LabHandle> {
-    let container_name = format!("bakula-lab-juiceshop-{}", uuid::Uuid::new_v4());
+    let container_name = format!("salticus-lab-juiceshop-{}", uuid::Uuid::new_v4());
     let status = Command::new("docker")
         .args([
             "run",
@@ -230,7 +230,7 @@ pub fn start_juice_shop_lab() -> Result<LabHandle> {
             JUICE_SHOP_IMAGE,
         ])
         .status()
-        .map_err(|error| BakulaError::Processing(format!("docker run selhal: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("docker run selhal: {error}")))?;
     if !status.success() {
         // `docker run` muze kontejner VYTVORIT (napr. v stavu "Created") i kdyz
         // selze start (napr. kolize portu) - bez LabHandle by nikdy neprobehl
@@ -239,7 +239,7 @@ pub fn start_juice_shop_lab() -> Result<LabHandle> {
         let _ = Command::new("docker")
             .args(["rm", "-f", &container_name])
             .status();
-        return Err(BakulaError::Processing(
+        return Err(SalticusError::Processing(
             "docker run pro juice-shop lab se nepodarilo spustit (mozna kolize portu 3000 - lab testy nesmi bezet paralelne).".to_string(),
         ));
     }
@@ -265,7 +265,7 @@ fn wait_for_http_health(port: u16, timeout: Duration) -> Result<()> {
             return Ok(());
         }
         if start.elapsed() > timeout {
-            return Err(BakulaError::Processing(format!(
+            return Err(SalticusError::Processing(format!(
                 "Lab cil 127.0.0.1:{port} nebyl HTTP-zdravy po {timeout:?}."
             )));
         }
@@ -297,12 +297,12 @@ fn docker_run(container_name: &str, port_mapping: &str, image_and_cmd: &[&str]) 
     let status = Command::new("docker")
         .args(&args)
         .status()
-        .map_err(|error| BakulaError::Processing(format!("docker run selhal: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("docker run selhal: {error}")))?;
     if !status.success() {
         let _ = Command::new("docker")
             .args(["rm", "-f", container_name])
             .status();
-        return Err(BakulaError::Processing(format!(
+        return Err(SalticusError::Processing(format!(
             "docker run pro {container_name} se nepodarilo spustit."
         )));
     }
@@ -317,10 +317,10 @@ fn docker_run(container_name: &str, port_mapping: &str, image_and_cmd: &[&str]) 
 pub fn start_multiservice_lab() -> Result<MultiLabHandle> {
     let suffix = uuid::Uuid::new_v4();
     let names = [
-        format!("bakula-lab-juiceshop-{suffix}"),
-        format!("bakula-lab-grafana-{suffix}"),
-        format!("bakula-lab-dirlisting-{suffix}"),
-        format!("bakula-lab-clean-{suffix}"),
+        format!("salticus-lab-juiceshop-{suffix}"),
+        format!("salticus-lab-grafana-{suffix}"),
+        format!("salticus-lab-dirlisting-{suffix}"),
+        format!("salticus-lab-clean-{suffix}"),
     ];
 
     let start_result = docker_run(
@@ -392,7 +392,7 @@ pub fn run_active_scan_against_ports(
     nuclei_templates_dir: PathBuf,
 ) -> Result<LabScanResult> {
     let scope = vec!["127.0.0.1/32".parse().map_err(|error| {
-        BakulaError::Processing(format!("neplatny scope 127.0.0.1/32: {error}"))
+        SalticusError::Processing(format!("neplatny scope 127.0.0.1/32: {error}"))
     })?];
 
     let xml_path = run_real_nmap(workspace, &scope, ports, "opatrny")?;
@@ -478,7 +478,7 @@ pub fn build_hypotheses_from_lab_scan_with_ports(
 
     let now = Utc::now();
     let scope = vec!["127.0.0.1/32".parse().map_err(|error| {
-        BakulaError::Processing(format!("neplatny scope 127.0.0.1/32: {error}"))
+        SalticusError::Processing(format!("neplatny scope 127.0.0.1/32: {error}"))
     })?];
     let mut report: RunReport = build_report(
         run_id,
@@ -534,10 +534,10 @@ pub struct InspectionOutcome {
 /// kandidata, ktery kvuli temto odhadum vyhral v `plan_verification()`.
 pub fn execute_inspect_metrics_content(base_url: &str) -> Result<InspectionOutcome> {
     let response = reqwest::blocking::get(format!("{base_url}/metrics"))
-        .map_err(|error| BakulaError::Processing(format!("GET /metrics selhal: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("GET /metrics selhal: {error}")))?;
     let status_code = response.status().as_u16();
     let body = response.text().map_err(|error| {
-        BakulaError::Processing(format!("cteni odpovedi /metrics selhalo: {error}"))
+        SalticusError::Processing(format!("cteni odpovedi /metrics selhalo: {error}"))
     })?;
 
     let sensitive_looking_metric_names = body
@@ -576,13 +576,13 @@ mod tests {
     /// dokumentace k mismatchi s jinym `httpx`). Prepsatelne env promennymi pro CI/jine
     /// stroje; vychozi odpovida tomu, kam byly binarky pro toto prostredi nainstalovany.
     fn httpx_bin() -> PathBuf {
-        std::env::var("BAKULA_TEST_HTTPX_BIN")
+        std::env::var("SALTICUS_TEST_HTTPX_BIN")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from(r"C:\Users\Creator\tools\projectdiscovery\httpx.exe"))
     }
 
     fn nuclei_bin() -> PathBuf {
-        std::env::var("BAKULA_TEST_NUCLEI_BIN")
+        std::env::var("SALTICUS_TEST_NUCLEI_BIN")
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
                 PathBuf::from(r"C:\Users\Creator\tools\projectdiscovery\nuclei.exe")
@@ -602,9 +602,9 @@ mod tests {
     fn voi_predict_template_from_passive_title(title: &str) -> Option<&'static str> {
         let lower = title.to_ascii_lowercase();
         if lower.contains("grafana") {
-            Some("bakula-grafana-login-exposed")
+            Some("salticus-grafana-login-exposed")
         } else if lower.contains("directory listing") {
-            Some("bakula-directory-listing-exposed")
+            Some("salticus-directory-listing-exposed")
         } else {
             None
         }
@@ -658,15 +658,15 @@ mod tests {
         };
 
         assert!(
-            has_template(JUICE_SHOP_PORT, "bakula-prometheus-metrics-exposed"),
+            has_template(JUICE_SHOP_PORT, "salticus-prometheus-metrics-exposed"),
             "Juice Shop musi vykazat prometheus-metrics-exposed jako v Deliverable 7"
         );
         assert!(
-            has_template(GRAFANA_HOST_PORT, "bakula-grafana-login-exposed"),
+            has_template(GRAFANA_HOST_PORT, "salticus-grafana-login-exposed"),
             "Grafana musi vykazat grafana-login-exposed"
         );
         assert!(
-            has_template(DIRLISTING_HOST_PORT, "bakula-directory-listing-exposed"),
+            has_template(DIRLISTING_HOST_PORT, "salticus-directory-listing-exposed"),
             "python http.server musi vykazat directory-listing-exposed"
         );
         assert!(
@@ -708,11 +708,11 @@ mod tests {
         // Predregistrovany manifest (napsany pred spustenim tohoto testu, ne odvozeny
         // ze zmereneho vysledku) - stejna disciplina jako label-leakage-safe eval.
         let expected_manifest: [(u16, Option<&str>); 4] = [
-            (JUICE_SHOP_PORT, Some("bakula-prometheus-metrics-exposed")),
-            (GRAFANA_HOST_PORT, Some("bakula-grafana-login-exposed")),
+            (JUICE_SHOP_PORT, Some("salticus-prometheus-metrics-exposed")),
+            (GRAFANA_HOST_PORT, Some("salticus-grafana-login-exposed")),
             (
                 DIRLISTING_HOST_PORT,
-                Some("bakula-directory-listing-exposed"),
+                Some("salticus-directory-listing-exposed"),
             ),
             (CLEAN_HOST_PORT, None),
         ];

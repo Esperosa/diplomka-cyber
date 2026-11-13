@@ -2,7 +2,7 @@ param(
     [switch]$Pull,
     [string]$ModelFile = "models/skoky/Modelfile",
     [string]$BaseModel = "qwen3:8b",
-    [string]$ProjectModel = "bakula-skoky:latest"
+    [string]$ProjectModel = "salticus-skoky:latest"
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,6 +30,6 @@ if (($models -join "`n") -notmatch [regex]::Escape($BaseModel.Split(":")[0])) {
 Write-Host "Vytvarim projektovy model $ProjectModel z $modelFilePath..."
 ollama create $ProjectModel -f $modelFilePath
 
-Write-Host "Hotovo. Pro Bakula UI nastav:"
-Write-Host "`$env:BAKULA_LLM_PROVIDER = `"ollama`""
+Write-Host "Hotovo. Pro Salticus UI nastav:"
+Write-Host "`$env:SALTICUS_LLM_PROVIDER = `"ollama`""
 Write-Host "`$env:OLLAMA_ASSISTANT_MODEL = `"$ProjectModel`""

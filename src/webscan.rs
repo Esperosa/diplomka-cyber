@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::{ActiveCheckRecord, Confidence, HostReport, Severity, WebProbeRecord},
     paths,
 };
@@ -80,7 +80,7 @@ pub fn enrich_http_services(
         run_httpx(
             httpx_path
                 .as_deref()
-                .ok_or_else(|| BakulaError::Processing("httpx neni dostupny.".to_string()))?,
+                .ok_or_else(|| SalticusError::Processing("httpx neni dostupny.".to_string()))?,
             &targets,
             &httpx_output,
         )?;
@@ -112,7 +112,7 @@ pub fn enrich_http_services(
             .clone()
             .unwrap_or_else(default_nuclei_templates_dir);
         if !templates_dir.is_dir() {
-            return Err(BakulaError::Processing(format!(
+            return Err(SalticusError::Processing(format!(
                 "Adresar s ridicimi nuclei templaty neexistuje: {}",
                 templates_dir.display()
             )));
@@ -143,7 +143,7 @@ fn default_nuclei_templates_dir() -> PathBuf {
     if let Ok(user_profile) = env::var("USERPROFILE") {
         let local = PathBuf::from(user_profile)
             .join("nuclei-templates")
-            .join("bakula-controlled");
+            .join("salticus-controlled");
         if local.is_dir() {
             return local;
         }
@@ -230,7 +230,7 @@ fn resolve_tool_path(
         }
     }
 
-    Err(BakulaError::Processing(format!(
+    Err(SalticusError::Processing(format!(
         "Nepodarilo se najit nastroj {file_name}. Ocekava se v tools/projectdiscovery nebo explicitne v argumentu."
     )))
 }
@@ -274,7 +274,7 @@ fn run_httpx(binary: &Path, targets: &[WebTarget], output_path: &Path) -> Result
         .status()?;
 
     if !status.success() {
-        return Err(BakulaError::Processing(format!(
+        return Err(SalticusError::Processing(format!(
             "httpx selhal nad vystupem {}",
             output_path.display()
         )));
@@ -343,7 +343,7 @@ fn run_nuclei(
 
 fn run_nuclei_batch(binary: &Path, urls: &[String], templates: &[PathBuf]) -> Result<String> {
     let temp_root = env::temp_dir().join(format!(
-        "bakula-nuclei-{}",
+        "salticus-nuclei-{}",
         Utc::now().format("%Y%m%d%H%M%S%3f")
     ));
     fs::create_dir_all(&temp_root)?;
@@ -371,7 +371,7 @@ fn run_nuclei_batch(binary: &Path, urls: &[String], templates: &[PathBuf]) -> Re
 
     let status = command.status()?;
     if !status.success() {
-        return Err(BakulaError::Processing(format!(
+        return Err(SalticusError::Processing(format!(
             "nuclei selhal pro sadu templatu {}",
             templates
                 .iter()
@@ -421,7 +421,7 @@ fn parse_httpx_line(line: &str) -> Result<HttpxResult> {
         .as_str()
         .or_else(|| value["input"].as_str())
         .ok_or_else(|| {
-            BakulaError::Processing("httpx vystup neobsahuje pole url ani input.".to_string())
+            SalticusError::Processing("httpx vystup neobsahuje pole url ani input.".to_string())
         })?
         .to_string();
 
@@ -572,7 +572,7 @@ fn parse_nuclei_line(line: &str) -> Result<NucleiResult> {
         .or_else(|| value["matched"].as_str())
         .or_else(|| value["host"].as_str())
         .ok_or_else(|| {
-            BakulaError::Processing("nuclei vystup neobsahuje pole matched-at/host.".to_string())
+            SalticusError::Processing("nuclei vystup neobsahuje pole matched-at/host.".to_string())
         })?
         .to_string();
     let matched_at = value["timestamp"]
@@ -759,22 +759,22 @@ mod tests {
     #[test]
     fn parses_httpx_json_line() {
         let record = parse_httpx_line(
-            r#"{"input":"http://127.0.0.1:8080","url":"http://127.0.0.1:8080","port":8080,"scheme":"http","status-code":200,"title":"Bakula","webserver":"Bakula","content-type":"text/html","content-length":1234,"response-time":"45ms","favicon":123456}"#,
+            r#"{"input":"http://127.0.0.1:8080","url":"http://127.0.0.1:8080","port":8080,"scheme":"http","status-code":200,"title":"Salticus","webserver":"Salticus","content-type":"text/html","content-length":1234,"response-time":"45ms","favicon":123456}"#,
         )
         .expect("httpx parse");
         assert_eq!(record.port, 8080);
         assert_eq!(record.status_code, Some(200));
-        assert_eq!(record.title.as_deref(), Some("Bakula"));
+        assert_eq!(record.title.as_deref(), Some("Salticus"));
         assert_eq!(record.response_time_ms, Some(45));
     }
 
     #[test]
     fn parses_nuclei_json_line() {
         let record = parse_nuclei_line(
-            r#"{"template-id":"bakula-basic-auth-over-http","matcher-name":"basic-auth","matched-at":"http://127.0.0.1:18081/","timestamp":"2026-04-08T10:00:00Z","info":{"name":"HTTP Basic Authentication over cleartext","severity":"high","description":"Basic auth challenge is available over plaintext HTTP."},"extracted-results":["WWW-Authenticate: Basic realm=Admin"]}"#,
+            r#"{"template-id":"salticus-basic-auth-over-http","matcher-name":"basic-auth","matched-at":"http://127.0.0.1:18081/","timestamp":"2026-04-08T10:00:00Z","info":{"name":"HTTP Basic Authentication over cleartext","severity":"high","description":"Basic auth challenge is available over plaintext HTTP."},"extracted-results":["WWW-Authenticate: Basic realm=Admin"]}"#,
         )
         .expect("nuclei parse");
-        assert_eq!(record.template_id, "bakula-basic-auth-over-http");
+        assert_eq!(record.template_id, "salticus-basic-auth-over-http");
         assert_eq!(record.severity, crate::model::Severity::High);
         assert_eq!(record.evidence.len(), 1);
     }
@@ -858,11 +858,11 @@ mod tests {
                 "low"
             };
             let line = format!(
-                r#"{{"template-id":"bakula-synth-{index}","matcher-name":"m{index}","matched-at":"http://127.0.0.1:{}/","timestamp":"2026-04-08T10:00:00Z","info":{{"name":"Synthetic template #{index}","severity":"{severity}","description":"Synthetic batch parse."}},"extracted-results":["evidence-{index}"]}}"#,
+                r#"{{"template-id":"salticus-synth-{index}","matcher-name":"m{index}","matched-at":"http://127.0.0.1:{}/","timestamp":"2026-04-08T10:00:00Z","info":{{"name":"Synthetic template #{index}","severity":"{severity}","description":"Synthetic batch parse."}},"extracted-results":["evidence-{index}"]}}"#,
                 18080 + (index % 100)
             );
             let record = parse_nuclei_line(&line).expect("synthetic nuclei parse");
-            assert!(record.template_id.starts_with("bakula-synth-"));
+            assert!(record.template_id.starts_with("salticus-synth-"));
             assert_eq!(record.evidence.len(), 1);
         }
     }

@@ -7,10 +7,10 @@
 # `--require-api-token` je tu zapnuty vedome (ne CLI/server.rs vychozi
 # `false`) - audit nalez byl prave "anonymous-admin je
 # vychozi, i /automation/restart s nim spusti aktivni sken". Produkcni
-# nasazeni by nemelo tohle riziko znovu tise zdedit. BAKULA_API_TOKEN je
+# nasazeni by nemelo tohle riziko znovu tise zdedit. SALTICUS_API_TOKEN je
 # POVINNY (zadna vychozi hodnota) - `docker compose up` bez neho spadne na
 # config.rs's vlastni fail-closed kontrole, ne tise pobezi bez autentizace.
-# Pro rychle lokalni vyzkouseni bez tokenu: `docker compose run --rm bakula
+# Pro rychle lokalni vyzkouseni bez tokenu: `docker compose run --rm salticus
 # server spust --workspace /data/workspace --host 0.0.0.0`.
 services:
   redis:
@@ -26,7 +26,7 @@ services:
       timeout: 3s
       retries: 5
 
-  bakula:
+  salticus:
     build: .
     restart: unless-stopped
     depends_on:
@@ -35,9 +35,9 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - bakula-workspace:/data/workspace
+      - salticus-workspace:/data/workspace
     environment:
-      - BAKULA_API_TOKEN=${BAKULA_API_TOKEN:?nastav BAKULA_API_TOKEN (napr. v .env) pred 'docker compose up'}
+      - SALTICUS_API_TOKEN=${SALTICUS_API_TOKEN:?nastav SALTICUS_API_TOKEN (napr. v .env) pred 'docker compose up'}
     command:
       [
         "server",
@@ -50,9 +50,9 @@ services:
         "8080",
         "--require-api-token",
         "--api-token-env",
-        "BAKULA_API_TOKEN"
+        "SALTICUS_API_TOKEN"
       ]
 
 volumes:
-  bakula-workspace:
+  salticus-workspace:
   redis-data:

@@ -6,7 +6,7 @@ Tento dokument shrnuje, co bylo doplneno nad puvodni thesis core prototyp tak, a
 
 ### 1. Provozni konfigurace
 
-- `bakula.toml` ma jednotny model `AppConfig`
+- `salticus.toml` ma jednotny model `AppConfig`
 - konfigurace se umi vytvorit i validovat prikazy:
   - `cargo run -- config init --path <soubor>`
   - `cargo run -- config validate --path <soubor>`
@@ -84,16 +84,16 @@ Aktualni verze je vyrazne provoznejsi nez puvodni prototyp, ale porad z ni pocti
 - multi-tenant prostredi a rozsahle provozni governance,
 - nastroj, ktery by nahrazoval SIEM/IDS/VM ekosystem v plnem rozsahu.
 
-## Soulad s puvodni praci (Bakula)
+## Soulad s puvodni praci (Salticus)
 
-Tato vrstva je v souladu s textem puvodni prace (Bakula) v tom, ze:
+Tato vrstva je v souladu s textem puvodni prace (Salticus) v tom, ze:
 
 - zachovava auditovatelny report a zdrojove artefakty,
 - nepretvari heuristiky za jiste vysledky,
 - rozviji prototyp smerem k realnejsimu provozu,
 - ale netvrdi, ze tim byl prokazan univerzalni enterprise-grade provoz bez dalsi validace.
 
-Primarni myslenka puvodni prace (Bakula) zustava stejna:
+Primarni myslenka puvodni prace (Salticus) zustava stejna:
 
 - aktivni inventar,
 - vulnerability enrichment,

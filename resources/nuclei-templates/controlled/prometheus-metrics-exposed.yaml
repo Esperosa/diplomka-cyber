@@ -1,11 +1,11 @@
-id: bakula-prometheus-metrics-exposed
+id: salticus-prometheus-metrics-exposed
 
 info:
   name: Prometheus metrics endpoint exposed
-  author: bakula
+  author: salticus
   severity: medium
   description: Metrics endpoint is reachable without additional protection.
-  tags: bakula,http,metrics,prometheus
+  tags: salticus,http,metrics,prometheus
 
 http:
   - method: GET

@@ -11,7 +11,7 @@ use std::path::Path;
 
 use chrono::DateTime;
 
-use crate::error::{BakulaError, Result};
+use crate::error::{SalticusError, Result};
 use crate::eval::ground_truth::{GroundTruthLabel, LabeledDataset};
 use crate::eval::source::{DatasetSourceInfo, ScenarioSource};
 use crate::passive::ConnectionObservation;
@@ -33,7 +33,7 @@ impl ScenarioSource for UnswNb15Source {
         let mut lines = content.lines();
         let header = lines
             .next()
-            .ok_or_else(|| BakulaError::Processing("UNSW-NB15 vyrez je prazdny.".into()))?;
+            .ok_or_else(|| SalticusError::Processing("UNSW-NB15 vyrez je prazdny.".into()))?;
         let columns: HashMap<&str, usize> = header
             .split(',')
             .enumerate()
@@ -41,7 +41,7 @@ impl ScenarioSource for UnswNb15Source {
             .collect();
         let column = |name: &str| -> Result<usize> {
             columns.get(name).copied().ok_or_else(|| {
-                BakulaError::Processing(format!("UNSW-NB15 vyrez postrada sloupec '{name}'."))
+                SalticusError::Processing(format!("UNSW-NB15 vyrez postrada sloupec '{name}'."))
             })
         };
         let idx: Vec<usize> = [

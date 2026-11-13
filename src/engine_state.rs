@@ -14,12 +14,12 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::HostReport,
 };
 
-fn db_error(error: rusqlite::Error) -> BakulaError {
-    BakulaError::Processing(format!("engine_state SQLite chyba: {error}"))
+fn db_error(error: rusqlite::Error) -> SalticusError {
+    SalticusError::Processing(format!("engine_state SQLite chyba: {error}"))
 }
 
 /// Úložiště stavu jádra (kv + paměť nálezů v téže databázi).
@@ -75,12 +75,12 @@ impl EngineStateStore {
             )
             .optional()
             .map_err(db_error)?;
-        raw.map(|text| serde_json::from_str(&text).map_err(BakulaError::Json))
+        raw.map(|text| serde_json::from_str(&text).map_err(SalticusError::Json))
             .transpose()
     }
 
     pub fn save<T: Serialize>(&self, name: &str, value: &T) -> Result<()> {
-        let text = serde_json::to_string(value).map_err(BakulaError::Json)?;
+        let text = serde_json::to_string(value).map_err(SalticusError::Json)?;
         self.conn
             .execute(
                 "INSERT INTO kv (name, value, updated_at) VALUES (?1, ?2, datetime('now'))

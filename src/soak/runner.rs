@@ -27,7 +27,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     soak::{
         alloc,
         episode::{EpisodeConfig, WorldMask, run_episode, run_with_counterfactual},
@@ -362,7 +362,7 @@ pub fn run(mut cfg: SoakConfig, resume: bool) -> Result<()> {
         persisted
     } else {
         if state_path(&cfg.out).exists() {
-            return Err(BakulaError::Config(format!(
+            return Err(SalticusError::Config(format!(
                 "{} uz obsahuje beh (state.json) - pouzij --resume, nebo jiny adresar",
                 cfg.out.display()
             )));
@@ -399,8 +399,8 @@ pub fn run(mut cfg: SoakConfig, resume: bool) -> Result<()> {
     let previous_elapsed = state.elapsed_wall_s;
     let legs: crate::soak::legs::SharedLegs = std::sync::Arc::new(Mutex::new(state.legs.clone()));
     let redis_uri =
-        std::env::var("BAKULA_SOAK_REDIS").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
-    let repo_root = std::env::var("BAKULA_SOAK_REPO")
+        std::env::var("SALTICUS_SOAK_REDIS").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+    let repo_root = std::env::var("SALTICUS_SOAK_REPO")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
     let shared = Mutex::new(Shared {
@@ -578,7 +578,7 @@ pub fn verify(out: &Path, samples: usize, seed: u64) -> Result<(usize, usize)> {
         }
     }
     if blocks.is_empty() {
-        return Err(BakulaError::Config("blocks.jsonl je prazdny".to_string()));
+        return Err(SalticusError::Config("blocks.jsonl je prazdny".to_string()));
     }
     // Nahodny vyber deterministicky ze `seed` (Fisher-Yates nad indexy).
     let mut rng = crate::soak::rng::Rng::new(seed);

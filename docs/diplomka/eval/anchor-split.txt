@@ -31,7 +31,7 @@ iot23/CTU-IoT-Malware-Capture-8-1
 iot23/CTU-IoT-Malware-Capture-21-1
 iot23/CTU-IoT-Malware-Capture-44-1
 
-# Krok 5 (impl-krok5.md, A9): verejne datasety mimo repo (BAKULA_EXTERNAL_DATASETS),
+# Krok 5 (impl-krok5.md, A9): verejne datasety mimo repo (SALTICUS_EXTERNAL_DATASETS),
 # CIC-IDS2017 po skupinach stitku, UNSW-NB15 po case. Testovaci cast je zamcena.
 # SHA-256 testovaci casti k5: b1dbb1ca6e5ce05fed0ada39604724fd57813801a31e9ed8487669e590706d3b
 

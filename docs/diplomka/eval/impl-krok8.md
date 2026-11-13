@@ -1,6 +1,6 @@
 # Implementace, krok 8: koncová telemetrie (EDR-like) jako další druh důkazu
 
-Datum 2026-11-11. Výchozí stav: krok 7 (`78ba3e1`), preset `recommended()` = sestava kroku 7, výchozí režim `legacy`. Rešerše: `studie/08-endpoint-telemetrie.md`. Skákavka je síťová detekce, krok 8 přidává vrstvu, která čte VÝSTUPY hotových nástrojů (Sysmon a Windows log v JSON, Wazuh alerts, osquery results). Žádný vlastní agent.
+Datum 2026-11-11. Výchozí stav: krok 7 (`78ba3e1`), preset `recommended()` = sestava kroku 7, výchozí režim `legacy`. Rešerše: `studie/08-endpoint-telemetrie.md`. Salticus je síťová detekce, krok 8 přidává vrstvu, která čte VÝSTUPY hotových nástrojů (Sysmon a Windows log v JSON, Wazuh alerts, osquery results). Žádný vlastní agent.
 
 Cíl: slepá místa z registru kroku 7 (exploit_attempt 35,5 %, lateral_movement, pomalé a nenápadné c2 majáky) a bezpečné zavření falešných poplachů známým procesem.
 
@@ -66,7 +66,7 @@ Rozhodnutí: když E1 až E14 projdou, vrstva je „připravena na držený běh
 | simulace | `src/soak/endpoint_sim.rs`, `episode.rs`, `ladder_env.rs`, `main.rs` | `--endpoint on|off`, `--endpoint-coverage %`, `--endpoint-agent honest|silent|ok`; generátor odvozený z rodin a benigních vzorů (viz A4), počítadla `endpoint_*` v `k7`. |
 | vyhodnocení | `tools/soak_k8.py` | párové rozdíly s bootstrapem po sítích, prahy E1 až E11. |
 
-**Testy.** Jednotkové (`endpoint::correlate::tests`: identita, sklad, shell z web serveru, neškodný vzor jen starý a čistý, chybějící telemetrie není neškodná, spojení s toky a posun hodin; `endpoint::tests`: vzorové záznamy, neplatné záznamy, limity dávky, ořez polí, UTF-8; `endpoint::persist::tests`), ladder (`endpoint_benign_never_refutes_protected_case`, `endpoint_benign_alone_does_not_refute_unprotected_case`, `endpoint_benign_with_other_benign_evidence_can_refute_with_audit_reason`, `endpoint_suspicious_raises_belief_and_missing_coverage_changes_nothing`), fuzz parserů (`fuzz_parsers_never_panic`, 20 000 průchodů na formát, v měření 100 000 přes `BAKULA_FUZZ_N`), soak (`endpoint_world_is_inert_without_switch_deterministic_and_keeps_protection`: svět s agenty bez přepínače je bit po bitu v3, determinismus, 0 chráněných zavření a 0 zavření chráněného koncovým signálem v režimech honest 100 %, honest 30 %, silent a ok).
+**Testy.** Jednotkové (`endpoint::correlate::tests`: identita, sklad, shell z web serveru, neškodný vzor jen starý a čistý, chybějící telemetrie není neškodná, spojení s toky a posun hodin; `endpoint::tests`: vzorové záznamy, neplatné záznamy, limity dávky, ořez polí, UTF-8; `endpoint::persist::tests`), ladder (`endpoint_benign_never_refutes_protected_case`, `endpoint_benign_alone_does_not_refute_unprotected_case`, `endpoint_benign_with_other_benign_evidence_can_refute_with_audit_reason`, `endpoint_suspicious_raises_belief_and_missing_coverage_changes_nothing`), fuzz parserů (`fuzz_parsers_never_panic`, 20 000 průchodů na formát, v měření 100 000 přes `SALTICUS_FUZZ_N`), soak (`endpoint_world_is_inert_without_switch_deterministic_and_keeps_protection`: svět s agenty bez přepínače je bit po bitu v3, determinismus, 0 chráněných zavření a 0 zavření chráněného koncovým signálem v režimech honest 100 %, honest 30 %, silent a ok).
 
 ## D) Měření
 

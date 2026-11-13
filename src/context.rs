@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::{Confidence, HostReport, MonitoringLane, NetworkAsset, Severity, TopologyEdge},
 };
 
@@ -91,7 +91,7 @@ pub fn collect_context(hosts: &[HostReport], config: &ContextConfig) -> Result<C
     } else if let Some(base_url) = &config.librenms_base_url {
         let snapshot = fetch_librenms_snapshot(base_url, &config.librenms_token_env)?;
         artifacts.librenms_snapshot_json =
-            Some(serde_json::to_string_pretty(&snapshot).map_err(BakulaError::Json)?);
+            Some(serde_json::to_string_pretty(&snapshot).map_err(SalticusError::Json)?);
         merge_normalized_snapshot(hosts, "librenms", snapshot.clone(), &mut assets, &mut edges);
         lanes.push(build_lane(
             "librenms",
@@ -120,7 +120,7 @@ pub fn collect_context(hosts: &[HostReport], config: &ContextConfig) -> Result<C
             config.meraki_timespan_seconds,
         )?;
         artifacts.meraki_snapshot_json =
-            Some(serde_json::to_string_pretty(&snapshot).map_err(BakulaError::Json)?);
+            Some(serde_json::to_string_pretty(&snapshot).map_err(SalticusError::Json)?);
         let normalized = meraki_to_snapshot(snapshot);
         merge_normalized_snapshot(hosts, "meraki", normalized.clone(), &mut assets, &mut edges);
         lanes.push(build_lane(
@@ -151,7 +151,7 @@ pub fn collect_context(hosts: &[HostReport], config: &ContextConfig) -> Result<C
             config.unifi_links_url.as_deref(),
         )?;
         artifacts.unifi_snapshot_json =
-            Some(serde_json::to_string_pretty(&snapshot).map_err(BakulaError::Json)?);
+            Some(serde_json::to_string_pretty(&snapshot).map_err(SalticusError::Json)?);
         merge_normalized_snapshot(hosts, "unifi", snapshot.clone(), &mut assets, &mut edges);
         lanes.push(build_lane(
             "unifi",
@@ -171,7 +171,7 @@ pub fn collect_context(hosts: &[HostReport], config: &ContextConfig) -> Result<C
     {
         let snapshot = fetch_aruba_snapshot(base_url, &config.aruba_token_env, site_id)?;
         artifacts.aruba_snapshot_json =
-            Some(serde_json::to_string_pretty(&snapshot).map_err(BakulaError::Json)?);
+            Some(serde_json::to_string_pretty(&snapshot).map_err(SalticusError::Json)?);
         merge_normalized_snapshot(hosts, "aruba", snapshot.clone(), &mut assets, &mut edges);
         lanes.push(build_lane("aruba", "context", "Aruba Central", &snapshot));
     }
@@ -196,7 +196,7 @@ pub fn collect_context(hosts: &[HostReport], config: &ContextConfig) -> Result<C
             config.omada_links_url.as_deref(),
         )?;
         artifacts.omada_snapshot_json =
-            Some(serde_json::to_string_pretty(&snapshot).map_err(BakulaError::Json)?);
+            Some(serde_json::to_string_pretty(&snapshot).map_err(SalticusError::Json)?);
         merge_normalized_snapshot(hosts, "omada", snapshot.clone(), &mut assets, &mut edges);
         lanes.push(build_lane(
             "omada",
@@ -856,11 +856,11 @@ fn fetch_librenms_snapshot(
     api_key_env: &str,
 ) -> Result<NormalizedControllerSnapshot> {
     let api_key = env::var(api_key_env).map_err(|_| {
-        BakulaError::Config(format!(
+        SalticusError::Config(format!(
             "Promenna prostredi {api_key_env} s LibreNMS API tokenem neni nastavena."
         ))
     })?;
-    let client = Client::builder().user_agent("bakula-program/0.1").build()?;
+    let client = Client::builder().user_agent("salticus-program/0.1").build()?;
     let headers = vec![("X-Auth-Token", api_key)];
 
     let devices_value = fetch_json(
@@ -909,11 +909,11 @@ fn fetch_meraki_snapshot(
     timespan_seconds: u32,
 ) -> Result<MerakiSnapshot> {
     let api_key = env::var(api_key_env).map_err(|_| {
-        BakulaError::Config(format!(
+        SalticusError::Config(format!(
             "Promenna prostredi {api_key_env} s Meraki API klicem neni nastavena."
         ))
     })?;
-    let client = Client::builder().user_agent("bakula-program/0.1").build()?;
+    let client = Client::builder().user_agent("salticus-program/0.1").build()?;
 
     let devices: Vec<MerakiDevice> = client
         .get(format!(
@@ -1008,11 +1008,11 @@ fn fetch_generic_controller_snapshot(
     links_url: Option<&str>,
 ) -> Result<NormalizedControllerSnapshot> {
     let token = env::var(token_env).map_err(|_| {
-        BakulaError::Config(format!(
+        SalticusError::Config(format!(
             "Promenna prostredi {token_env} pro connector {source} neni nastavena."
         ))
     })?;
-    let client = Client::builder().user_agent("bakula-program/0.1").build()?;
+    let client = Client::builder().user_agent("salticus-program/0.1").build()?;
     let headers = vec![
         ("Authorization", format!("Bearer {token}")),
         ("X-API-Key", token.clone()),
@@ -1057,11 +1057,11 @@ fn fetch_aruba_snapshot(
     site_id: &str,
 ) -> Result<NormalizedControllerSnapshot> {
     let token = env::var(token_env).map_err(|_| {
-        BakulaError::Config(format!(
+        SalticusError::Config(format!(
             "Promenna prostredi {token_env} pro Aruba Central bearer token neni nastavena."
         ))
     })?;
-    let client = Client::builder().user_agent("bakula-program/0.1").build()?;
+    let client = Client::builder().user_agent("salticus-program/0.1").build()?;
     let headers = vec![("Authorization", format!("Bearer {token}"))];
     let base = base_url.trim_end_matches('/');
 
@@ -1095,7 +1095,7 @@ fn fetch_json(client: &Client, url: &str, headers: &[(&str, String)]) -> Result<
         request = request.header(*name, value);
     }
     let response = request.send()?.error_for_status()?;
-    response.json().map_err(BakulaError::Http)
+    response.json().map_err(SalticusError::Http)
 }
 
 fn build_lane(

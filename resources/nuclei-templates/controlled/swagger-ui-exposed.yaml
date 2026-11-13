@@ -1,11 +1,11 @@
-id: bakula-swagger-ui-exposed
+id: salticus-swagger-ui-exposed
 
 info:
   name: Swagger UI exposed
-  author: bakula
+  author: salticus
   severity: medium
   description: Interactive API documentation is publicly reachable.
-  tags: bakula,http,swagger,api
+  tags: salticus,http,swagger,api
 
 http:
   - method: GET

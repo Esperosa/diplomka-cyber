@@ -1,7 +1,7 @@
-# Analýza současného stavu — Bakula (service-fingerprinting-passive-analysis)
+# Analýza současného stavu — Salticus (service-fingerprinting-passive-analysis)
 
 **Datum:** 29. října 2026
-**Status:** nezávislá analýza kódu (ne jen statická inspekce z chatu) — doplňuje a na místech opravuje sekci 2 a 2.1 dokumentu `BAKULA_kompletni_technicky_navrh_diplomova_prace.md`.
+**Status:** nezávislá analýza kódu (ne jen statická inspekce z chatu) — doplňuje a na místech opravuje sekci 2 a 2.1 dokumentu `SALTICUS_kompletni_technicky_navrh_diplomova_prace.md`.
 
 ---
 
@@ -14,7 +14,7 @@
 
 ### 1.2 Autentizace — horší, než popisoval původní návrh
 `src/server.rs:474-523`, `SecurityConfig::default()`:
-- `require_api_token` je **výchozí `false`**, a to i v commitnuté konfiguraci `workspace_thesis_verify_current/bakula.toml` — jde o reálně používanou demo konfiguraci, ne jen teoretickou větev.
+- `require_api_token` je **výchozí `false`**, a to i v commitnuté konfiguraci `workspace_thesis_verify_current/salticus.toml` — jde o reálně používanou demo konfiguraci, ne jen teoretickou větev.
 - Bez `platform_db`: každý request dostává `anonymous-admin` (plné `*` oprávnění).
 - **Nový nález:** i při `auth_required = true` (bez platform DB) projdou čtecí endpointy (`*.read`, `metrics.read`) bez tokenu jako `anonymous-readonly`. Čtecí API je tedy fakticky vždy neautentizované, dokud není zapnutý `platform.enabled`.
 
@@ -36,8 +36,8 @@
 - `storage.rs` (souborový workspace) + `external_sql.rs` (SQLite/Postgres) jsou dvě nekonzistentní persistence vrstvy vedle sebe.
 
 ### 1.6 Co návrh nezmiňoval, a existuje
-- `ai.rs` + `assistant.rs` (~90 KB): lokální LLM copilot (Ollama `qwen3:8b`, finetune `bakula-skoky`) nad kontextem reportu — UI asistent, nesouvisí s detekčním jádrem.
-- `evaluation.rs` / `verification.rs`: zárodek `ScenarioManifest`/`EvaluationSummary` — základ pro `bakula-evaluation` z návrhu už částečně existuje.
+- `ai.rs` + `assistant.rs` (~90 KB): lokální LLM copilot (Ollama `qwen3:8b`, finetune `salticus-skoky`) nad kontextem reportu — UI asistent, nesouvisí s detekčním jádrem.
+- `evaluation.rs` / `verification.rs`: zárodek `ScenarioManifest`/`EvaluationSummary` — základ pro `salticus-evaluation` z návrhu už částečně existuje.
 - `readiness.rs`: `ProductionReadinessReport` — projekt si už sám měří gap vůči produkci.
 - `pentest.rs`, `simulation.rs`: interní pentest runner a syntetická data pro škálovací testy.
 

@@ -486,17 +486,17 @@ fn resort_and_recompute_lane_summary(report: &mut RunReport) {
 
 /// Krok 7 (C5): čas běhu při chronologickém přehrávání veřejného datasetu celou
 /// produkční cestou (`tools/replay_public.py`). Jen pro evaluaci: proměnná
-/// `BAKULA_REPLAY_NOW` (RFC 3339) nastaví začátek běhu na začátek přehrávaného okna,
+/// `SALTICUS_REPLAY_NOW` (RFC 3339) nastaví začátek běhu na začátek přehrávaného okna,
 /// aby profil, novost a paměť nálezů běžely v čase dat. Bez proměnné nástěnné hodiny.
 fn replay_clock() -> Option<chrono::DateTime<Utc>> {
-    let value = std::env::var("BAKULA_REPLAY_NOW").ok()?;
+    let value = std::env::var("SALTICUS_REPLAY_NOW").ok()?;
     match chrono::DateTime::parse_from_rfc3339(value.trim()) {
         Ok(at) => {
-            tracing::warn!(%value, "cas behu z BAKULA_REPLAY_NOW (prehravani datasetu)");
+            tracing::warn!(%value, "cas behu z SALTICUS_REPLAY_NOW (prehravani datasetu)");
             Some(at.with_timezone(&Utc))
         }
         Err(error) => {
-            tracing::warn!(%value, %error, "neplatne BAKULA_REPLAY_NOW, pouzit aktualni cas");
+            tracing::warn!(%value, %error, "neplatne SALTICUS_REPLAY_NOW, pouzit aktualni cas");
             None
         }
     }
@@ -505,7 +505,7 @@ fn replay_clock() -> Option<chrono::DateTime<Utc>> {
 pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
     let args = prepare_pipeline_args(args)?;
     fs::create_dir_all(&args.workspace)?;
-    let config_path = args.workspace.join("bakula.toml");
+    let config_path = args.workspace.join("salticus.toml");
     let app_config = config::load_or_default(&config_path)?;
     let workspace = Workspace::open(&args.workspace)?;
     let run_id = report::build_run_id();
@@ -1309,12 +1309,12 @@ pub fn run_pipeline(args: BehArgs) -> anyhow::Result<RunReport> {
                     "aggressive_checks={}",
                     pentest_artifacts.aggressive_checks_total
                 ),
-                "tool=bakula-internal-pentest".to_string(),
+                "tool=salticus-internal-pentest".to_string(),
             ],
             recommended_tools: vec![
-                "bakula-tcp-probe".to_string(),
-                "bakula-http-prober".to_string(),
-                "bakula-method-auditor".to_string(),
+                "salticus-tcp-probe".to_string(),
+                "salticus-http-prober".to_string(),
+                "salticus-method-auditor".to_string(),
             ],
         });
     }

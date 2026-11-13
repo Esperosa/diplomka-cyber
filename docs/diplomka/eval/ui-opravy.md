@@ -1,4 +1,4 @@
-# Oprava UI Skákavky: stav po bodech 1–18
+# Oprava UI Salticus: stav po bodech 1–18
 
 Stav k 2026-11-01. Změny prvního kola nebyly commitnuté. Mock server běží na portu 8851 (showcase).
 Snímky jsou v `C:\Users\Creator\.t3\userdata\browser-artifacts\`. Náhled prohlížeče je v nich zmenšený na 1280 px, takže drobný text na nich není čitelný. Důkazem jsou proto hlavně měření přes `preview_evaluate`.

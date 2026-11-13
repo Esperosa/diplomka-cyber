@@ -21,7 +21,7 @@ Zdroje:
 * krok 7 (držený běh): ``docs/diplomka/eval/k7/held.md`` a registr slepých
   míst a tabulka prahů v ``docs/diplomka/eval/impl-krok7.md``;
 * krok 8: ``docs/diplomka/eval/k8/vysledky.md``;
-* dlouhý běh: ``final-report.json`` (cesta z ``BAKULA_FINAL_REPORT`` nebo
+* dlouhý běh: ``final-report.json`` (cesta z ``SALTICUS_FINAL_REPORT`` nebo
   ``F:/Projekty/bakula-soak/run-mega-4d/final-report.json``).
 
 Skript používá jen standardní knihovnu Pythonu 3.
@@ -376,7 +376,7 @@ def main(argv: Optional[list] = None, root: Path = ROOT) -> int:
     tests = args.tests
     if tests is None and not args.no_cargo:
         tests = count_tests(root)
-    fr = Path(args.final_report or os.environ.get("BAKULA_FINAL_REPORT") or DEFAULT_FINAL_REPORT)
+    fr = Path(args.final_report or os.environ.get("SALTICUS_FINAL_REPORT") or DEFAULT_FINAL_REPORT)
 
     block = build_block(root, tests, fr)
     if args.show:

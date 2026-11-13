@@ -296,7 +296,7 @@ try {
     await page.fill('dialog.modal input[name="token"]', "test");
     await page.click('dialog.modal button[value="ok"]');
     await page.waitForFunction(() => document.querySelector(".node") !== null, null, { timeout: 8000 });
-    const stored = await page.evaluate(() => ({ s: sessionStorage.getItem("bakulaApiToken"), l: localStorage.getItem("bakulaApiToken") }));
+    const stored = await page.evaluate(() => ({ s: sessionStorage.getItem("salticusApiToken"), l: localStorage.getItem("salticusApiToken") }));
     assert(stored.s === "test" && stored.l === null, `token je ulozen spatne: ${JSON.stringify(stored)}`);
     await context.close();
   });

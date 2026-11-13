@@ -3,7 +3,7 @@ use std::io;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum BakulaError {
+pub enum SalticusError {
     #[error("I/O chyba: {0}")]
     Io(#[from] io::Error),
     #[error("JSON chyba: {0}")]
@@ -16,4 +16,4 @@ pub enum BakulaError {
     Processing(String),
 }
 
-pub type Result<T> = std::result::Result<T, BakulaError>;
+pub type Result<T> = std::result::Result<T, SalticusError>;

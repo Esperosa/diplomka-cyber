@@ -1198,7 +1198,7 @@
       ],
       "recommended_tools": [
         "nmap",
-        "bakula-internal-pentest",
+        "salticus-internal-pentest",
         "httpx-optional",
         "nuclei-controlled-optional",
         "zeek",
@@ -1224,9 +1224,9 @@
         "policy=non-destructive-authorized"
       ],
       "recommended_tools": [
-        "bakula-internal-pentest",
-        "bakula-tcp-probe",
-        "bakula-http-prober",
+        "salticus-internal-pentest",
+        "salticus-tcp-probe",
+        "salticus-http-prober",
         "nmap-safe-scripts",
         "greenbone-authenticated"
       ]

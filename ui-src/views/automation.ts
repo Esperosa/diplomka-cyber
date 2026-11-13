@@ -182,7 +182,7 @@ export const automation: View = {
   actions: {
     "pentest-mode": (el) => {
       const mode = (el as HTMLSelectElement).value as PentestMode;
-      window.localStorage.setItem("bakulaPentestMode", mode);
+      window.localStorage.setItem("salticusPentestMode", mode);
       update({ pentestMode: mode });
     },
     "auto-restart": async () => {

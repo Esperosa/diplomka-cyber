@@ -1,10 +1,10 @@
-# Soulad s primarni myslenkou puvodni prace (Bakula)
+# Soulad s primarni myslenkou puvodni prace (Salticus)
 
-Tento dokument shrnuje, zda aktualni program odpovida primarni myslence puvodni prace (Bakula):
+Tento dokument shrnuje, zda aktualni program odpovida primarni myslence puvodni prace (Salticus):
 
 > fingerprinting sluzeb a pasivni analyza sitoveho provozu pro detekci bezpecnostnich hrozeb v lokalni siti, s jednotnym auditovatelnym reportem a poctivym vymezenim nejistoty.
 
-## Primarni osa puvodni prace (Bakula)
+## Primarni osa puvodni prace (Salticus)
 
 Z LaTeX textu vyplyva, ze jadro reseni ma byt:
 
@@ -47,7 +47,7 @@ Program oddeluje fingerprinting od enrichmentu a uklada zdroj, cas stazeni, kand
 
 ### 3. Pasivni cast
 
-Splneno v rozsahu puvodniho prototypu (Bakula).
+Splneno v rozsahu puvodniho prototypu (Salticus).
 
 - `src/passive/*`
 - `src/correlation.rs`
@@ -81,7 +81,7 @@ Splneno jako pomocna vrstva nad reportem.
 - `src/server.rs`
 - `ui/*`
 
-UI je nadstavba nad reportem, ne samostatny zdroj pravdy. To je v souladu s puvodni praci (Bakula), kde je hlavnim artefaktem auditovatelny report.
+UI je nadstavba nad reportem, ne samostatny zdroj pravdy. To je v souladu s puvodni praci (Salticus), kde je hlavnim artefaktem auditovatelny report.
 
 ## Co bylo potreba vycistit
 
@@ -104,11 +104,11 @@ Nad ramec jadra jsou k dispozici:
 - externi PostgreSQL control-plane backend,
 - rolling upgrade policy a cluster metadata.
 
-Tato vrstva neni v rozporu s puvodni praci (Bakula), pokud je interpretovana jako navazujici rozsireni a ne jako nova hlavni osa projektu.
+Tato vrstva neni v rozporu s puvodni praci (Salticus), pokud je interpretovana jako navazujici rozsireni a ne jako nova hlavni osa projektu.
 
 ## Zavěr
 
-Aktualni program odpovida primarni myslence puvodni prace (Bakula) tehdy, kdyz je pouzivan predevsim jako:
+Aktualni program odpovida primarni myslence puvodni prace (Salticus) tehdy, kdyz je pouzivan predevsim jako:
 
 - aktivni inventar + vulnerability enrichment + pasivni korelace + jednotny report + overeni scenaru.
 
@@ -120,4 +120,4 @@ cargo run -- overeni spust --workspace .\workspace --scenare .\workspace\simulac
 cargo run -- server spust --workspace .\workspace
 ```
 
-Pokud by byl program prezentovan hlavne jako cluster orchestrator nebo univerzalni network manager, s puvodni praci (Bakula) by se rozchazel. V aktualnim stavu tomu tak neni; thesis core je zachovano a v dokumentaci je znovu postaveno na prvni misto.
+Pokud by byl program prezentovan hlavne jako cluster orchestrator nebo univerzalni network manager, s puvodni praci (Salticus) by se rozchazel. V aktualnim stavu tomu tak neni; thesis core je zachovano a v dokumentaci je znovu postaveno na prvni misto.

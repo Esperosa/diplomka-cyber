@@ -292,9 +292,9 @@ const nowIso = () => new Date().toISOString();
 let enforcementMode = process.env.MOCK_MODE ?? "dry_run";
 let nextId = 4;
 const actions = [
-  { id: 1, ip: "203.0.113.50", ttl_seconds: 3600, reason: "Opakované skenování portů z vnější adresy", finding_id: null, status: "applied", nft_command: ["add", "element", "inet", "bakula", "blocked_ips", "{ 203.0.113.50 timeout 3600s }"], proposed_at: new Date(Date.now() - 22 * 60000).toISOString(), decided_by: "operator", decided_at: new Date(Date.now() - 20 * 60000).toISOString(), applied_at: new Date(Date.now() - 20 * 60000).toISOString() },
-  { id: 2, ip: "198.51.100.7", ttl_seconds: 900, reason: "Podezřelý C2 provoz na 4444/tcp", finding_id: golden.findings[0].finding_id, status: "proposed", nft_command: ["add", "element", "inet", "bakula", "blocked_ips", "{ 198.51.100.7 timeout 900s }"], proposed_at: new Date(Date.now() - 3 * 60000).toISOString(), decided_by: null, decided_at: null, applied_at: null },
-  { id: 3, ip: "198.51.100.99", ttl_seconds: 600, reason: "Zkušební návrh", finding_id: null, status: "rejected", nft_command: ["add", "element", "inet", "bakula", "blocked_ips", "{ 198.51.100.99 timeout 600s }"], proposed_at: new Date(Date.now() - 90 * 60000).toISOString(), decided_by: "operator", decided_at: new Date(Date.now() - 85 * 60000).toISOString(), applied_at: null },
+  { id: 1, ip: "203.0.113.50", ttl_seconds: 3600, reason: "Opakované skenování portů z vnější adresy", finding_id: null, status: "applied", nft_command: ["add", "element", "inet", "salticus", "blocked_ips", "{ 203.0.113.50 timeout 3600s }"], proposed_at: new Date(Date.now() - 22 * 60000).toISOString(), decided_by: "operator", decided_at: new Date(Date.now() - 20 * 60000).toISOString(), applied_at: new Date(Date.now() - 20 * 60000).toISOString() },
+  { id: 2, ip: "198.51.100.7", ttl_seconds: 900, reason: "Podezřelý C2 provoz na 4444/tcp", finding_id: golden.findings[0].finding_id, status: "proposed", nft_command: ["add", "element", "inet", "salticus", "blocked_ips", "{ 198.51.100.7 timeout 900s }"], proposed_at: new Date(Date.now() - 3 * 60000).toISOString(), decided_by: null, decided_at: null, applied_at: null },
+  { id: 3, ip: "198.51.100.99", ttl_seconds: 600, reason: "Zkušební návrh", finding_id: null, status: "rejected", nft_command: ["add", "element", "inet", "salticus", "blocked_ips", "{ 198.51.100.99 timeout 600s }"], proposed_at: new Date(Date.now() - 90 * 60000).toISOString(), decided_by: "operator", decided_at: new Date(Date.now() - 85 * 60000).toISOString(), applied_at: null },
 ];
 const audit = [
   { id: 1, at: new Date(Date.now() - 95 * 60000).toISOString(), actor: "analyst", action: "enforcement.proposed", subject: "198.51.100.99", detail: "ttl=600s" },
@@ -348,7 +348,7 @@ createServer(async (req, res) => {
 async function api(req, res, url, path) {
   const method = req.method ?? "GET";
   if (AUTH && path !== "/api/meta" && req.headers.authorization !== "Bearer test") return send(res, 401, { error: "token" });
-  if (method !== "GET" && req.headers["x-bakula-csrf"] !== "1") return send(res, 403, { error: "Chybí hlavička X-Bakula-Csrf." });
+  if (method !== "GET" && req.headers["x-salticus-csrf"] !== "1") return send(res, 403, { error: "Chybí hlavička X-Salticus-Csrf." });
 
   if (path === "/api/meta") return send(res, 200, { auth_required: AUTH });
   if (path === "/api/runs") return send(res, 200, EMPTY ? [] : RUNS.map((run) => { const r = run.build(); return { run_id: run.id, nazev: run.nazev, hosts_total: r.hosts.length, services_total: r.hosts.reduce((n, h) => n + h.services.length, 0), cves_total: Number(r.summary.cves_total) }; }));
@@ -399,7 +399,7 @@ async function api(req, res, url, path) {
     if (PROTECTED.some((re) => re.test(ip))) return send(res, 422, { error: "ProtectedRange" });
     if (!(body.ttl_seconds >= 1 && body.ttl_seconds <= 86400)) return send(res, 422, { error: "TtlExceedsMaximum" });
     if (actions.some((a) => a.ip === ip && ["proposed", "approved", "applied"].includes(a.status))) return send(res, 422, { error: "AlreadyActive" });
-    const action = { id: nextId++, ip, ttl_seconds: body.ttl_seconds, reason: body.reason ?? "", finding_id: body.finding_id ?? null, status: "proposed", nft_command: ["add", "element", "inet", "bakula", "blocked_ips", `{ ${ip} timeout ${body.ttl_seconds}s }`], proposed_at: nowIso(), decided_by: null, decided_at: null, applied_at: null };
+    const action = { id: nextId++, ip, ttl_seconds: body.ttl_seconds, reason: body.reason ?? "", finding_id: body.finding_id ?? null, status: "proposed", nft_command: ["add", "element", "inet", "salticus", "blocked_ips", `{ ${ip} timeout ${body.ttl_seconds}s }`], proposed_at: nowIso(), decided_by: null, decided_at: null, applied_at: null };
     actions.push(action);
     audit.unshift({ id: audit.length + 1, at: nowIso(), actor: ROLE, action: "enforcement.proposed", subject: ip, detail: `ttl=${body.ttl_seconds}s` });
     return send(res, 200, action);

@@ -3,9 +3,9 @@
 
 Vstup: Zeek `conn.log.labeled` (IoT-23, CTU). Toky se seradi podle casu a rozdeli do
 30min oken. Kazde okno se zapise jako `conn.log` bez stitku a projde skutecnou
-produkcni cestou `bakula-program beh spust` (pamet, kontext, zebrik, profil, novost,
+produkcni cestou `salticus-program beh spust` (pamet, kontext, zebrik, profil, novost,
 audit uzavreni) v docasnem workspace s `[engine] mode = "v3"`. Cas behu je zacatek
-okna (`BAKULA_REPLAY_NOW`), takze profil a novost bezi v case dat. Stitky slouzi jen
+okna (`SALTICUS_REPLAY_NOW`), takze profil a novost bezi v case dat. Stitky slouzi jen
 k vyhodnoceni (skodlivy host = zdroj aspon jednoho toku se stitkem Malicious).
 
 Aktivni kontroly na zaznamu provest nejdou: beh je bez `--execute-verification`,
@@ -125,7 +125,7 @@ def main():
         order = order[: args.max_windows]
     workspace = os.path.join(args.work, "ws")
     os.makedirs(workspace, exist_ok=True)
-    with open(os.path.join(workspace, "bakula.toml"), "w", encoding="utf-8") as cfg:
+    with open(os.path.join(workspace, "salticus.toml"), "w", encoding="utf-8") as cfg:
         cfg.write('[engine]\nmode = "v3"\n')
         if args.protect:
             cfg.write("[engine.v3]\nprotect = true\n")
@@ -142,7 +142,7 @@ def main():
         wdir = os.path.join(args.work, f"w{index:05d}", "zeek")
         write_window(wdir, fields, windows[index])
         env = dict(os.environ)
-        env["BAKULA_REPLAY_NOW"] = datetime.fromtimestamp(start, timezone.utc).isoformat()
+        env["SALTICUS_REPLAY_NOW"] = datetime.fromtimestamp(start, timezone.utc).isoformat()
         cmd = [args.bin, "beh", "spust", "--workspace", workspace, "--nazev", f"w{index}",
                "--scope", scope, "--nmap-xml", nmap, "--zeek-dir", wdir,
                "--provider", "demo", "--disable-circl"]

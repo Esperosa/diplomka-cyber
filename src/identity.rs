@@ -301,7 +301,7 @@ pub fn resolve_and_annotate_v3(
 ) -> Result<Vec<IdentityMatch>> {
     let mut resolver: IdentityResolverV3 = if registry_path.exists() {
         let bytes = fs::read(registry_path)?;
-        serde_json::from_slice(&bytes).map_err(crate::error::BakulaError::Json)?
+        serde_json::from_slice(&bytes).map_err(crate::error::SalticusError::Json)?
     } else {
         IdentityResolverV3::new()
     };
@@ -313,7 +313,7 @@ pub fn resolve_and_annotate_v3(
             IdentityMatch::Same(_) | IdentityMatch::New(_) => None,
         };
     }
-    let bytes = serde_json::to_vec_pretty(&resolver).map_err(crate::error::BakulaError::Json)?;
+    let bytes = serde_json::to_vec_pretty(&resolver).map_err(crate::error::SalticusError::Json)?;
     storage::write_atomic(registry_path, &bytes)?;
     Ok(matches)
 }
@@ -346,7 +346,7 @@ pub fn resolve_and_annotate(
 ) -> Result<Vec<IdentityMatch>> {
     let mut resolver: IdentityResolver = if registry_path.exists() {
         let bytes = fs::read(registry_path)?;
-        serde_json::from_slice(&bytes).map_err(crate::error::BakulaError::Json)?
+        serde_json::from_slice(&bytes).map_err(crate::error::SalticusError::Json)?
     } else {
         IdentityResolver::new()
     };
@@ -362,7 +362,7 @@ pub fn resolve_and_annotate(
         matches.push(identity_match);
     }
 
-    let bytes = serde_json::to_vec_pretty(&resolver).map_err(crate::error::BakulaError::Json)?;
+    let bytes = serde_json::to_vec_pretty(&resolver).map_err(crate::error::SalticusError::Json)?;
     storage::write_atomic(registry_path, &bytes)?;
     Ok(matches)
 }
@@ -490,7 +490,7 @@ mod tests {
     /// pameti jednoho testu/labu, nikdy ne pres 2 ODDELENE procesy (coz CLI
     /// invokace vzdy jsou). Tenhle test overuje presne tu cross-run
     /// kontinuitu pres skutecny soubor na disku - 2 nezavisla volani
-    /// `resolve_and_annotate` (simulace 2 samostatnych `bakula-program`
+    /// `resolve_and_annotate` (simulace 2 samostatnych `salticus-program`
     /// behu) musi dat stejny `asset_id` pri DHCP renewal (stejna MAC, nova IP).
     #[test]
     fn resolve_and_annotate_persists_identity_across_two_separate_calls() {

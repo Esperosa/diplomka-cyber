@@ -154,7 +154,7 @@ pub async fn serve_with_config(addr: SocketAddr, config: AppConfig) -> Result<()
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state);
 
-    tracing::info!(%addr, "Skakavka UI bezi");
+    tracing::info!(%addr, "Salticus UI bezi");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
@@ -197,7 +197,7 @@ async fn ready(State(state): State<AppState>, headers: HeaderMap) -> impl IntoRe
 async fn meta(State(state): State<AppState>) -> impl IntoResponse {
     let workspace_root = state.workspace_root.display().to_string();
     Json(serde_json::json!({
-        "service": "bakula-program",
+        "service": "salticus-program",
         "version": env!("CARGO_PKG_VERSION"),
         "started_at": state.started_at,
         "workspace_root": workspace_root,
@@ -223,7 +223,7 @@ async fn metrics(State(state): State<AppState>, headers: HeaderMap) -> impl Into
 }
 
 /// Provozni metriky zasahu: pocty akci podle stavu, aktualni mod, delka auditu.
-/// Nedostupna ops DB nesmi shodit cele `/metrics` - vypise se jen `bakula_ops_up 0`.
+/// Nedostupna ops DB nesmi shodit cele `/metrics` - vypise se jen `salticus_ops_up 0`.
 fn render_ops_metrics(state: &AppState) -> String {
     let mode = match state.ops.config.mode {
         ops::EnforcementMode::DryRun => "dry_run",
@@ -231,55 +231,55 @@ fn render_ops_metrics(state: &AppState) -> String {
     };
     let mut text = String::new();
     text.push_str(
-        "# HELP bakula_enforcement_mode Aktualni rezim zasahu (1 = aktivni).
+        "# HELP salticus_enforcement_mode Aktualni rezim zasahu (1 = aktivni).
 ",
     );
     text.push_str(
-        "# TYPE bakula_enforcement_mode gauge
+        "# TYPE salticus_enforcement_mode gauge
 ",
     );
     text.push_str(&format!(
-        "bakula_enforcement_mode{{mode=\"{mode}\"}} 1
+        "salticus_enforcement_mode{{mode=\"{mode}\"}} 1
 "
     ));
     match ops_store(state).and_then(|store| store.metrics_snapshot()) {
         Ok((counts, audit)) => {
             text.push_str(
-                "# HELP bakula_ops_up Ops databaze je dostupna.
-# TYPE bakula_ops_up gauge
-bakula_ops_up 1
+                "# HELP salticus_ops_up Ops databaze je dostupna.
+# TYPE salticus_ops_up gauge
+salticus_ops_up 1
 ",
             );
             text.push_str(
-                "# HELP bakula_enforcement_actions Pocet zasahu podle stavu.
+                "# HELP salticus_enforcement_actions Pocet zasahu podle stavu.
 ",
             );
             text.push_str(
-                "# TYPE bakula_enforcement_actions gauge
+                "# TYPE salticus_enforcement_actions gauge
 ",
             );
             for (status, count) in counts {
                 text.push_str(&format!(
-                    "bakula_enforcement_actions{{status=\"{status}\"}} {count}
+                    "salticus_enforcement_actions{{status=\"{status}\"}} {count}
 "
                 ));
             }
             text.push_str(
-                "# HELP bakula_audit_entries_total Pocet zaznamu audit logu.
+                "# HELP salticus_audit_entries_total Pocet zaznamu audit logu.
 ",
             );
             text.push_str(
-                "# TYPE bakula_audit_entries_total counter
+                "# TYPE salticus_audit_entries_total counter
 ",
             );
             text.push_str(&format!(
-                "bakula_audit_entries_total {audit}
+                "salticus_audit_entries_total {audit}
 "
             ));
         }
         Err(_) => text.push_str(
-            "# TYPE bakula_ops_up gauge
-bakula_ops_up 0
+            "# TYPE salticus_ops_up gauge
+salticus_ops_up 0
 ",
         ),
     }
@@ -628,12 +628,12 @@ fn ensure_csrf_guard_header(
     auth: &AuthContext,
     headers: &HeaderMap,
 ) -> std::result::Result<(), (StatusCode, String)> {
-    if auth.subject != "anonymous-admin" || headers.contains_key("x-bakula-csrf") {
+    if auth.subject != "anonymous-admin" || headers.contains_key("x-salticus-csrf") {
         return Ok(());
     }
     Err((
         StatusCode::FORBIDDEN,
-        "Chybi hlavicka X-Bakula-Csrf - pozadavek vypada jako cross-site a byl odmitnut."
+        "Chybi hlavicka X-Salticus-Csrf - pozadavek vypada jako cross-site a byl odmitnut."
             .to_string(),
     ))
 }
@@ -761,36 +761,36 @@ fn render_metrics(runs: &[RunIndexEntry], latest: Option<&RunIndexEntry>) -> Str
     let lanes_total: usize = runs.iter().map(|item| item.monitoring_lanes_total).sum();
     format!(
         concat!(
-            "# HELP bakula_runs_total Pocet ulozenych behu.\n",
-            "# TYPE bakula_runs_total gauge\n",
-            "bakula_runs_total {}\n",
-            "# HELP bakula_hosts_total_sum Soucet hostu napric ulozenymi behy.\n",
-            "# TYPE bakula_hosts_total_sum gauge\n",
-            "bakula_hosts_total_sum {}\n",
-            "# HELP bakula_services_total_sum Soucet sluzeb napric ulozenymi behy.\n",
-            "# TYPE bakula_services_total_sum gauge\n",
-            "bakula_services_total_sum {}\n",
-            "# HELP bakula_cves_total_sum Soucet CVE napric ulozenymi behy.\n",
-            "# TYPE bakula_cves_total_sum gauge\n",
-            "bakula_cves_total_sum {}\n",
-            "# HELP bakula_events_total_sum Soucet udalosti napric ulozenymi behy.\n",
-            "# TYPE bakula_events_total_sum gauge\n",
-            "bakula_events_total_sum {}\n",
-            "# HELP bakula_findings_total_sum Soucet nalezu napric ulozenymi behy.\n",
-            "# TYPE bakula_findings_total_sum gauge\n",
-            "bakula_findings_total_sum {}\n",
-            "# HELP bakula_triage_actions_total_sum Soucet triage kroku napric ulozenymi behy.\n",
-            "# TYPE bakula_triage_actions_total_sum gauge\n",
-            "bakula_triage_actions_total_sum {}\n",
-            "# HELP bakula_monitoring_lanes_total_sum Soucet monitoring lanes napric ulozenymi behy.\n",
-            "# TYPE bakula_monitoring_lanes_total_sum gauge\n",
-            "bakula_monitoring_lanes_total_sum {}\n",
-            "# HELP bakula_latest_hosts_total Hoste v poslednim behu.\n",
-            "# TYPE bakula_latest_hosts_total gauge\n",
-            "bakula_latest_hosts_total {}\n",
-            "# HELP bakula_latest_findings_total Nalezy v poslednim behu.\n",
-            "# TYPE bakula_latest_findings_total gauge\n",
-            "bakula_latest_findings_total {}\n",
+            "# HELP salticus_runs_total Pocet ulozenych behu.\n",
+            "# TYPE salticus_runs_total gauge\n",
+            "salticus_runs_total {}\n",
+            "# HELP salticus_hosts_total_sum Soucet hostu napric ulozenymi behy.\n",
+            "# TYPE salticus_hosts_total_sum gauge\n",
+            "salticus_hosts_total_sum {}\n",
+            "# HELP salticus_services_total_sum Soucet sluzeb napric ulozenymi behy.\n",
+            "# TYPE salticus_services_total_sum gauge\n",
+            "salticus_services_total_sum {}\n",
+            "# HELP salticus_cves_total_sum Soucet CVE napric ulozenymi behy.\n",
+            "# TYPE salticus_cves_total_sum gauge\n",
+            "salticus_cves_total_sum {}\n",
+            "# HELP salticus_events_total_sum Soucet udalosti napric ulozenymi behy.\n",
+            "# TYPE salticus_events_total_sum gauge\n",
+            "salticus_events_total_sum {}\n",
+            "# HELP salticus_findings_total_sum Soucet nalezu napric ulozenymi behy.\n",
+            "# TYPE salticus_findings_total_sum gauge\n",
+            "salticus_findings_total_sum {}\n",
+            "# HELP salticus_triage_actions_total_sum Soucet triage kroku napric ulozenymi behy.\n",
+            "# TYPE salticus_triage_actions_total_sum gauge\n",
+            "salticus_triage_actions_total_sum {}\n",
+            "# HELP salticus_monitoring_lanes_total_sum Soucet monitoring lanes napric ulozenymi behy.\n",
+            "# TYPE salticus_monitoring_lanes_total_sum gauge\n",
+            "salticus_monitoring_lanes_total_sum {}\n",
+            "# HELP salticus_latest_hosts_total Hoste v poslednim behu.\n",
+            "# TYPE salticus_latest_hosts_total gauge\n",
+            "salticus_latest_hosts_total {}\n",
+            "# HELP salticus_latest_findings_total Nalezy v poslednim behu.\n",
+            "# TYPE salticus_latest_findings_total gauge\n",
+            "salticus_latest_findings_total {}\n",
         ),
         runs.len(),
         hosts_total,
@@ -1354,7 +1354,7 @@ async fn get_audit_verify(State(state): State<AppState>, headers: HeaderMap) -> 
     }
 }
 
-fn to_http_error(error: crate::BakulaError) -> (StatusCode, String) {
+fn to_http_error(error: crate::SalticusError) -> (StatusCode, String) {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
         format!("Chyba serveru: {error}"),
@@ -1629,7 +1629,7 @@ mod tests {
 
     fn csrf_headers() -> HeaderMap {
         let mut headers = HeaderMap::new();
-        headers.insert("x-bakula-csrf", HeaderValue::from_static("1"));
+        headers.insert("x-salticus-csrf", HeaderValue::from_static("1"));
         headers
     }
 
@@ -1725,9 +1725,9 @@ mod tests {
         )
         .await;
         let text = render_ops_metrics(&state);
-        assert!(text.contains("bakula_enforcement_mode{mode=\"dry_run\"} 1"));
-        assert!(text.contains("bakula_enforcement_actions{status=\"proposed\"} 1"));
-        assert!(text.contains("bakula_ops_up 1"));
+        assert!(text.contains("salticus_enforcement_mode{mode=\"dry_run\"} 1"));
+        assert!(text.contains("salticus_enforcement_actions{status=\"proposed\"} 1"));
+        assert!(text.contains("salticus_ops_up 1"));
     }
 
     fn seed_run_with_finding(workspace: &std::path::Path) -> (String, String) {
@@ -1956,7 +1956,7 @@ mod tests {
     #[test]
     fn ensure_csrf_guard_header_accepts_anonymous_requests_with_custom_header() {
         let mut headers = HeaderMap::new();
-        headers.insert("x-bakula-csrf", HeaderValue::from_static("1"));
+        headers.insert("x-salticus-csrf", HeaderValue::from_static("1"));
         let anonymous = admin_context("anonymous-admin");
         assert!(ensure_csrf_guard_header(&anonymous, &headers).is_ok());
     }

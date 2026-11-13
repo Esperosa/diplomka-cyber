@@ -4,7 +4,7 @@ Verified release:
 
 - Repository: https://github.com/Esperosa/service-fingerprinting-passive-analysis
 - Tag: `v0.1.0-thesis`
-- Asset: `bakula-program-20260423-083911.zip`
+- Asset: `salticus-program-20260423-083911.zip`
 - Asset size: `69 423 335 B`
 - SHA-256: `BA5076C7BC49568401A5DA24FC1C86C096BB0D54EFB629B0CDA92E928FC83B09`
 
@@ -14,7 +14,7 @@ Verification was performed from the ZIP downloaded from the GitHub release, not 
 
 The release ZIP contains:
 
-- `bakula-program.exe`
+- `salticus-program.exe`
 - static web UI in `ui/index.html`, `ui/app.js`, `ui/styles.css`
 - demo/reference data in `data`
 - controlled `nuclei` templates in `resources/nuclei-templates/controlled`
@@ -26,18 +26,18 @@ The release ZIP contains:
 ```powershell
 gh release download v0.1.0-thesis `
   --repo Esperosa/service-fingerprinting-passive-analysis `
-  --pattern bakula-program-20260423-083911.zip `
+  --pattern salticus-program-20260423-083911.zip `
   --dir .\public-release
 
-Get-FileHash .\public-release\bakula-program-20260423-083911.zip -Algorithm SHA256
+Get-FileHash .\public-release\salticus-program-20260423-083911.zip -Algorithm SHA256
 
 Expand-Archive `
-  -LiteralPath .\public-release\bakula-program-20260423-083911.zip `
+  -LiteralPath .\public-release\salticus-program-20260423-083911.zip `
   -DestinationPath .\public-release -Force
 
-.\bakula-program.exe --help
-.\bakula-program.exe demo e2e --workspace .\workspace_release_verify
-.\bakula-program.exe server spust --workspace .\workspace_release_verify --host 127.0.0.1 --port 8131
+.\salticus-program.exe --help
+.\salticus-program.exe demo e2e --workspace .\workspace_release_verify
+.\salticus-program.exe server spust --workspace .\workspace_release_verify --host 127.0.0.1 --port 8131
 ```
 
 HTTP checks against the running server:

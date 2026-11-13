@@ -328,7 +328,7 @@ impl StaticReputation {
         }
         let text = std::fs::read_to_string(path)?;
         let entries: Vec<ReputationEntry> =
-            serde_json::from_str(&text).map_err(crate::error::BakulaError::Json)?;
+            serde_json::from_str(&text).map_err(crate::error::SalticusError::Json)?;
         Ok(Self::new(entries))
     }
 

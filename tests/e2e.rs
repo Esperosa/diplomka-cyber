@@ -16,7 +16,7 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 fn bin_path() -> &'static str {
-    env!("CARGO_BIN_EXE_bakula-program")
+    env!("CARGO_BIN_EXE_salticus-program")
 }
 
 #[test]
@@ -395,7 +395,7 @@ fn server_vraci_api_a_ui() {
         .expect("meta request")
         .json()
         .expect("meta json");
-    assert_eq!(meta["service"], "bakula-program");
+    assert_eq!(meta["service"], "salticus-program");
     assert_eq!(meta["auth_required"], false);
 
     let ready: Value = reqwest::blocking::get(format!("http://127.0.0.1:{port}/api/ready"))
@@ -415,7 +415,7 @@ fn server_vraci_api_a_ui() {
         .expect("ui request")
         .text()
         .expect("ui text");
-    assert!(html.contains("<title>Skákavka</title>"));
+    assert!(html.contains("<title>Salticus</title>"));
     assert!(html.contains("id=\"app\""));
     assert!(html.contains("/styles.css?v="));
     assert!(html.contains("/app.js?v="));
@@ -440,8 +440,8 @@ fn server_vraci_api_a_ui() {
         .expect("metrics request")
         .text()
         .expect("metrics text");
-    assert!(metrics.contains("bakula_runs_total 2"));
-    assert!(metrics.contains("bakula_latest_hosts_total"));
+    assert!(metrics.contains("salticus_runs_total 2"));
+    assert!(metrics.contains("salticus_latest_hosts_total"));
 
     child.kill().expect("ukonceni serveru");
     child.wait().expect("wait");
@@ -466,9 +466,9 @@ fn server_respektuje_api_token() {
         &[
             "--require-api-token",
             "--api-token-env",
-            "BAKULA_TEST_API_TOKEN",
+            "SALTICUS_TEST_API_TOKEN",
         ],
-        &[("BAKULA_TEST_API_TOKEN", "tajny-token")],
+        &[("SALTICUS_TEST_API_TOKEN", "tajny-token")],
     );
 
     wait_for_server(port);
@@ -849,21 +849,21 @@ fn hard_pentest_rezim_najde_vic_duvodu_na_realisticke_lokalni_sluzbe() {
     let hard_checks = active_template_ids(hard);
 
     assert!(
-        smart_checks.contains(&"bakula-login-surface-over-http".to_string()),
+        smart_checks.contains(&"salticus-login-surface-over-http".to_string()),
         "smart rezim musi najit nebezpecny login povrch pres HTTP"
     );
     assert!(
         hard_checks.len() > smart_checks.len(),
         "hard rezim musi pridat dalsi read-only pentest dukazy"
     );
-    assert!(hard_checks.contains(&"bakula-git-head-exposed".to_string()));
-    assert!(hard_checks.contains(&"bakula-backup-directory-exposed".to_string()));
-    assert!(hard_checks.contains(&"bakula-config-yaml-accessible".to_string()));
-    assert!(hard_checks.contains(&"bakula-cookie-missing-security-flags".to_string()));
-    assert!(hard_checks.contains(&"bakula-cors-wildcard-origin".to_string()));
-    assert!(hard_checks.contains(&"bakula-admin-product-exposed".to_string()));
-    assert!(hard_checks.contains(&"bakula-admin-endpoint-reachable".to_string()));
-    assert!(hard_checks.contains(&"bakula-private-key-accessible".to_string()));
+    assert!(hard_checks.contains(&"salticus-git-head-exposed".to_string()));
+    assert!(hard_checks.contains(&"salticus-backup-directory-exposed".to_string()));
+    assert!(hard_checks.contains(&"salticus-config-yaml-accessible".to_string()));
+    assert!(hard_checks.contains(&"salticus-cookie-missing-security-flags".to_string()));
+    assert!(hard_checks.contains(&"salticus-cors-wildcard-origin".to_string()));
+    assert!(hard_checks.contains(&"salticus-admin-product-exposed".to_string()));
+    assert!(hard_checks.contains(&"salticus-admin-endpoint-reachable".to_string()));
+    assert!(hard_checks.contains(&"salticus-private-key-accessible".to_string()));
     assert!(
         hard["monitoringLanes"]
             .as_array()
@@ -1137,7 +1137,7 @@ fn platform_rbac_scheduler_cluster_and_server_work_end_to_end() {
     let reports = load_reports(&workspace);
     assert_eq!(reports.len(), 1);
 
-    let config_path = workspace.join("bakula.toml");
+    let config_path = workspace.join("salticus.toml");
     fs::write(
         &config_path,
         r#"
@@ -1151,7 +1151,7 @@ keep_raw = true
 
 [security]
 require_api_token = false
-api_token_env = "BAKULA_API_TOKEN"
+api_token_env = "SALTICUS_API_TOKEN"
 
 [platform]
 enabled = true
@@ -1255,7 +1255,7 @@ fn lab_nmap_xml(port: u16) -> String {
     <ports>
       <port protocol="tcp" portid="{port}">
         <state state="open" reason="syn-ack"/>
-        <service name="http" product="Bakula Lab Web" version="1.2" method="probed" conf="10"/>
+        <service name="http" product="Salticus Lab Web" version="1.2" method="probed" conf="10"/>
       </port>
     </ports>
   </host>
@@ -1334,7 +1334,7 @@ impl HttpPentestLab {
                             }
                         };
                         let response = format!(
-                            "HTTP/1.1 {status}\r\nServer: BakulaLab/1.2\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n{extra}\r\n{body}",
+                            "HTTP/1.1 {status}\r\nServer: SalticusLab/1.2\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n{extra}\r\n{body}",
                             body.len()
                         );
                         let _ = stream.write_all(response.as_bytes());

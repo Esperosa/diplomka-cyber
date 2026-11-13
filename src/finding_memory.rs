@@ -22,7 +22,7 @@ use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::Severity,
 };
 
@@ -31,8 +31,8 @@ pub const SCHEMA_VERSION: i64 = 1;
 /// Maximální délka složky klíče (ochrana paměti před extrémními vstupy).
 const MAX_KEY_PART: usize = 200;
 
-fn db_error(error: rusqlite::Error) -> BakulaError {
-    BakulaError::Processing(format!("finding_memory SQLite chyba: {error}"))
+fn db_error(error: rusqlite::Error) -> SalticusError {
+    SalticusError::Processing(format!("finding_memory SQLite chyba: {error}"))
 }
 
 fn clip(value: &str) -> String {
@@ -355,7 +355,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(db_error)?;
     if version > SCHEMA_VERSION {
-        return Err(BakulaError::Processing(format!(
+        return Err(SalticusError::Processing(format!(
             "finding_memory: schema {version} je novejsi nez podporovane {SCHEMA_VERSION}"
         )));
     }

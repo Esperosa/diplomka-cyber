@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const EDGE = process.env.EDGE_PATH ?? "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
-const outDir = process.argv[2] ?? join(tmpdir(), "bakula-ui-shots");
+const outDir = process.argv[2] ?? join(tmpdir(), "salticus-ui-shots");
 const port = 8791;
 await mkdir(outDir, { recursive: true });
 

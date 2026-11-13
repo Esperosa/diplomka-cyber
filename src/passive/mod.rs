@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use ipnet::IpNet;
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::{HostReport, NormalizedEvent},
 };
 
@@ -170,17 +170,17 @@ pub(crate) fn parse_zeek_ts(value: &str) -> Result<DateTime<Utc>> {
     let seconds = value
         .trim()
         .parse::<f64>()
-        .map_err(|error| BakulaError::Processing(format!("Neplatny Zeek timestamp: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("Neplatny Zeek timestamp: {error}")))?;
     let secs = seconds.floor() as i64;
     let nanos = ((seconds - secs as f64) * 1_000_000_000.0).round() as u32;
     DateTime::<Utc>::from_timestamp(secs, nanos)
-        .ok_or_else(|| BakulaError::Processing("Neplatny Zeek cas.".to_string()))
+        .ok_or_else(|| SalticusError::Processing("Neplatny Zeek cas.".to_string()))
 }
 
 fn parse_suricata_ts(value: &str) -> Result<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .map(|dt| dt.with_timezone(&Utc))
-        .map_err(|error| BakulaError::Processing(format!("Neplatny Suricata timestamp: {error}")))
+        .map_err(|error| SalticusError::Processing(format!("Neplatny Suricata timestamp: {error}")))
 }
 
 // pub(crate): naside tez pro src/eval (dataset replay baseline), beze zmeny logiky.

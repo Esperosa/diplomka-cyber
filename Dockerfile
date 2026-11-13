@@ -22,7 +22,7 @@ FROM rust:1-slim-bookworm AS rust-builder
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-RUN cargo build --release --bin bakula-program
+RUN cargo build --release --bin salticus-program
 
 FROM debian:bookworm-slim AS runtime
 
@@ -32,22 +32,22 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates nmap \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd --create-home --shell /usr/sbin/nologin --uid 10001 bakula
+RUN useradd --create-home --shell /usr/sbin/nologin --uid 10001 salticus
 
 WORKDIR /app
-COPY --from=rust-builder /src/target/release/bakula-program /app/bakula-program
+COPY --from=rust-builder /src/target/release/salticus-program /app/salticus-program
 COPY --from=ui-builder /src/ui /app/ui
 COPY resources /app/resources
 
 # /data/workspace: ocekava se jako mountovany volume (docker-compose.yml) -
 # drzi runs/, cache/, platform.sqlite, identity-registry.json atd. napric
 # restarty kontejneru.
-RUN mkdir -p /data/workspace && chown -R bakula:bakula /app /data
+RUN mkdir -p /data/workspace && chown -R salticus:salticus /app /data
 
-USER bakula
+USER salticus
 EXPOSE 8080
 
-ENTRYPOINT ["/app/bakula-program"]
+ENTRYPOINT ["/app/salticus-program"]
 # --host 0.0.0.0 je nutne (vychozi je 127.0.0.1, nedosazitelne zvenku
 # kontejneru). --workspace/--port lze prepsat pri `docker run`/compose.
 CMD ["server", "spust", "--workspace", "/data/workspace", "--host", "0.0.0.0", "--port", "8080"]

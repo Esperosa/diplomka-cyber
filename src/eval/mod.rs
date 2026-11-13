@@ -1,5 +1,5 @@
 //! Evaluacni ramec pro replay realnych labelovanych datasetu proti nezmenenemu
-//! analytickemu enginu (ablace A dle docs/diplomka/BAKULA_kompletni_technicky_navrh...md,
+//! analytickemu enginu (ablace A dle docs/diplomka/SALTICUS_kompletni_technicky_navrh...md,
 //! sekce 9 a 13). Zalozeno jako samostatny modul, ne roubovano na `evaluation.rs`/
 //! `verification.rs`, ktere jsou svazane se syntetickym scenario-manifest workflow.
 //!

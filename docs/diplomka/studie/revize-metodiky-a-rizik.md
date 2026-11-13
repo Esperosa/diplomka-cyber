@@ -25,7 +25,7 @@ Důkaz proti: RQ6-001, -002 a -003 pocházejí z téže práce (Tsegai et al., a
 Oprava: uvést jeden preprint, jeden model a údaj AIDA 3,1 %. Doporučení zdůvodnit hlavně rizikem prompt injection (M44, střední) a chybějící nezávislou replikací, ne formulací, jako by bylo selhání LLM prokázané.
 
 **K3 (záv. 2): M9 a R6 „ověření proti stavu cíle / kontextová degradace na službu, která v inventáři neexistuje nebo není zranitelná: 50 až 100 % (RQ1-024)“.**
-Důkaz proti: ATLANTIDES (RQ1-024, LISA 2007) neověřuje inventář ani zranitelnost. Analyzuje anomálie v *odpovědích* serveru (výstupní provoz) po protokolech HTTP/FTP/SMTP/Telnet. Mechanismus, který R6 navrhuje (inventář a zranitelnost), je jiný a číslo 50 až 100 % se na něj nepřenáší. Navíc jde o protokoly s výstupem v otevřeném textu, který Skákavka z toků nemá.
+Důkaz proti: ATLANTIDES (RQ1-024, LISA 2007) neověřuje inventář ani zranitelnost. Analyzuje anomálie v *odpovědích* serveru (výstupní provoz) po protokolech HTTP/FTP/SMTP/Telnet. Mechanismus, který R6 navrhuje (inventář a zranitelnost), je jiný a číslo 50 až 100 % se na něj nepřenáší. Navíc jde o protokoly s výstupem v otevřeném textu, který Salticus z toků nemá.
 Oprava: v M9 a R6 uvést „ověření podle odpovědi služby (výstupní provoz)“ a u degradace podle inventáře napsat „bez přímého podkladu, mechanismus se liší“. V3-H12 posunout do P3.
 
 **K4 (záv. 1): M23 „Holt-Winters se adaptuje na dlouhou anomálii a pozdější útok mine“.**

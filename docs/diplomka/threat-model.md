@@ -2,13 +2,13 @@
 
 **Status: konsolidace k 29. 10. 2026.** Návrh (sekce 11, "Očekávané výstupy") jmenuje "model hrozeb" jako samostatný požadovaný výstup diplomky. Tento dokument ho nevytváří od nuly — konsoliduje obsah, který už existuje rozptýlený v návrhu (sekce 4, 9.2, 9.3, 12) a v jednotlivých eval reportech (`docs/diplomka/eval/*.md`), do jednoho místa. Žádný bod zde nebyl vymyšlen nově; u každého je odkaz na zdroj.
 
-Dokument má dvě části, protože "hrozba" tu znamená dvě různé věci: (A) hrozby vůči síti, kterou by Bakula měla chránit (adversary model), a (B) hrozby vůči platnosti samotných empirických tvrzení této diplomky (validity threats) — ta druhá část je pro vědeckou prokazatelnost důležitější a dosavadní práce se jí fakticky už řídila, jen to nebylo zapsáno na jednom místě.
+Dokument má dvě části, protože "hrozba" tu znamená dvě různé věci: (A) hrozby vůči síti, kterou by Salticus měla chránit (adversary model), a (B) hrozby vůči platnosti samotných empirických tvrzení této diplomky (validity threats) — ta druhá část je pro vědeckou prokazatelnost důležitější a dosavadní práce se jí fakticky už řídila, jen to nebylo zapsáno na jednom místě.
 
-## A. Adversary model — co Bakula (v rozsahu diplomky) umí a neumí pozorovat
+## A. Adversary model — co Salticus (v rozsahu diplomky) umí a neumí pozorovat
 
 **Rozsah je omezen na analytické jádro** (Identity/Correlation/Hypothesis/Verification Planner), ne na enforcement. Firewall/DNS filtrování/IPS blokování/SOAR playbooky (návrh sekce 4) jsou mimo rozsah diplomky — návrh sám je řadí jako "širší dlouhodobá produktová ambice" (sekce 11), ne podmínku splnění.
 
-- **Žádná endpoint telemetrie, žádné dešifrování TLS.** Síťová viditelnost je nutně neúplná (riziko #2, sekce 12) — Bakula nemůže tvrdit 100% detekci. Nejistota `coverage`/`missing-data indicator` (sekce 9.1) je proto architektonickou nutností, ne detailem.
+- **Žádná endpoint telemetrie, žádné dešifrování TLS.** Síťová viditelnost je nutně neúplná (riziko #2, sekce 12) — Salticus nemůže tvrdit 100% detekci. Nejistota `coverage`/`missing-data indicator` (sekce 9.1) je proto architektonickou nutností, ne detailem.
 - **DoH/DoT a externí resolvery omezují DNS viditelnost** (sekce 4.2) — zařízení, které obchází lokální resolver, je mimo dosah DNS-based detekce i v hypotetickém budoucím rozšíření.
 - **Tři senzory nad jedním tokem nejsou tři nezávislé důkazy** (riziko #4, sekce 12) — přesně to, co H2 ve svém doslovném znění žádá řešit (korekce závislosti zdrojů), a přesně to, co dosavadní single-sensor datasety (IoT-23, CTU-13) ani nemohou testovat (viz `souhrn-vysledku-a-hypotez.md`, sekce H2).
 - **Nekalibrovaná skóre nejsou pravděpodobnosti** (riziko #5) — `hypothesis.rs` tohle vědomě nefabrikuje (`probability: None`, dokumentováno jako limitace), přesně kvůli tomuto riziku.

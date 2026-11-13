@@ -8,7 +8,7 @@ Poctivost zdrojů: u každého tvrzení je URL a rok. Co jsem nečetl celé (jen
 
 ## Shrnutí (15 řádků)
 
-1. Největší problém Skákavky v datech soaku není slabý model, ale (a) 211 až 1 108 falešných nálezů na síť-den, (b) provozní události (patch, pád senzoru, záloha, replay kolektoru) jsou pro engine „útok“ (v2: patch_window 99 %, collector_replay 97 %, log_corruption 95 %, sensor_crash 93 % s falešným nálezem) a (c) špatná kalibrace.
+1. Největší problém Salticus v datech soaku není slabý model, ale (a) 211 až 1 108 falešných nálezů na síť-den, (b) provozní události (patch, pád senzoru, záloha, replay kolektoru) jsou pro engine „útok“ (v2: patch_window 99 %, collector_replay 97 %, log_corruption 95 %, sensor_crash 93 % s falešným nálezem) a (c) špatná kalibrace.
 2. Největší páka je proto DEDUKCE/ABDUKCE nad kontextem („vysvětli pozorování nejlepší benigní hypotézou dřív, než ji vydáš jako útok“), ne nový generativní model. Je to levné, bez GPU, vysvětlitelné a v Rustu hotové (crate `ascent`).
 3. Druhá páka je kalibrace pravděpodobností (isotonická regrese + konformální práh) učená na simulaci a korigovaná na malé reálné kotvě. Přínos je spolehlivý, ale jen tak poctivý, jak poctivá je kotva.
 4. Třetí páka jsou peer-group baseline podle typu zařízení (`classifyHost` / role v simulaci). Fakt „zařízení stejného typu se chovají podobně“ je v literatuře o MUD profilech dobře podložen (nepřímo, viz 2.2), a řeší cold-start.
@@ -66,7 +66,7 @@ Simulace s ground truth je v zásadě „generátor označených dat“. Literat
 - Arp et al. (USENIX Security 2022): katalog 10 záludností ML v bezpečnosti (např. sampling bias, data snooping, spurious correlations, label inaccuracy, test na nerealistickém prostředí). https://arxiv.org/pdf/2010.09470
 - Přehled 2026 o NetFlow IDS: benchmarkové výsledky bývají nafouknuté (normalizace přes train/test, náhodné dělení); nový benchmark MAWIFlow z reálného provozu 2011–2021. https://arxiv.org/pdf/2602.05594 (nečteno celé)
 
-### 1.2 Přínos a rizika pro Skákavku
+### 1.2 Přínos a rizika pro Salticus
 
 Simulátor `src/soak` už je mechanistický generátor s ground truth, takže „syntéza“ je ve Skákavce de facto řešena pro vyhodnocení; zbývá otázka, zda ho smíme používat i k učení (kalibrace, priory).
 
@@ -114,7 +114,7 @@ Konkrétní postup (úvaha, standardní techniky dvouvýběrového testu; žádn
 | Kalibrace na stejných sítích jako metrika | ECE se počítá z dat, ze kterých se učila isotonic | Cross-fitting po sítích (K-fold po sítích) |
 | „Nadějný“ Brier | 0,0107 vs 0,25 baseline při triviálních rodinách | Reportovat Brier po rodinách a jen na netriviálních (p ∈ [0,1; 0,9]) |
 
-Nezávislý generátor (doporučení): druhý, odlišný zdroj provozu, který Skákavka nezná: (i) přehrání reálných PCAP/CSV z CTU-13 a IoT-23 přes Suricata + Zeek, (ii) jednoduchý druhý simulátor psaný z textového popisu technik ATT&CK jiným autorem (nebo jiným modelem, který nevidí kód detektoru), (iii) červený tým: člověk (nebo agent bez přístupu k pravidlům detektoru) navrhuje evasion scénáře a spouští je v harnessu.
+Nezávislý generátor (doporučení): druhý, odlišný zdroj provozu, který Salticus nezná: (i) přehrání reálných PCAP/CSV z CTU-13 a IoT-23 přes Suricata + Zeek, (ii) jednoduchý druhý simulátor psaný z textového popisu technik ATT&CK jiným autorem (nebo jiným modelem, který nevidí kód detektoru), (iii) červený tým: člověk (nebo agent bez přístupu k pravidlům detektoru) navrhuje evasion scénáře a spouští je v harnessu.
 
 ### 1.7 Co je realistické v Rustu bez GPU
 
@@ -135,14 +135,14 @@ Nezávislý generátor (doporučení): druhý, odlišný zdroj provozu, který S
 - ET-BERT (WWW 2022): předtrénování transformeru na neoznačených datagramech, úlohy Masked BURST a Same-origin BURST; po doladění zlepšení 0,2 až 10 % proti předchozím pracím na pěti úlohách klasifikace šifrovaného provozu. https://arxiv.org/pdf/2202.06335 (2022)
 - netFound (2023, v4 leden 2025): hierarchický transformer s protokolově uvědomělou tokenizací, předtrénovaný na telemetrii; autoři uvádějí lepší výsledky než čtyři SOTA metody na pěti úlohách a odolnost vůči šumu v označení a „shortcutům“; kritika, že ET-BERT/YaTC chovají provoz jako text/obrázek a nezachycují specifika sítí, je autorský rámec, ne nezávislé hodnocení. https://arxiv.org/abs/2310.17025
 - YaTC (AAAI 2023): masked autoencoder nad obrázkovou reprezentací toku; nehledal jsem primární zdroj (jen zmínka v netFound), nečteno.
-- Pozor, jejich úlohy jsou klasifikace aplikací a malwaru v šifrovaném provozu s označenými daty; Skákavka řeší detekci anomálií a ověřování hypotéz nad agregovanými toky a Suricatou. Přenositelnost je nejistá (úvaha).
+- Pozor, jejich úlohy jsou klasifikace aplikací a malwaru v šifrovaném provozu s označenými daty; Salticus řeší detekci anomálií a ověřování hypotéz nad agregovanými toky a Suricatou. Přenositelnost je nejistá (úvaha).
 
-Reálný přínos vs. cena (odhad): pro Skákavku nízký–střední přínos, vysoká cena (trénink, data o objemu, GPU, MLOps, vysvětlitelnost slabá), a zvyšuje cirkularitu, pokud se předtrénuje na simulaci.
+Reálný přínos vs. cena (odhad): pro Salticus nízký–střední přínos, vysoká cena (trénink, data o objemu, GPU, MLOps, vysvětlitelnost slabá), a zvyšuje cirkularitu, pokud se předtrénuje na simulaci.
 
 ### 2.2 Peer-group baseline (podobná zařízení se chovají podobně)
 
 - Základ je podložen MUD profily (RFC 8520): zařízení stejného typu mívají úzký, předvídatelný komunikační vzor, z něhož se generují profily a baseline pro detekci anomálií; hybrid „statický MUD + ML“ snižuje FP oproti samotnému ML. Zdroje: https://arxiv.org/pdf/1902.02484 (2019), https://arxiv.org/pdf/2304.04987 (2023), https://www2.ee.unsw.edu.au/~hhabibi/pubs/conf/22wowmom.pdf (2022). Rešerše nenašla práci přímo o „peer-group“ (kohortní baseline sdílená mezi zařízeními stejného typu); to je moje extrapolace.
-- Využití pro Skákavku: `classifyHost` (ui-src/devices.ts) dává typ + `confidence` + `reasons` z portů, produktů, jmen, výrobce a assetů. Soak má vlastní role (19 typů: ws 68 706, mobile 37 054, voip 29 027, iot 13 468, printer 11 414, cam 11 249, plc 2 426, medical 4 479...), takže ground truth role je k dispozici.
+- Využití pro Salticus: `classifyHost` (ui-src/devices.ts) dává typ + `confidence` + `reasons` z portů, produktů, jmen, výrobce a assetů. Soak má vlastní role (19 typů: ws 68 706, mobile 37 054, voip 29 027, iot 13 468, printer 11 414, cam 11 249, plc 2 426, medical 4 479...), takže ground truth role je k dispozici.
 - Konkrétní návrh: pro každý (typ zařízení, kontext sítě) udržovat kompaktní profil: množina povolených cílových portů/protokolů, kvantily bytes/h, počet unikátních cílů/h, denní profil. Skóre odchylky zařízení = vzdálenost od profilu peer-skupiny (po odstranění sebe sama), ne od vlastní krátké historie. Jednoduché, vysvětlitelné („tato kamera mluví na 3 cíle, ostatní kamery na 1“).
 - Rizika: (a) chyba klasifikace typu se propíše (použít `confidence` jako váhu, ne tvrdé přiřazení); (b) neznámá zařízení (`unknown`) nemají skupinu; (c) skupina poškozená jednou zhackovanou skupinou (otrava: robustní statistiky, medián/MAD; viz ochrana v `case_memory.rs`); (d) v malých sítích (Soho 14 zařízení) jsou skupiny malé: použít hierarchický (empirický Bayes) shrinkage k celosvětovému typovému priorovi.
 - Přínos (odhad): střední pro FP u IoT/tiskáren/kamer; malý pro C2/rogue.
@@ -150,7 +150,7 @@ Reálný přínos vs. cena (odhad): pro Skákavku nízký–střední přínos, 
 ### 2.3 Transfer mezi sítěmi, federované priory, cold-start
 
 - Federované učení pro IDS: přehledy ukazují hlavní překážky: non-IID data, FedAvg špatně konverguje v heterogenním prostředí, poisoning/inference útoky, chybějící standardní benchmarky. Zdroje: https://arxiv.org/pdf/2509.17836v1 (2025), https://arxiv.org/pdf/2509.21389v2 (2025). Cold-start a few-shot jsem v rešerši konkrétně nenašel (mezera).
-- Pro Skákavku je federace předčasná (produkt nemá flotilu sítí; úvaha). Realistická verze je „sdílené anonymizované statistiky“: ručně kurátorované priory (např. hierarchické Beta priory per (typ nálezu, archetyp sítě)) dodané s produktem a aktualizované centrálně z dobrovolně sdílených agregátů. Soak dává možnost „předtrénovat“ je na simulaci a zeslabit hodnotou pseudopozorování (např. efektivní velikost vzorku 10–20, aby je reálná data brzy přebila). Toto je v souladu se současnou Beta-konstrukcí Case Memory (úvaha).
+- Pro Salticus je federace předčasná (produkt nemá flotilu sítí; úvaha). Realistická verze je „sdílené anonymizované statistiky“: ručně kurátorované priory (např. hierarchické Beta priory per (typ nálezu, archetyp sítě)) dodané s produktem a aktualizované centrálně z dobrovolně sdílených agregátů. Soak dává možnost „předtrénovat“ je na simulaci a zeslabit hodnotou pseudopozorování (např. efektivní velikost vzorku 10–20, aby je reálná data brzy přebila). Toto je v souladu se současnou Beta-konstrukcí Case Memory (úvaha).
 - Cold-start (první dny bez historie): (1) typové priory (peer-group), (2) pravidla z veřejných znalostí (2.4), (3) vyšší práh vydání nálezu a nižší důvěra v objemové detektory po dobu učení (např. první 3–7 dní), (4) explicitní stav „učím se“ v UI. Tohle snižuje FP právě na začátku, kdy jsou největší.
 - Few-shot adaptace: bayesovská aktualizace priorů s malým počtem označení správce (schválí/odmítne nález); tuto zpětnou vazbu Case Memory už přijímá (zdroj `CaseSource`).
 
@@ -233,7 +233,7 @@ Rogue device: dedukce `mluví(ip) ∧ ¬v_inventáři(ip) ∧ ¬dhcp_lease(ip)` 
 Plné do-calculus bez experimentů nelze. Realistické jsou kauzální omezení pořadí (časová souslednost), která zakazují nemožné vysvětlení:
 - příčina předchází následek (exfiltrace po sběru dat; lateral movement po kompromitaci zdroje);
 - řetězec ATT&CK taktik (recon → initial access → ... → exfiltration) jako prior pro korelaci nálezů do kampaně (`apt_chain` už dosahuje 99,5 %);
-- „zásah“ jako experiment: aktivní ověření Skákavky (`verification_planner`) je přirozená intervence. EVOI už vybírá kontrolu s nejvyšší očekávanou informací; kauzální formulace dovoluje říct „zkoušel jsem X a výsledek rozlišil H1 od H2“. Důkaz z intervence je silnější než z pozorování (úvaha).
+- „zásah“ jako experiment: aktivní ověření Salticus (`verification_planner`) je přirozená intervence. EVOI už vybírá kontrolu s nejvyšší očekávanou informací; kauzální formulace dovoluje říct „zkoušel jsem X a výsledek rozlišil H1 od H2“. Důkaz z intervence je silnější než z pozorování (úvaha).
 
 ### 3.7 Vysvětlitelnost pro správce
 
@@ -273,7 +273,7 @@ Důkazy o rizicích: Alert-Bench (NeurIPS 2026, zdroj https://neurips.cc/virtual
 
 ---
 
-## 5. Návrh pro Skákavku
+## 5. Návrh pro Salticus
 
 ### 5.1 Vrstvy
 
@@ -334,7 +334,7 @@ Předregistrace (do repozitáře před spuštěním, s hashem): seznam hypotéz 
 - Sítě: dělení po sítích a archetypech (např. leave-one-archetype-out), ne po cyklech.
 
 **Nezávislé zdroje:**
-1. Replay reálných datasetů přes stejný pipeline Suricata/Zeek → Skákavka: CTU-13 (23 scénářů už v harnessu, 3 průchody bez nedeterminismu), IoT-23. Primární metriky: FP/hodina na benigním provozu a recall na malicious scénářích; porovnat s „triviální baseline“ (dnes: A porazí baseline jen v 6 z 20 scénářů; cílem je zvýšit toto číslo, ne dosáhnout vysokého absolutního).
+1. Replay reálných datasetů přes stejný pipeline Suricata/Zeek → Salticus: CTU-13 (23 scénářů už v harnessu, 3 průchody bez nedeterminismu), IoT-23. Primární metriky: FP/hodina na benigním provozu a recall na malicious scénářích; porovnat s „triviální baseline“ (dnes: A porazí baseline jen v 6 z 20 scénářů; cílem je zvýšit toto číslo, ne dosáhnout vysokého absolutního).
 2. Druhý generátor „B“: psaný z textového zadání (ATT&CK technika, parametrické rozsahy) nikým, kdo nevidí detektor; používán jen k závěrečnému hodnocení, nikdy k ladění.
 3. Červený tým: scénáře evaze (maskování za zálohu, pomalý beacon pod prahem jitteru) navržené bez přístupu k pravidlům; každé zjištěné selhání → záznam, ne ladění na místě.
 

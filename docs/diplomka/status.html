@@ -2,7 +2,7 @@
 <html lang="cs">
 <head>
 <meta charset="utf-8">
-<title>Bakula — stav diplomky</title>
+<title>Salticus — stav diplomky</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -91,7 +91,7 @@
 </head>
 <body>
 
-<h1>Bakula — stav diplomky a produkčního programu</h1>
+<h1>Salticus — stav diplomky a produkčního programu</h1>
 <div class="meta">
   Poslední aktualizace: <strong>30. 10. 2026, 23:10</strong> ·
   commit <code>fca9108</code> ·
@@ -287,7 +287,7 @@
       <li><span class="badge badge-green mini">hotovo</span> <b>Suricata parser bral každý event_type jako alert</b> (flow/http/dns/tls/stats) — masivní falešné nálezy na reálném eve.json; opraveno filtrem na <code class="file">event_type=="alert"</code> + odolnost proti poškozenému řádku/timestampu (dřív shodilo celý <code class="file">monitor --continuous</code> běh) — <code class="file">src/passive/suricata.rs</code></li>
       <li><span class="badge badge-green mini">hotovo</span> <b>Zeek v JSON formátu tiše vracel 0 událostí</b> (chybí '#fields' TSV hlavička) — nástroj tvrdil "vše čisté", protože nic neviděl; teď selže nahlas a hlasitě, + odolnost proti poškozenému řádku — <code class="file">src/passive/zeek.rs</code></li>
       <li><span class="badge badge-green mini">hotovo</span> <b>path traversal přes <code class="file">run_id</code></b> v <code class="file">/runs/{run_id}</code>/<code class="file">/runs/{run_id}/export/{format}</code> — nezávisle našly 2 revize; opraveno <code class="file">storage::is_valid_run_id</code> na obou místech — <code class="file">src/storage.rs</code>, <code class="file">src/server.rs</code></li>
-      <li><span class="badge badge-green mini">hotovo</span> <b>CSRF na <code class="file">/automation/restart</code>/<code class="file">reset</code></b> — s výchozím <code class="file">require_api_token=false</code> mohl obyčejný cross-site <code>&lt;form&gt;</code> tise spustit agresivní sken; opraveno vlastní hlavičkou <code class="file">X-Bakula-Csrf</code> (vyžaduje CORS preflight, co server nemá čím splnit)</li>
+      <li><span class="badge badge-green mini">hotovo</span> <b>CSRF na <code class="file">/automation/restart</code>/<code class="file">reset</code></b> — s výchozím <code class="file">require_api_token=false</code> mohl obyčejný cross-site <code>&lt;form&gt;</code> tise spustit agresivní sken; opraveno vlastní hlavičkou <code class="file">X-Salticus-Csrf</code> (vyžaduje CORS preflight, co server nemá čím splnit)</li>
       <li><span class="badge badge-green mini">hotovo</span> <b><code class="file">triage.rs</code> vs. <code class="file">decision.rs</code> nekonzistence</b> — potvrzeno všemi 3 revizemi: 3 ze 7 "traffic-like" typů nálezů nikdy nevygenerovaly triage akci; sjednoceno + golden snapshot aktualizován</li>
       <li><span class="badge badge-green mini">hotovo</span> <b>neatomický <code class="file">fs::write</code></b> — crash uprostřed zápisu <code class="file">index.json</code> by shodil KAŽDÝ další <code class="file">/api/runs*</code> dotaz; opraveno <code class="file">write_atomic</code> (tmp soubor + rename)</li>
       <li><span class="badge badge-green mini">hotovo</span> <b>jednorázový job bez backoffu po selhání</b> — nekonečné okamžité opakování (např. sken nedostupné sítě); opraveno exponenciální backoff (30s→240s) + vzdání se po 5 pokusech na ~30 dní</li>

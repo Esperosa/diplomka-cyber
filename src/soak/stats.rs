@@ -964,7 +964,7 @@ pub fn wilson(k: u64, n: u64) -> (f64, f64, f64) {
 }
 
 /// CPU cas aktualniho vlakna v sekundach (Windows, jinde 0). Rucni profil cyklu
-/// (`BAKULA_SOAK_CYCLE_TRACE`): oddeli praci cyklu od cekani na zatizenem stroji.
+/// (`SALTICUS_SOAK_CYCLE_TRACE`): oddeli praci cyklu od cekani na zatizenem stroji.
 pub fn thread_cpu_secs() -> f64 {
     #[cfg(windows)]
     {

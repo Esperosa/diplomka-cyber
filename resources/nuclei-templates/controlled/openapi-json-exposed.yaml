@@ -1,11 +1,11 @@
-id: bakula-openapi-json-exposed
+id: salticus-openapi-json-exposed
 
 info:
   name: OpenAPI specification exposed
-  author: bakula
+  author: salticus
   severity: low
   description: OpenAPI schema endpoint is reachable and may leak API surface details.
-  tags: bakula,http,openapi,api
+  tags: salticus,http,openapi,api
 
 http:
   - method: GET

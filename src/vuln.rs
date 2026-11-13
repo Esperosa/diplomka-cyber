@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     cpe,
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::{Confidence, CveRecord, CvssRecord, EpssRecord, ExploitContext, HostReport, KevRecord},
 };
 
@@ -137,7 +137,7 @@ impl DemoProvider {
         let database = if path.exists() {
             let content = fs::read_to_string(path)?;
             serde_json::from_str(&content).map_err(|error| {
-                BakulaError::Processing(format!("Nelze nacist demo databazi: {error}"))
+                SalticusError::Processing(format!("Nelze nacist demo databazi: {error}"))
             })?
         } else {
             default_demo_database()
@@ -271,7 +271,7 @@ impl NvdProvider {
         let mut missing = Vec::new();
         {
             let cache = self.feed_cache.lock().map_err(|_| {
-                BakulaError::Processing("Nelze zamknout cache pro EPSS enrichment.".to_string())
+                SalticusError::Processing("Nelze zamknout cache pro EPSS enrichment.".to_string())
             })?;
             for cve_id in cve_ids {
                 if let Some(item) = cache.epss.get(cve_id) {
@@ -312,7 +312,7 @@ impl NvdProvider {
 
             {
                 let mut cache = self.feed_cache.lock().map_err(|_| {
-                    BakulaError::Processing(
+                    SalticusError::Processing(
                         "Nelze zamknout cache pro ulozeni EPSS enrichmentu.".to_string(),
                     )
                 })?;
@@ -340,7 +340,7 @@ impl NvdProvider {
     ) -> Result<HashMap<String, KevRecord>> {
         {
             let cache = self.feed_cache.lock().map_err(|_| {
-                BakulaError::Processing("Nelze zamknout cache pro KEV enrichment.".to_string())
+                SalticusError::Processing("Nelze zamknout cache pro KEV enrichment.".to_string())
             })?;
             if let Some(kev) = &cache.kev {
                 return Ok(filter_kev_records(kev, cve_ids));
@@ -374,7 +374,7 @@ impl NvdProvider {
 
         {
             let mut cache = self.feed_cache.lock().map_err(|_| {
-                BakulaError::Processing(
+                SalticusError::Processing(
                     "Nelze zamknout cache pro ulozeni KEV enrichmentu.".to_string(),
                 )
             })?;
@@ -420,7 +420,7 @@ impl VulnerabilityProvider for NvdProvider {
         }
 
         let client = reqwest::blocking::Client::builder()
-            .user_agent("bakula-program/0.1")
+            .user_agent("salticus-program/0.1")
             .timeout(Duration::from_secs(20))
             .build()?;
 
@@ -454,7 +454,7 @@ impl VulnerabilityProvider for NvdProvider {
         }
 
         let response_value = response_value.ok_or_else(|| {
-            BakulaError::Processing(format!(
+            SalticusError::Processing(format!(
                 "NVD odpoved nebyla dostupna pro CPE {} ani po opakovani.",
                 cpe23_uri
             ))
@@ -584,7 +584,7 @@ impl VulnerabilityProvider for VulnersProvider {
         };
 
         let client = reqwest::blocking::Client::builder()
-            .user_agent("bakula-program/0.1")
+            .user_agent("salticus-program/0.1")
             .timeout(Duration::from_secs(20))
             .build()?;
 
@@ -868,14 +868,14 @@ fn try_read_cache(path: &Path) -> Result<Option<Vec<CveRecord>>> {
         return Ok(None);
     }
     let content = fs::read(path)?;
-    let items = serde_json::from_slice(&content).map_err(BakulaError::Json)?;
+    let items = serde_json::from_slice(&content).map_err(SalticusError::Json)?;
     Ok(Some(items))
 }
 
 fn write_cache(path: &Path, records: &[CveRecord]) -> Result<()> {
     fs::write(
         path,
-        serde_json::to_vec_pretty(records).map_err(BakulaError::Json)?,
+        serde_json::to_vec_pretty(records).map_err(SalticusError::Json)?,
     )?;
     Ok(())
 }

@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use ipnet::IpNet;
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::{NormalizedEvent, Severity},
     passive::{
         ConnectionObservation,
@@ -259,7 +259,7 @@ pub(crate) fn parse_zeek_log(path: &Path) -> Result<Vec<HashMap<String, String>>
         // vratil 0 udalosti (nastroj by tvrdil "vse ciste", protoze nic nevidel).
         // Nahle selhani s jasnou chybou je bezpecnejsi nez tiche tiseni dat.
         if fields.is_empty() {
-            return Err(BakulaError::Processing(format!(
+            return Err(SalticusError::Processing(format!(
                 "Zeek log {} nema TSV '#fields' hlavicku - bud je poskozeny, nebo je to \
                  JSON format (JSON::use_json), ktery tento parser neumi. Pouzijte TSV \
                  vystup (vychozi Zeek format) nebo prevedte pres 'zeek -C -r <pcap> local'.",

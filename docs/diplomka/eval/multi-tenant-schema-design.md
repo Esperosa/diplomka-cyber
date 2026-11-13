@@ -11,7 +11,7 @@ schema navrhovat od nuly nebo migrovat 2x.
 
 ## Kde by `tenant_id` sel
 
-Podle `docs/diplomka/BAKULA_kompletni_technicky_navrh_diplomova_prace.md`
+Podle `docs/diplomka/SALTICUS_kompletni_technicky_navrh_diplomova_prace.md`
 (sekce 3.2, "Jednotna `tenant_id`, `site_id`, `sensor_id`, `asset_id`"):
 
 - **`platform.rs`'s SQLite schema** (az bude Postgres, viz trigger nize):
@@ -19,8 +19,8 @@ Podle `docs/diplomka/BAKULA_kompletni_technicky_navrh_diplomova_prace.md`
   dostanou `tenant_id` sloupec, FK na novou `tenants` tabulku.
 - **`model::RunReport`** - `tenant_id` pole na urovni celeho behu (ne per-
   `HostReport`/`Finding` - run uz dnes patri jednomu operatorovi/scope).
-- **Redis stream keys** (`broker.rs`) - prefix `{tenant_id}.bakula.jobs`
-  namisto globalniho `bakula.jobs`, aby fronty byly uz na urovni
+- **Redis stream keys** (`broker.rs`) - prefix `{tenant_id}.salticus.jobs`
+  namisto globalniho `salticus.jobs`, aby fronty byly uz na urovni
   transportu oddelene (ne jen filtrovane v DB dotazu).
 - **Workspace adresare** (`storage.rs`) - `{workspace_root}/{tenant_id}/runs/...`
   namisto flat `{workspace_root}/runs/...`.

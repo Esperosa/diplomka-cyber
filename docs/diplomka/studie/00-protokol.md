@@ -3,7 +3,7 @@
 Verze 1.0, 2026-10-31. Platí pro všechny studie RQ1–RQ6 v tomto adresáři. Předchozí návrhy jsou v `_predbezne/` a **nesmí se citovat jako důkaz**: vznikly ze shrnutí vyhledávače, ne z plných textů.
 
 ## 1. Účel
-Podklad pro rozhodnutí, jak vylepšit korelační a ověřovací jádro programu Skákavka (nižší šum, vyšší úspěšnost, univerzálnost). Studie musí být reprodukovatelná, každý závěr dohledatelný na konkrétní důkaz a každá nejistota přiznaná.
+Podklad pro rozhodnutí, jak vylepšit korelační a ověřovací jádro programu Salticus (nižší šum, vyšší úspěšnost, univerzálnost). Studie musí být reprodukovatelná, každý závěr dohledatelný na konkrétní důkaz a každá nejistota přiznaná.
 
 ## 2. Výzkumné otázky
 - **RQ1** Které metody korelace a agregace alertů do incidentů mají publikované měření snížení falešných poplachů a o kolik, za jakých podmínek?
@@ -35,12 +35,12 @@ Do závěrů smí **jen V3 a V2**; V1/V0 se uvedou v příloze „neověřeno“
 E1 systematický přehled/metastudie s kvantitativní syntézou; E2 kontrolovaný experiment s reálnými daty a více datasety, replikace; E3 experiment na jednom datasetu nebo simulaci; E4 provozní/případová zpráva, whitepaper s daty; E5 názor/koncept bez dat. Samostatně `riziko_zkreseni` (nízké/střední/vysoké) podle: duplicity v train/test, label leakage, jediný dataset, neuvedené FPR, ladění na testu, absence variance/CI, chybějící baseline.
 
 ## 7. Extrakční tabulka (`extrakce.csv`, oddělovač `;`, UTF-8)
-Sloupce: `id;rq;citace;url_nebo_doi;rok;venue;recenzovano;seminal;dataset;typ_dat;metoda;baseline;metrika;hodnota;ci_nebo_sd;podminky;limity_autoru;E;riziko_zkreseni;V;umisteni_a_citace;pouzitelnost_pro_skakavku;poznamka`.
+Sloupce: `id;rq;citace;url_nebo_doi;rok;venue;recenzovano;seminal;dataset;typ_dat;metoda;baseline;metrika;hodnota;ci_nebo_sd;podminky;limity_autoru;E;riziko_zkreseni;V;umisteni_a_citace;pouzitelnost_pro_salticus;poznamka`.
 `id` ve tvaru `RQ1-001`. `umisteni_a_citace` povinné u V3 (např. „Tab. 4, s. 9: ‚…‘“).
 
 ## 8. Syntéza
 - Kvantitativní souhrn jen při ≥ 3 studiích se stejnou metrikou a srovnatelnými podmínkami; jinak rozsah (min–medián–max) bez sdružování. Žádný vážený průměr nesrovnatelných čísel. Vždy uvést počet studií, datasetů a heterogenitu.
-- Každá studie končí tabulkou **Závěry**: `Z-id; tvrzení; důkazy (id řádků extrakce); jistota (vysoká/střední/nízká/velmi nízká); důvody snížení jistoty (zkreslení, nekonzistence, nepřímost, nepřesnost, publikační zkreslení); použitelnost pro Skákavku (ano/s úpravou/ne); doporučená akce`.
+- Každá studie končí tabulkou **Závěry**: `Z-id; tvrzení; důkazy (id řádků extrakce); jistota (vysoká/střední/nízká/velmi nízká); důvody snížení jistoty (zkreslení, nekonzistence, nepřímost, nepřesnost, publikační zkreslení); použitelnost pro Salticus (ano/s úpravou/ne); doporučená akce`.
 - Tvrzení bez id důkazu se nesmí objevit v sekci Závěry. Rozpory mezi studiemi se uvádějí a vysvětlují, ne vyhlazují.
 - Samostatná sekce **Co NEBYLO nalezeno** (mezery, nenalezené negativní výsledky) a **Hrozby validity**.
 - Samostatná sekce **Překlad do praxe**: konkrétní parametry/postupy s odkazem na důkazy a s označením, co je extrapolace (a proč).

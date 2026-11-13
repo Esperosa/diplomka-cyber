@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     Result,
-    error::BakulaError,
+    error::SalticusError,
     model::RunReport,
     verification::{CheckResult, ScenarioManifest, ScenarioVerification},
 };
@@ -562,7 +562,7 @@ pub fn save_evaluation_report(workspace_root: &Path, report: &EvaluationReport) 
     let latest = directory.join("latest.json");
     fs::write(
         &latest,
-        serde_json::to_vec_pretty(report).map_err(BakulaError::Json)?,
+        serde_json::to_vec_pretty(report).map_err(SalticusError::Json)?,
     )?;
     fs::write(directory.join("latest.md"), render_markdown(report))?;
     Ok(latest)
@@ -589,7 +589,7 @@ fn render_markdown(report: &EvaluationReport) -> String {
 
     format!(
         concat!(
-            "# Eval Bakula\n\n",
+            "# Eval Salticus\n\n",
             "- generated_at: `{}`\n",
             "- provider: `{}`\n",
             "- random_pairs: `{}`\n",

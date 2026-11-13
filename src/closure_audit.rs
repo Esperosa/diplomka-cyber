@@ -24,12 +24,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     context_gate::wilson_lower,
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     finding_memory::FindingKey,
 };
 
-fn db_error(error: rusqlite::Error) -> BakulaError {
-    BakulaError::Processing(format!("closure_audit SQLite chyba: {error}"))
+fn db_error(error: rusqlite::Error) -> SalticusError {
+    SalticusError::Processing(format!("closure_audit SQLite chyba: {error}"))
 }
 
 /// Druh zavření žebříkem (vedle druhů kontextu).
@@ -67,7 +67,7 @@ impl AuditPolicy {
             return Ok(Self::default());
         }
         let text = std::fs::read_to_string(&path)?;
-        let mut policy: Self = serde_json::from_str(&text).map_err(BakulaError::Json)?;
+        let mut policy: Self = serde_json::from_str(&text).map_err(SalticusError::Json)?;
         policy.sample_rate = policy.sample_rate.clamp(0.01, 1.0);
         policy.deadline_s = policy.deadline_s.clamp(3600, 30 * 86_400);
         policy.max_backlog = policy.max_backlog.clamp(1, 10_000);

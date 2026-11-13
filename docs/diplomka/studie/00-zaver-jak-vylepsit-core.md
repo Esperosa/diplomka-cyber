@@ -1,4 +1,4 @@
-# Závěrečná studie: jak vylepšit korelační a ověřovací jádro Skákavky (nižší šum, vyšší úspěšnost, univerzálnost)
+# Závěrečná studie: jak vylepšit korelační a ověřovací jádro Salticus (nižší šum, vyšší úspěšnost, univerzálnost)
 
 Verze 1.1, 2026-11-01. Revize podle `revize-metodiky-a-rizik.md` (K1 až K23) a `revize-rozsahu-a-nakladu.md` (P, Q, U, B, E, M), log změn v `revize-00.md`. Souhrnná (meta)studie nad revidovanými studiemi RQ1 až RQ6 podle `00-protokol.md` v1.0. Zdrojový kód se neměnil, nic se nespouštělo kromě čtení souborů a `git log`, procesy `bakula-soak-*` zůstaly bez zásahu.
 
@@ -55,7 +55,7 @@ Třídy doporučení:
 - **P3 „testovat jako hypotézu“:** jistota nízká.
 - **P4 „průzkumné“:** jistota velmi nízká nebo žádná.
 
-Pořadí v §5 se řídí třídou a v rámci třídy náročností a závislostmi. Očekávaný efekt uvádím jen v rozsahu důkazu a vždy s jednotkou zdroje. Přenos na jednotku Skákavky (nález × cyklus, incident) je vždy extrapolace.
+Pořadí v §5 se řídí třídou a v rámci třídy náročností a závislostmi. Očekávaný efekt uvádím jen v rozsahu důkazu a vždy s jednotkou zdroje. Přenos na jednotku Salticus (nález × cyklus, incident) je vždy extrapolace.
 
 ### 2.3 Co se do závěrů nepustilo
 
@@ -70,7 +70,7 @@ Pořadí v §5 se řídí třídou a v rámci třídy náročností a závislost
 
 ## 3. Mapa důkazů
 
-| # | tvrzení | RQ a id důkazů | jistota po revizi | použitelnost pro Skákavku |
+| # | tvrzení | RQ a id důkazů | jistota po revizi | použitelnost pro Salticus |
 |---|---|---|---|---|
 | M1 | Při základní četnosti 2·10⁻⁵ potřebuje polovina až dvě třetiny pravých poplachů FPR řádu 10⁻⁵. Při poměru 1:100 dává TPR 99 % a FPR 1 % 100 FP na 99 TP | RQ1 Z11 (RQ1-001 až 005), RQ5 Z-6a (RQ5-030, -055) | vysoká (matematika) | ano: hlásit FP/síť-den absolutně a precision při realistické četnosti |
 | M2 | Detektory se na benchmarcích opírají o artefakty (TTL, adresy, porty, velikosti) a triviální pravidla dosahují špičkových výsledků | RQ5 Z-2 (RQ5-006, -007, -013 až -016, -018, -039) | vysoká | ano: artefaktové baseline v soaku |
@@ -129,7 +129,7 @@ Pořadí v §5 se řídí třídou a v rámci třídy náročností a závislost
 ### Rozpory mezi studiemi a jejich vysvětlení
 
 - **R-1, jistota téhož zdroje (Larroche):** RQ4 Z9 hodnotí nadsazení výsledků LANL/OpTC jako vysokou jistotu, RQ2 Z9 je po revizi snížila na střední, protože jde o jeden preprint jednoho autora (RQ2-027, -050), a RQ5 Z-8 je střední. Jde o tytéž řádky z téže práce (RQ4-039 = RQ2-027/050 = RQ5-024). Podle pravidla 2.2 přebírám **střední**. RQ4 navíc opírá jistotu o deterministickou re-evaluaci a 10 běhů, což je argument pro přesnost čísel, ne pro jejich nezávislou replikaci.
-- **R-2, vzácnost:** RQ1 Z6 (RBA moduly vzácnosti a aperiodicity kolem náhody, RQ1-038) proti RQ6 Z8a a hypotéze RQ6 H-4 (řazení podle vzácnosti kontextu ve stylu NoDoze, −84 %, RQ6-031). Vysvětlení: jde o jiné veličiny. RBA měří vzácnost signatury alertu v čase, NoDoze vzácnost přechodů v kauzálním grafu hostu s prahem voleným dodatečně. Pro toky Skákavky přímý důkaz není. RQ6 H-4 proto ponechávám jako P3 s RQ1-038 jako negativním priorem.
+- **R-2, vzácnost:** RQ1 Z6 (RBA moduly vzácnosti a aperiodicity kolem náhody, RQ1-038) proti RQ6 Z8a a hypotéze RQ6 H-4 (řazení podle vzácnosti kontextu ve stylu NoDoze, −84 %, RQ6-031). Vysvětlení: jde o jiné veličiny. RBA měří vzácnost signatury alertu v čase, NoDoze vzácnost přechodů v kauzálním grafu hostu s prahem voleným dodatečně. Pro toky Salticus přímý důkaz není. RQ6 H-4 proto ponechávám jako P3 s RQ1-038 jako negativním priorem.
 - **R-3, NoDoze:** 84 % v PDF (RQ6-031, RQ1-026), 86 % na stránce NDSS (RQ3-048, V2) a AUC 0,60 v cizím hodnocení na ATLASv2 (RQ3-043). Vysvětlení: jiné metriky a datasety a dodatečný práh. Žádné z čísel nepřebírám jako očekávaný efekt.
 - **R-4, jednoduchý práh:** RQ2 Z1b (nízká, jediné síťové měření) proti RQ5 Z-12 (střední, tři zdroje, různé úlohy). Obě studie se shodují ve směru. RQ5 má vyšší jistotu, protože zobecňuje přes úlohy, ne kvůli síťovému měření prahu. Pro práh na tocích platí nízká jistota, pro povinnost triviální baseline v hodnocení střední.
 - **R-5, adaptace:** adaptivní baseline se otráví (RQ2-019), adaptivní kalibrace prahu FPR zlepšuje (RQ2-045). RQ2 to vysvětluje jako adaptaci úrovně proti adaptaci prahu. Plyne z toho gating úrovně a adaptivní kalibrace prahu.
@@ -384,7 +384,7 @@ Ve v1.0 R1 blokovala všechny ostatní body. To bylo chybně: snížení šumu s
 - **Důkazy pro:** RQ1 Z4 (střední, ale pro aktivní ověření zranitelnosti a pro odpověď služby, ne pro inventář, viz M9 a K3), RQ3 Z2 (nízká až střední), RQ3 Z9 (nízká, 99,64 → 0 % v testbedu), RQ6 Z10 (nízká, −53 % falešných alarmů při −3 p. b.), RQ6 Z11 (velmi nízká), M28, RQ1 Z12 (nízká).
 - **Očekávaný efekt:**
   - spolehlivost senzoru: −53 % falešných alarmů za cenu −3 p. b. predikce v jedné studii (RQ6-046; jednotka alarm IDS za den),
-  - kontextová degradace podle pasivního inventáře: **bez přímého podkladu**. ATLANTIDES (RQ1-024, 50 až 100 %) analyzuje odpovědi služeb v otevřeném textu, ne inventář, a Skákavka tento obsah z toků nemá (K3),
+  - kontextová degradace podle pasivního inventáře: **bez přímého podkladu**. ATLANTIDES (RQ1-024, 50 až 100 %) analyzuje odpovědi služeb v otevřeném textu, ne inventář, a Salticus tento obsah z toků nemá (K3),
   - kalendář a benigní vysvětlení: bez podkladu. Hranice −30 % je pracovní odhad autora RQ6 (RQ6 H-1), který zde slouží jako zamítací práh, ne jako opora (K16).
 - **Rizika:**
   - Útočník v okně údržby nebo na allowlistu (RQ1-020, Z3). Proto TTL, schválení, audit a v UI zobrazené aktivní výjimky (B7).
@@ -928,7 +928,7 @@ Pokrytí: všech 50 původních hypotéz je zařazeno (RQ1: 11, RQ2: 8, RQ3: 9, 
 
 ## Dodatek A (2026-11-01): požadavek autora práce a jeho dopad na plán
 
-**Požadavek (závazný):** Skákavka je produkční nástroj, ne důkaz konceptu. Podezření má **co nejvíce automaticky ověřit a buď vyloučit, nebo potvrdit**. Člověku se zobrazuje jen to, co po automatickém ověření přežilo, nebo co má vysoký dopad.
+**Požadavek (závazný):** Salticus je produkční nástroj, ne důkaz konceptu. Podezření má **co nejvíce automaticky ověřit a buď vyloučit, nebo potvrdit**. Člověku se zobrazuje jen to, co po automatickém ověření přežilo, nebo co má vysoký dopad.
 
 ### A.1 Tři skupiny výstupu (definice metriky)
 1. **Zachyceno**: všechno, co engine detekuje; zůstává v logu s důvodem a důkazy.

@@ -149,7 +149,7 @@ Rozpory: (i) Soule uvádí 100 % TPR při 7 % FPR na Abilene, což je u tisíců
 
 ## 5. Závěry
 
-| Z-id | Tvrzení | Důkazy | Jistota | Důvody snížení jistoty | Použitelnost pro Skákavku | Doporučená akce |
+| Z-id | Tvrzení | Důkazy | Jistota | Důvody snížení jistoty | Použitelnost pro Salticus | Doporučená akce |
 |---|---|---|---|---|---|---|
 | Z1a | Benchmarky časových řad (Yahoo, NAB) jsou často řešitelné jednoduchým pravidlem a mezi detektory často není jasný vítěz; deep learning zatím není konkurenceschopný. | RQ2-012, 013, 014, 015, 046, 051 | střední | nesíťová data; RQ2-046 se týká jen 14 nesupervizovaných algoritmů a o jednoduchých prazích nic netvrdí; RQ2-051 jen ukazuje rozptyl mezi rodinami | ano | do harnessu zařadit triviální baseline a nepovažovat Yahoo/NAB za důkaz sofistikovanosti |
 | Z1b | Jednoduchý robustní práh bývá při nízkém FPR srovnatelný nebo lepší než složitý detektor (u síťových dat). | RQ2-021 | **nízká** (dříve střední) | jediné síťové měření (Mirai, laboratoř, velmi nápadný provoz); autoři sami říkají, že nedokazuje detekci v reálu; ostatní řádky o prazích nic netvrdí | s úpravou | porovnávat TPR při pevné FPR proti triviální baseline, ale nespoléhat na tvrzení jako na doložené |
@@ -167,7 +167,7 @@ Rozpory: (i) Soule uvádí 100 % TPR při 7 % FPR na Abilene, což je u tisíců
 | Z10 | Velká část alarmů z objemových řad pochází z legitimního provozu; relevance závisí na metrice a části provozu. | RQ2-003 | nízká | 1 síť, kvalitativní | ano | kontextové metadata a udržovací okna jako vstup; souvisí s RQ1 |
 | Z11 | Isotonická kalibrace snižuje Brier proti surovému skóre BOCPD (velikost nespolehlivá). | RQ2-034 | velmi nízká | autor opravil popis kódu a sestavené proudy | s úpravou | pouze jako hypotéza H5, ne důkaz |
 
-## 6. Překlad do praxe (Skákavka)
+## 6. Překlad do praxe (Salticus)
 
 Označení: [D] doloženo uvedenými id, [E] extrapolace (a proč).
 

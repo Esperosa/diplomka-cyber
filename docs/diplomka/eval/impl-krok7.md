@@ -214,7 +214,7 @@ Všechno nové v3 je za přepínači (`--v3-on`, `[engine.v3]`), `V3Features::re
 | B5 | `behavior/novelty.rs`, `src/novelty_consent.rs` (nový), `server.rs` | `saas_group`: nová vazba ven jako incident na vnější /24 a službu; souhlas `POST /api/novelty/consent` (přesná dvojice, nejvýš 30 dní, append-only), souhlasená dvojice zůstává pro profil zmrazená. |
 | C1, C3, C4 | `soak/coverage.rs`, `soak/traffic.rs`, `soak/netmodel.rs`, `main.rs` | `--coverage k7` (nové úrovně os a varianty poruch podle B1, vlastní větev výběru), `--size industrial`, `--v3-mask` (skutečná ablace: maskované typy se odstraní z výstupu detekce před pamětí, kontextem, žebříkem, indexem pivotu a zmrazením učení). |
 | C2 | `tools/soak_k7.py` (nový) | Metriky B5 a kategorie buněk s Holmovou korekcí. |
-| C5 | `tools/replay_public.py` (nový), `pipeline/mod.rs` | Přehrání `conn.log.labeled` po 30min oknech skutečnými běhy `beh spust` ve v3; čas běhu z `BAKULA_REPLAY_NOW` (jen evaluace, bez proměnné beze změny). |
+| C5 | `tools/replay_public.py` (nový), `pipeline/mod.rs` | Přehrání `conn.log.labeled` po 30min oknech skutečnými běhy `beh spust` ve v3; čas běhu z `SALTICUS_REPLAY_NOW` (jen evaluace, bez proměnné beze změny). |
 
 **Zpětná kompatibilita a determinismus.** Binárka `749047d` dává na 4 sítích seedu 20261701 bajtově stejný `networks.jsonl` jako výstupy kroku 6 (`legacy` 4 ze 4 sítí, `v3k6` 2 ze 2 hotových sítí; po odečtení časových polí a nových polí `k7`). Nová pole se zapisují jen ve v3 s pamětí nálezů. Starý stav (`ladder`, `behavior`, paměť nálezů, `clientele`) se načte: nová pole mají serde výchozí hodnoty.
 

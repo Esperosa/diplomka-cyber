@@ -1,11 +1,11 @@
-id: bakula-directory-listing-exposed
+id: salticus-directory-listing-exposed
 
 info:
   name: Directory listing exposed
-  author: bakula
+  author: salticus
   severity: low
   description: Web server root appears to expose directory listing.
-  tags: bakula,http,listing
+  tags: salticus,http,listing
 
 http:
   - method: GET

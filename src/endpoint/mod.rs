@@ -1,7 +1,7 @@
 //! Koncová telemetrie (EDR-like) jako nezávislý druh důkazu (krok 8,
 //! docs/diplomka/eval/impl-krok8.md, studie 08).
 //!
-//! Skákavka čte VÝSTUPY hotových nástrojů (Sysmon a Windows log v JSON, Wazuh alerts,
+//! Salticus čte VÝSTUPY hotových nástrojů (Sysmon a Windows log v JSON, Wazuh alerts,
 //! osquery results), žádný vlastní agent. Vrstva:
 //! - `model`: typovaná událost,
 //! - `sysmon`, `wazuh`, `osquery`: odolné parsery nedůvěryhodného vstupu,

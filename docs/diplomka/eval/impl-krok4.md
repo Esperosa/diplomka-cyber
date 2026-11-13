@@ -152,7 +152,7 @@ Rozhodnutí o rozsahu: dlouhý komplexní běh v3 se spouští bez ohledu na G4.
 
 ## F) Profil cyklu v3 na XXXL (jen ladicí seedy, po slepém testu)
 
-Držené seedy 20261201 a 20261301 jsem nepoužil. Profil běžel na ladicích seedech 20261102 až 20261104, `--size xxxl --max-networks 3 --threads 1 --block-size 1 --no-legs --no-feedback --engine v3`. Stroj byl zatížený během E a cizími procesy, proto jsem kromě reálného času měřil i CPU čas vlákna (`BAKULA_SOAK_CYCLE_TRACE=1`, `GetThreadTimes`). Podíl CPU na reálném čase byl za celé běhy jen 0,28 až 0,45.
+Držené seedy 20261201 a 20261301 jsem nepoužil. Profil běžel na ladicích seedech 20261102 až 20261104, `--size xxxl --max-networks 3 --threads 1 --block-size 1 --no-legs --no-feedback --engine v3`. Stroj byl zatížený během E a cizími procesy, proto jsem kromě reálného času měřil i CPU čas vlákna (`SALTICUS_SOAK_CYCLE_TRACE=1`, `GetThreadTimes`). Podíl CPU na reálném čase byl za celé běhy jen 0,28 až 0,45.
 
 Nálezy:
 

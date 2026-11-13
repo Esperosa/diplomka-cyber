@@ -1242,127 +1242,127 @@ fn build_unmapped_event_evidence(event: &crate::model::CorrelatedEvent) -> Vec<S
 
 fn active_check_rationale(check: &crate::model::ActiveCheckRecord) -> String {
     match check.template_id.as_str() {
-        "bakula-basic-auth-over-http" => {
+        "salticus-basic-auth-over-http" => {
             "Kontrolovaný HTTP check potvrdil Basic autentizační challenge nad nešifrovaným HTTP kanálem."
                 .to_string()
         }
-        "bakula-prometheus-metrics-exposed" => {
+        "salticus-prometheus-metrics-exposed" => {
             "Kontrolovaný check potvrdil veřejně dosažitelný endpoint /metrics, který může zpřístupňovat provozní informace o systému."
                 .to_string()
         }
-        "bakula-swagger-ui-exposed" => {
+        "salticus-swagger-ui-exposed" => {
             "Kontrolovaný check potvrdil veřejně dostupné interaktivní rozhraní API dokumentace."
                 .to_string()
         }
-        "bakula-directory-listing-exposed" => {
+        "salticus-directory-listing-exposed" => {
             "Kontrolovaný check potvrdil vystavené directory listing rozhraní na kořenové cestě webu."
                 .to_string()
         }
-        "bakula-directory-listing-root" => {
+        "salticus-directory-listing-root" => {
             "Interní obsahová forenzika potvrdila directory listing přímo na kořenové cestě webu."
                 .to_string()
         }
-        "bakula-login-surface-over-http" => {
+        "salticus-login-surface-over-http" => {
             "Interní pentest našel přihlašovací nebo administrační povrch přes nešifrované HTTP."
                 .to_string()
         }
-        "bakula-missing-security-headers" => {
+        "salticus-missing-security-headers" => {
             "Interní HTTP kontrola potvrdila chybějící základní obranné hlavičky."
                 .to_string()
         }
-        "bakula-versioned-server-header" => {
+        "salticus-versioned-server-header" => {
             "Agresivnější interní pentest našel Server hlavičku s produktovým nebo verzovacím detailem."
                 .to_string()
         }
-        "bakula-ftp-port-reachable" => {
+        "salticus-ftp-port-reachable" => {
             "Interní TCP validace potvrdila dosažitelný FTP port."
                 .to_string()
         }
-        "bakula-telnet-port-reachable" => {
+        "salticus-telnet-port-reachable" => {
             "Interní TCP validace potvrdila dosažitelný Telnet port."
                 .to_string()
         }
-        "bakula-openssh-legacy-banner" => {
+        "salticus-openssh-legacy-banner" => {
             "Agresivnější interní TCP validace zachytila starší OpenSSH banner."
                 .to_string()
         }
-        "bakula-openapi-json-exposed" => {
+        "salticus-openapi-json-exposed" => {
             "Interní pentest potvrdil dostupný OpenAPI JSON, který může prozrazovat strukturu API."
                 .to_string()
         }
-        "bakula-actuator-health-exposed" => {
+        "salticus-actuator-health-exposed" => {
             "Interní pentest potvrdil dostupný actuator health endpoint s provozním kontextem služby."
                 .to_string()
         }
-        "bakula-server-status-exposed" => {
+        "salticus-server-status-exposed" => {
             "Interní pentest potvrdil dostupný server-status endpoint s technickými detaily serveru."
                 .to_string()
         }
-        "bakula-git-head-exposed" => {
+        "salticus-git-head-exposed" => {
             "Agresivnější interní pentest potvrdil dostupnost Git metadata cesty. Obsah nebyl uložen, jen stav odpovědi."
                 .to_string()
         }
-        "bakula-env-file-accessible" => {
+        "salticus-env-file-accessible" => {
             "Agresivnější interní pentest potvrdil odpověď na cestě .env. Obsah nebyl uložen, aby se neukládala tajná data."
                 .to_string()
         }
-        "bakula-debug-pprof-exposed" => {
+        "salticus-debug-pprof-exposed" => {
             "Agresivnější interní pentest potvrdil dostupný debug pprof endpoint."
                 .to_string()
         }
-        "bakula-phpinfo-exposed" => {
+        "salticus-phpinfo-exposed" => {
             "Agresivnější interní pentest potvrdil dostupnou phpinfo stránku."
                 .to_string()
         }
-        "bakula-backup-directory-exposed" | "bakula-backup-archive-exposed" => {
+        "salticus-backup-directory-exposed" | "salticus-backup-archive-exposed" => {
             "Agresivnější interní pentest potvrdil odpověď na backup cestě. Obsah nebyl uložen."
                 .to_string()
         }
-        "bakula-svn-entries-exposed" => {
+        "salticus-svn-entries-exposed" => {
             "Agresivnější interní pentest potvrdil dostupnost SVN metadata cesty. Obsah nebyl uložen."
                 .to_string()
         }
-        "bakula-config-yaml-accessible" => {
+        "salticus-config-yaml-accessible" => {
             "Agresivnější interní pentest potvrdil odpověď na konfigurační cestě. Obsah nebyl uložen."
                 .to_string()
         }
-        "bakula-actuator-env-exposed" => {
+        "salticus-actuator-env-exposed" => {
             "Agresivnější interní pentest potvrdil dostupný actuator env endpoint."
                 .to_string()
         }
-        "bakula-dangerous-http-methods" => {
+        "salticus-dangerous-http-methods" => {
             "Agresivnější interní pentest zjistil, že server inzeruje rizikové HTTP metody."
                 .to_string()
         }
-        "bakula-trace-method-enabled" => {
+        "salticus-trace-method-enabled" => {
             "Agresivnější interní pentest ověřil, že server přijímá HTTP TRACE požadavek."
                 .to_string()
         }
-        "bakula-cors-wildcard-origin" => {
+        "salticus-cors-wildcard-origin" => {
             "Agresivnější interní pentest potvrdil wildcard CORS hlavičku na kontrolované službě."
                 .to_string()
         }
-        "bakula-cookie-missing-security-flags" => {
+        "salticus-cookie-missing-security-flags" => {
             "Agresivnější interní pentest našel cookie bez kompletní sady běžných bezpečnostních flagů."
                 .to_string()
         }
-        "bakula-hsts-missing" => {
+        "salticus-hsts-missing" => {
             "Agresivnější interní pentest potvrdil HTTPS odpověď bez HSTS hlavičky."
                 .to_string()
         }
-        "bakula-admin-product-exposed" => {
+        "salticus-admin-product-exposed" => {
             "Obsahová forenzika rozpoznala administrační produkt dostupný z testovaného rozsahu."
                 .to_string()
         }
-        "bakula-admin-endpoint-reachable" => {
+        "salticus-admin-endpoint-reachable" => {
             "Agresivnější interní pentest potvrdil dosažitelnou administrační nebo login cestu."
                 .to_string()
         }
-        "bakula-private-key-accessible" => {
+        "salticus-private-key-accessible" => {
             "Agresivnější interní pentest potvrdil odpověď na cestě privátního klíče. Obsah nebyl uložen."
                 .to_string()
         }
-        "bakula-wp-config-backup-accessible" | "bakula-config-php-backup-accessible" => {
+        "salticus-wp-config-backup-accessible" | "salticus-config-php-backup-accessible" => {
             "Agresivnější interní pentest potvrdil odpověď na záložní konfigurační cestě. Obsah nebyl uložen."
                 .to_string()
         }
@@ -1372,127 +1372,127 @@ fn active_check_rationale(check: &crate::model::ActiveCheckRecord) -> String {
 
 fn active_check_recommendation(template_id: &str) -> String {
     match template_id {
-        "bakula-basic-auth-over-http" => {
+        "salticus-basic-auth-over-http" => {
             "Vynutit TLS před autentizací, omezit přístup k rozhraní a odstranit přihlašování přes čisté HTTP."
                 .to_string()
         }
-        "bakula-prometheus-metrics-exposed" => {
+        "salticus-prometheus-metrics-exposed" => {
             "Omezit endpoint /metrics autentizací, segmentací nebo reverzní proxy a ověřit, zda má být dostupný z daného segmentu."
                 .to_string()
         }
-        "bakula-swagger-ui-exposed" => {
+        "salticus-swagger-ui-exposed" => {
             "Omezit dokumentační rozhraní na interní síť nebo autentizované uživatele a ověřit, zda neprozrazuje citlivé detaily API."
                 .to_string()
         }
-        "bakula-directory-listing-exposed" => {
+        "salticus-directory-listing-exposed" => {
             "Zakázat directory listing a ověřit, zda webový server neodhaluje citlivé soubory nebo strukturu aplikace."
                 .to_string()
         }
-        "bakula-directory-listing-root" => {
+        "salticus-directory-listing-root" => {
             "Zakázat directory listing na web serveru a projít, zda nejsou dostupné zálohy, logy nebo interní soubory."
                 .to_string()
         }
-        "bakula-login-surface-over-http" => {
+        "salticus-login-surface-over-http" => {
             "Přesměrovat přihlašování na HTTPS, vynutit TLS a do opravy omezit přístup jen na správcovské adresy."
                 .to_string()
         }
-        "bakula-missing-security-headers" => {
+        "salticus-missing-security-headers" => {
             "Doplnit minimálně X-Frame-Options, X-Content-Type-Options a Content-Security-Policy podle role aplikace."
                 .to_string()
         }
-        "bakula-versioned-server-header" => {
+        "salticus-versioned-server-header" => {
             "Omezit detail Server hlavičky a hlavně ověřit, zda deklarovaná verze odpovídá záplatovanému balíčku."
                 .to_string()
         }
-        "bakula-ftp-port-reachable" => {
+        "salticus-ftp-port-reachable" => {
             "Vypnout FTP, nahradit ho SFTP/FTPS nebo port 21 omezit jen na nutné zdrojové adresy."
                 .to_string()
         }
-        "bakula-telnet-port-reachable" => {
+        "salticus-telnet-port-reachable" => {
             "Vypnout Telnet, nahradit ho SSH a port 23 odstranit z běžně dosažitelných segmentů."
                 .to_string()
         }
-        "bakula-openssh-legacy-banner" => {
+        "salticus-openssh-legacy-banner" => {
             "Ověřit skutečnou OpenSSH verzi na systému a záplatování distribučního balíčku."
                 .to_string()
         }
-        "bakula-openapi-json-exposed" => {
+        "salticus-openapi-json-exposed" => {
             "Omezit OpenAPI dokumentaci na interní nebo autentizovaný přístup a zkontrolovat, zda nepopisuje neveřejné endpointy."
                 .to_string()
         }
-        "bakula-actuator-health-exposed" => {
+        "salticus-actuator-health-exposed" => {
             "Omezit actuator endpointy na monitoring segment nebo autentizovanou reverzní proxy."
                 .to_string()
         }
-        "bakula-server-status-exposed" => {
+        "salticus-server-status-exposed" => {
             "Vypnout veřejný server-status nebo ho povolit jen pro správce z interní sítě."
                 .to_string()
         }
-        "bakula-git-head-exposed" => {
+        "salticus-git-head-exposed" => {
             "Okamžitě zablokovat přístup k .git adresáři a ověřit, zda nebyl dostupný celý repozitář."
                 .to_string()
         }
-        "bakula-env-file-accessible" => {
+        "salticus-env-file-accessible" => {
             "Zablokovat přístup k .env, zkontrolovat historii přístupů a rotovat tajné hodnoty, pokud mohl být soubor dostupný."
                 .to_string()
         }
-        "bakula-debug-pprof-exposed" => {
+        "salticus-debug-pprof-exposed" => {
             "Vypnout debug endpoint nebo ho omezit pouze na izolovanou administrátorskou síť."
                 .to_string()
         }
-        "bakula-phpinfo-exposed" => {
+        "salticus-phpinfo-exposed" => {
             "Odstranit phpinfo stránku z produkce a ověřit, zda neprozrazuje citlivou konfiguraci."
                 .to_string()
         }
-        "bakula-backup-directory-exposed" | "bakula-backup-archive-exposed" => {
+        "salticus-backup-directory-exposed" | "salticus-backup-archive-exposed" => {
             "Zablokovat backup cesty přes web, přesunout zálohy mimo webroot a zkontrolovat přístupové logy."
                 .to_string()
         }
-        "bakula-svn-entries-exposed" => {
+        "salticus-svn-entries-exposed" => {
             "Zablokovat .svn metadata, odstranit je z webrootu a ověřit, zda nebyl dostupný zdrojový kód."
                 .to_string()
         }
-        "bakula-config-yaml-accessible" => {
+        "salticus-config-yaml-accessible" => {
             "Zablokovat přístup ke konfiguračním souborům a rotovat tajné hodnoty, pokud mohly být zveřejněné."
                 .to_string()
         }
-        "bakula-actuator-env-exposed" => {
+        "salticus-actuator-env-exposed" => {
             "Omezit actuator env endpoint jen na chráněný monitoring segment nebo ho v produkci vypnout."
                 .to_string()
         }
-        "bakula-dangerous-http-methods" => {
+        "salticus-dangerous-http-methods" => {
             "Ověřit, zda jsou metody PUT/DELETE/PATCH/TRACE skutečně potřebné, a na proxy nebo serveru zakázat ty, které nejsou."
                 .to_string()
         }
-        "bakula-trace-method-enabled" => {
+        "salticus-trace-method-enabled" => {
             "Zakázat HTTP TRACE na web serveru nebo reverzní proxy."
                 .to_string()
         }
-        "bakula-cors-wildcard-origin" => {
+        "salticus-cors-wildcard-origin" => {
             "Ověřit, zda endpoint pracuje s citlivými daty, a místo wildcard CORS povolit jen konkrétní důvěryhodné originy."
                 .to_string()
         }
-        "bakula-cookie-missing-security-flags" => {
+        "salticus-cookie-missing-security-flags" => {
             "Doplnit HttpOnly, SameSite a u HTTPS také Secure na session cookie; u login povrchů ověřit délku platnosti relace."
                 .to_string()
         }
-        "bakula-hsts-missing" => {
+        "salticus-hsts-missing" => {
             "Doplnit Strict-Transport-Security na HTTPS službu po ověření, že celý přístup funguje přes TLS."
                 .to_string()
         }
-        "bakula-admin-product-exposed" => {
+        "salticus-admin-product-exposed" => {
             "Omezit administrační produkt segmentací, autentizovanou proxy nebo VPN a projít přístupové logy."
                 .to_string()
         }
-        "bakula-admin-endpoint-reachable" => {
+        "salticus-admin-endpoint-reachable" => {
             "Ověřit, zda má být admin/login cesta dostupná z daného rozsahu, a jinak ji omezit firewallem nebo reverzní proxy."
                 .to_string()
         }
-        "bakula-private-key-accessible" => {
+        "salticus-private-key-accessible" => {
             "Okamžitě zablokovat cestu ke klíči, ověřit přístupové logy a klíč rotovat, pokud mohl být dostupný."
                 .to_string()
         }
-        "bakula-wp-config-backup-accessible" | "bakula-config-php-backup-accessible" => {
+        "salticus-wp-config-backup-accessible" | "salticus-config-php-backup-accessible" => {
             "Odstranit záložní konfigurace z webrootu, zablokovat jejich cesty a rotovat tajné hodnoty, pokud mohly být dostupné."
                 .to_string()
         }

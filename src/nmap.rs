@@ -9,7 +9,7 @@ use ipnet::IpNet;
 use roxmltree::Document;
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::{Confidence, HostReport},
 };
 
@@ -98,7 +98,7 @@ pub fn run_real_nmap(
     args.extend(scope_arg);
     let status = Command::new("nmap").args(&args).status()?;
     if !status.success() {
-        return Err(BakulaError::Processing(
+        return Err(SalticusError::Processing(
             "Nmap se nepodarilo uspesne spustit.".to_string(),
         ));
     }
@@ -165,7 +165,7 @@ pub fn run_targeted_followup_nmap(
     args.extend(host_args);
     let status = Command::new("nmap").args(&args).status()?;
     if !status.success() {
-        return Err(BakulaError::Processing(
+        return Err(SalticusError::Processing(
             "Cílený follow-up Nmap průchod selhal.".to_string(),
         ));
     }
@@ -237,7 +237,7 @@ pub fn run_forensic_followup_nmap(
     args.extend(host_args);
     let status = Command::new("nmap").args(&args).status()?;
     if !status.success() {
-        return Err(BakulaError::Processing(
+        return Err(SalticusError::Processing(
             "Forenzní Nmap průchod selhal.".to_string(),
         ));
     }
@@ -297,7 +297,7 @@ pub fn merge_followup_inventory(
 pub fn parse_nmap_xml(path: &Path) -> Result<ParsedInventory> {
     let xml = sanitize_nmap_xml(&fs::read_to_string(path)?);
     let doc = Document::parse(&xml)
-        .map_err(|error| BakulaError::Processing(format!("Nelze parsovat Nmap XML: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("Nelze parsovat Nmap XML: {error}")))?;
 
     let mut hosts = Vec::new();
     for host_node in doc.descendants().filter(|node| node.has_tag_name("host")) {
@@ -314,7 +314,7 @@ pub fn parse_nmap_xml(path: &Path) -> Result<ParsedInventory> {
             .descendants()
             .find(|node| node.has_tag_name("address") && node.attribute("addrtype") == Some("ipv4"))
             .and_then(|node| node.attribute("addr"))
-            .ok_or_else(|| BakulaError::Processing("Host bez IPv4 adresy.".to_string()))?
+            .ok_or_else(|| SalticusError::Processing("Host bez IPv4 adresy.".to_string()))?
             .to_string();
 
         let hostname = host_node
@@ -340,13 +340,13 @@ pub fn parse_nmap_xml(path: &Path) -> Result<ParsedInventory> {
             let port = port_node
                 .attribute("portid")
                 .and_then(|value| value.parse::<u16>().ok())
-                .ok_or_else(|| BakulaError::Processing("Port bez platneho cisla.".to_string()))?;
+                .ok_or_else(|| SalticusError::Processing("Port bez platneho cisla.".to_string()))?;
             let proto = port_node.attribute("protocol").unwrap_or("tcp").to_string();
 
             let state_node = port_node
                 .children()
                 .find(|node| node.has_tag_name("state"))
-                .ok_or_else(|| BakulaError::Processing("Port bez stavu.".to_string()))?;
+                .ok_or_else(|| SalticusError::Processing("Port bez stavu.".to_string()))?;
             let port_state = state_node
                 .attribute("state")
                 .unwrap_or("unknown")

@@ -1,4 +1,4 @@
-# Skákavka: rešerše prior art a novost
+# Salticus: rešerše prior art a novost
 
 Stav: rychlá rešerše (datum 2026-10-31). Jde o první průchod, ne o systematickou přehledovou studii.
 
@@ -30,7 +30,7 @@ Ověření: PLNÝ TEXT, ABSTRAKT (abstrakt nebo oficiální stránka), SNIPPET (
 
 ### Bod 1: Korelace pasivní telemetrie (Zeek, Suricata) s aktivním inventářem (nmap, httpx, nuclei)
 
-| Nejbližší práce/produkt | Rok | URL | Co dělá | Rozdíl od Skákavky | Ověřeno | Blízkost |
+| Nejbližší práce/produkt | Rok | URL | Co dělá | Rozdíl od Salticus | Ověřeno | Blízkost |
 |---|---|---|---|---|---|---|
 | Combining active and passive scanning: Nmap + NetFlow vs NVD (NOMS, Muni) | 2020 | https://is.muni.cz/publication/1605419/2020-NOMS-Network-Monitoring-Enumerating-Vulnerabilities-Large-Heterogeneous-Networks-paper.pdf | Porovnává aktivní (Nmap) a pasivní (NetFlow) skenování a koreluje s NVD | Žádný Zeek/Suricata, žádné hypotézy ani ověřovací plánovač | SNIPPET (fetch PDF vrátil prázdný obsah) | 2 |
 | Qualys Passive Sensor (sloučení pasivních nálezů s aktivními a agentovými záznamy) | ? | https://docs.qualys.com/en/ps/latest/get_started/get_started.htm | Odhaluje zařízení pasivně a páruje je s existujícím inventářem | Komerční, bez hypotéz a EVOI | SNIPPET | 2 |
@@ -91,7 +91,7 @@ Poznámka: Patenty (např. US7761918, „System and method for scanning a networ
 |---|---|---|---|---|---|---|
 | Juniper QRadar/JSA: asset profiler (MAC > NetBIOS > DNS > IP, pravidlo na nestabilní IP) | 2026 (verze 7.5) | https://networkingdocs.hpe.com/documentation//us/en/software/jsa7.5.0/jsa/topics/concept/concept-jsa-user-updates-to-asset-data.html | Priorita identitních údajů; IP s ≥3 MAC/hostname za 2 h na blacklistu | Komerční SIEM, bez asset ID z DHCP logů jako veřejné metody | PLNÝ TEXT (přes redirect, dokumentace) | 2 |
 | Stellar Cyber: MAC-identified vs IP-identified assets, DHCP continuity, IPAM | 2026 (doc v6.6) | https://docs.stellarcyber.ai/6.6.x/Using/Investigate/Asset-Analytics-MAC-or-IP-Identified.htm | Stabilní asset ID podle MAC, sledování po změně IP přes DHCP a IPAM | Vendor; bez pravidel pro MAC randomizaci | PLNÝ TEXT (dokumentace) | 2 |
-| Splunk ES: identity resolution z DHCP, DNS, VPN, AD | 2024+ | https://docs.splunk.com/Documentation/ES/7.0.1/BehavioralAnalytics/Identityresolution | DHCP IP→MAC mapování v databázi identit | Komerční, bez Skákavky-like ověřování | SNIPPET | 2 |
+| Splunk ES: identity resolution z DHCP, DNS, VPN, AD | 2024+ | https://docs.splunk.com/Documentation/ES/7.0.1/BehavioralAnalytics/Identityresolution | DHCP IP→MAC mapování v databázi identit | Komerční, bez Salticus-like ověřování | SNIPPET | 2 |
 | Zeek dhcp.log jako zdroj vazby MAC↔IP (dokumentace), MCP asset map | 2026 | https://docs.zeek.org/en/lts/logs/dhcp.html ; https://glama.ai/mcp/servers/lidless-labs/zeek-mcp/tools/zeek_dhcp_asset_map | Log DORA výměn, mapa MAC→IP/hostname | Dokumentace a nástroj, ne asset ID | SNIPPET | 1 |
 | IETF draft-ietf-dhc-anonymity-profile (DHCP identifikátory umožňují sledování) | 2015 (draft) | https://ietf.potaroo.net/all-ids/draft-ietf-dhc-anonymity-profile-02.txt | Ukazuje, že DHCP identifikátory prozrazují zařízení i při randomizaci MAC | Obecný problém soukromí, ne správa aktiv | SNIPPET | 1 |
 | Vanhoef et al., Why MAC Address Randomization is not Enough (WiSec 2016) | 2016 | https://papers.mathyvanhoef.com/wisec2016.pdf | Útok na randomizaci MAC přes časování skenů a čísla sekvencí | Útočný pohled na Wi-Fi; PDF nebylo čitelné | NEOVĚŘENO (PDF binární, nečitelné) | 1 |

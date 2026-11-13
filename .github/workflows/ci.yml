@@ -72,18 +72,18 @@ jobs:
         with:
           context: .
           push: false
-          tags: bakula-program:ci-smoke
+          tags: salticus-program:ci-smoke
 
       - name: Container starts and serves /api/health
         run: |
-          docker run -d --name bakula-smoke -p 8080:8080 bakula-program:ci-smoke \
+          docker run -d --name salticus-smoke -p 8080:8080 salticus-program:ci-smoke \
             server spust --workspace /data/workspace --host 0.0.0.0 --port 8080
           for i in $(seq 1 20); do
             if curl -sf http://127.0.0.1:8080/api/health; then exit 0; fi
             sleep 1
           done
           echo "server never answered /api/health" >&2
-          docker logs bakula-smoke >&2
+          docker logs salticus-smoke >&2
           exit 1
 
   supply-chain:
@@ -105,10 +105,10 @@ jobs:
         run: cargo audit
 
       - name: SBOM (CycloneDX)
-        run: cargo cyclonedx --format json --override-filename bakula-sbom
+        run: cargo cyclonedx --format json --override-filename salticus-sbom
 
       - uses: actions/upload-artifact@v4
         with:
           name: sbom-rust
-          path: "**/bakula-sbom.json"
+          path: "**/salticus-sbom.json"
           if-no-files-found: error

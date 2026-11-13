@@ -1,7 +1,7 @@
 //! Krok 5 zdroj: CIC-IDS2017 v pregenerovane verzi Engelen a kol. (WTMC 2021, opravene
 //! toky a stitky tehoz zaznamu UNB CIC). Vstup je redukovany vyrez CSV (sloupce
 //! `KEEP` v `tools`/skriptu vyrezu, viz `docs/diplomka/dataset-registry.md`), data
-//! lezi mimo repo (`BAKULA_EXTERNAL_DATASETS`).
+//! lezi mimo repo (`SALTICUS_EXTERNAL_DATASETS`).
 //!
 //! **Prevod na `ConnectionObservation`:** CICFlowMeter nema Zeek `conn_state`. Stav se
 //! odvozuje priblizne: bez paketu zpet = `S0`, s RST = `RSTO`, jinak `SF`. Bajty jsou
@@ -16,7 +16,7 @@ use std::path::Path;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 
-use crate::error::{BakulaError, Result};
+use crate::error::{SalticusError, Result};
 use crate::eval::ground_truth::{GroundTruthLabel, LabeledDataset};
 use crate::eval::source::{DatasetSourceInfo, ScenarioSource};
 use crate::passive::ConnectionObservation;
@@ -38,7 +38,7 @@ impl ScenarioSource for CicIds2017Source {
         let mut lines = content.lines();
         let header = lines
             .next()
-            .ok_or_else(|| BakulaError::Processing("CIC-IDS2017 vyrez je prazdny.".into()))?;
+            .ok_or_else(|| SalticusError::Processing("CIC-IDS2017 vyrez je prazdny.".into()))?;
         let columns: HashMap<&str, usize> = header
             .split(',')
             .enumerate()
@@ -46,7 +46,7 @@ impl ScenarioSource for CicIds2017Source {
             .collect();
         let column = |name: &str| -> Result<usize> {
             columns.get(name).copied().ok_or_else(|| {
-                BakulaError::Processing(format!("CIC-IDS2017 vyrez postrada sloupec '{name}'."))
+                SalticusError::Processing(format!("CIC-IDS2017 vyrez postrada sloupec '{name}'."))
             })
         };
         let idx = [

@@ -63,7 +63,7 @@ Pokud vedoucí práce a správci kybernetických laboratoří FIM (J5/J7) povol�
 
 > Dobrý den,
 >
-> píšu diplomovou práci o automatickém ověřování podezření v síťovém provozu (navazuje na bakalářskou práci Bakula). Rád bych ověřil detekci na skutečném provozu se známou pozemní pravdou, nejen v simulaci a na veřejných datasetech.
+> píšu diplomovou práci o automatickém ověřování podezření v síťovém provozu (navazuje na bakalářskou práci Salticus). Rád bych ověřil detekci na skutečném provozu se známou pozemní pravdou, nejen v simulaci a na veřejných datasetech.
 >
 > Bylo by možné použít kybernetickou laboratoř FIM (J5/J7, cyber range) pro tato pasivní měření?
 >

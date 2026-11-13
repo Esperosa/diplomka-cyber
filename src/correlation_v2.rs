@@ -738,10 +738,10 @@ mod tests {
     }
 
     /// Stejny env-var ovladany pocet jako u `fusion.rs` fuzz testu - vychozi hodnota
-    /// bezi v radu sekund, `BAKULA_FUZZ_SCENARIOS=1000000` pro zamerny stres-beh.
+    /// bezi v radu sekund, `SALTICUS_FUZZ_SCENARIOS=1000000` pro zamerny stres-beh.
     #[test]
     fn detect_windowed_anomalies_linked_holds_structural_invariants_across_many_random_scenarios() {
-        let total_scenarios: usize = std::env::var("BAKULA_FUZZ_SCENARIOS")
+        let total_scenarios: usize = std::env::var("SALTICUS_FUZZ_SCENARIOS")
             .ok()
             .and_then(|value| value.parse().ok())
             .unwrap_or(200_000);

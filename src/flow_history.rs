@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use rusqlite::{Connection, params};
 
-use crate::error::{BakulaError, Result};
+use crate::error::{SalticusError, Result};
 
 pub const SLOTS: usize = 168;
 const MAX_KEYS: usize = 60_000;
@@ -28,8 +28,8 @@ const MAX_NODES: usize = 20_000;
 /// Dny, po kterých slot zastará.
 const HORIZON_DAYS: i64 = 7;
 
-fn db_error(error: rusqlite::Error) -> BakulaError {
-    BakulaError::Processing(format!("flow_history SQLite chyba: {error}"))
+fn db_error(error: rusqlite::Error) -> SalticusError {
+    SalticusError::Processing(format!("flow_history SQLite chyba: {error}"))
 }
 
 /// Metrika uložená v historii.

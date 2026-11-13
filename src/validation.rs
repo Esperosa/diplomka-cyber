@@ -243,7 +243,7 @@ fn validation_matrix_lane(
         ],
         recommended_tools: vec![
             "nmap".to_string(),
-            "bakula-internal-pentest".to_string(),
+            "salticus-internal-pentest".to_string(),
             "httpx-optional".to_string(),
             "nuclei-controlled-optional".to_string(),
             "zeek".to_string(),
@@ -303,9 +303,9 @@ fn safe_pentest_lane(
             "policy=non-destructive-authorized".to_string(),
         ],
         recommended_tools: vec![
-            "bakula-internal-pentest".to_string(),
-            "bakula-tcp-probe".to_string(),
-            "bakula-http-prober".to_string(),
+            "salticus-internal-pentest".to_string(),
+            "salticus-tcp-probe".to_string(),
+            "salticus-http-prober".to_string(),
             "nmap-safe-scripts".to_string(),
             "greenbone-authenticated".to_string(),
         ],
@@ -374,7 +374,7 @@ fn internal_pentest_checks_total(report: &RunReport) -> usize {
         .iter()
         .flat_map(|host| host.services.iter())
         .flat_map(|service| service.active_checks.iter())
-        .filter(|check| check.source == "bakula-internal-pentest")
+        .filter(|check| check.source == "salticus-internal-pentest")
         .count()
 }
 
@@ -385,7 +385,7 @@ fn aggressive_pentest_checks_total(report: &RunReport) -> usize {
         .flat_map(|host| host.services.iter())
         .flat_map(|service| service.active_checks.iter())
         .filter(|check| {
-            check.source == "bakula-internal-pentest"
+            check.source == "salticus-internal-pentest"
                 && check.evidence.iter().any(|item| item == "mode=aggressive")
         })
         .count()

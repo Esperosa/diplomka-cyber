@@ -15,7 +15,7 @@ Otázka: přinášejí dedukce a abdukce, pravděpodobnostní logika a triáž p
 7. **Bayesovská kombinace doplňkové evidence a spolehlivosti senzoru** snížila falešné alarmy z 1,58 % na 0,74 % za cenu poklesu predikce o 3 p.b. (RQ6-046). Stavová evidence z hostů zvýšila poměr konfidence mezi skutečnými a ostatními alerty 8–15krát (RQ6-047). Obě studie jsou staré a malé.
 8. **Pro Datalog, Markovskou logiku (MLN), ProbLog ani formální abdukci jsem nenašel žádné publikované měření přínosu pro ověřování alertů**, které by šlo ověřit. Jediná abduktivní studie má F1 diagnózy 0,12–1,0 a opírá se o ručně doplněná fakta (RQ6-049).
 
-Důsledek pro Skákavku: deduktivní a pravděpodobnostní jádro dává smysl hlavně tam, kde kombinuje doplňkovou evidenci a explicitní benigní vysvětlení. LLM do verdiktní cesty nepatří. Nejvýš by mohlo shrnovat už rozhodnuté a strukturované nálezy.
+Důsledek pro Salticus: deduktivní a pravděpodobnostní jádro dává smysl hlavně tam, kde kombinuje doplňkovou evidenci a explicitní benigní vysvětlení. LLM do verdiktní cesty nepatří. Nejvýš by mohlo shrnovat už rozhodnuté a strukturované nálezy.
 
 ## Metodika a PRISMA
 
@@ -173,7 +173,7 @@ Vysvětlení zvyšují důvěru spolehlivěji než přesnost. Jediná randomizov
 | Z12 | Vysvětlení zvyšují důvěru analytiků víc než přesnost a prezentace v přirozeném jazyce vede k nadměrné důvěře | RQ6-027, RQ6-028, RQ6-029 | nízká | malé n, pilot, sebehodnocení | s úpravou | vysvětlení stavět na evidenci a protipříkladech, ne na volném textu |
 | Z13 | Ne-LLM model učený na rozhodnutích analytiků uzavřel v produkci 61 % alertů při FNR 1,36 % | RQ6-030 | nízká | jeden výrobce, štítky analytiků | ano | laťka pro jakoukoli „chytrou“ triáž |
 
-## Překlad do praxe (Skákavka)
+## Překlad do praxe (Salticus)
 
 Napojení na naše měření (soak v2, `F:\Projekty\bakula-soak\run-v2-72h\status.md`, 3,5 h, 566 sítí):
 
@@ -208,7 +208,7 @@ Společné podmínky: soak v2, seed 20261031 a 4 další seedy (vývoj: 2, test:
 - **Výběr zdrojů:** vyhledávání ukazuje jen prvních 10 odkazů na dotaz. Počty identifikovaných záznamů jsou odhad. ACM DL a IEEE Xplore jsem neprohledával přímo, starší logické práce (Ning, Kruegel, Zhou) zůstaly V1.
 - **Recenze:** většina LLM prací jsou preprinty z let 2025–2026 a rychle se mění. Například CyberSOCEval má mezi verzemi odlišná čísla.
 - **Střet zájmů:** Microsoft (RQ6-026, RQ6-018), AWS (RQ6-016), Sophos (RQ6-030), autoři AIDA hodnotí vlastní návrh (RQ6-006).
-- **Nepřímost:** literatura o provenance pracuje s hostovými audit logy, Skákavka s toky, Zeekem a aktivním ověřováním. Přenos čísel je extrapolace a hypotézy jsou podle toho formulované se širokými rozsahy.
+- **Nepřímost:** literatura o provenance pracuje s hostovými audit logy, Salticus s toky, Zeekem a aktivním ověřováním. Přenos čísel je extrapolace a hypotézy jsou podle toho formulované se širokými rozsahy.
 - **Ground truth:** přeštítkování (Kairos), počítání na úrovni událostí (ATLAS), štítky analytiků (AACT) a hypotetické alerty (Eilertsen) mění význam metrik. Srovnání napříč tabulkami není přímé.
 - **Extrakce:** pořadí sloupců v Tab. II u RQ6-028 jsem odvodil z textu, protože záhlaví se v PDF neextrahovalo. NoDoze uvádí 84 % v PDF a 86 % na webu NDSS. Nezávislá kontrola (§9) pokryla 26 z 51 řádků, zbylých 25 řádků nikdo nezávislý nezkontroloval. U RQ6-009 se text oddílu a Tab. II rozcházejí a platí tabulka.
 - **Vlastní data:** soak je simulace. Shoda našich FP u provozních událostí s literaturou může vycházet ze stejné konstrukce generátoru, ne ze stejného jevu.

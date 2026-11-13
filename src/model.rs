@@ -43,7 +43,7 @@ impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
             require_api_token: false,
-            api_token_env: Some("BAKULA_API_TOKEN".to_string()),
+            api_token_env: Some("SALTICUS_API_TOKEN".to_string()),
         }
     }
 }

@@ -57,7 +57,7 @@
 
 ### Fáze 0 (bezpečnostní síť pro refaktor): HOTOVO (29. 10. 2026)
 
-`tests/golden_snapshot.rs` — golden-snapshot regresní test nad `full_visibility_stack_populates_lanes_and_findings` fixturami (plně deterministický vstup, `data/*.json` + `simulace generuj --seed 7`). Normalizuje volatilní pole (run_id i jako substring, ISO8601 časová razítka, unixová razítka v `event_id`, a — honestně odhalený zdroj nedeterminismu — skutečně naměřené `mas_*`/`runtime_ms`/`parallelism_ratio` hodnoty z reálného `thread::scope` běhu) a porovná zbytek proti committed `tests/golden/full_visibility_stack.json`. Ověřeno: stabilní přes 3 opakované běhy beze změny; negativní kontrola (dočasná změna `--nazev`) test spolehlivě shodí. Test NENÍ `#[ignore]` (potřebuje jen binárku + commitnuté fixtury, žádný Docker/nmap/httpx/nuclei) — běží normálně v CI. Aktualizace po vědomé změně: `BAKULA_UPDATE_GOLDEN=1 cargo test --test golden_snapshot`.
+`tests/golden_snapshot.rs` — golden-snapshot regresní test nad `full_visibility_stack_populates_lanes_and_findings` fixturami (plně deterministický vstup, `data/*.json` + `simulace generuj --seed 7`). Normalizuje volatilní pole (run_id i jako substring, ISO8601 časová razítka, unixová razítka v `event_id`, a — honestně odhalený zdroj nedeterminismu — skutečně naměřené `mas_*`/`runtime_ms`/`parallelism_ratio` hodnoty z reálného `thread::scope` běhu) a porovná zbytek proti committed `tests/golden/full_visibility_stack.json`. Ověřeno: stabilní přes 3 opakované běhy beze změny; negativní kontrola (dočasná změna `--nazev`) test spolehlivě shodí. Test NENÍ `#[ignore]` (potřebuje jen binárku + commitnuté fixtury, žádný Docker/nmap/httpx/nuclei) — běží normálně v CI. Aktualizace po vědomé změně: `SALTICUS_UPDATE_GOLDEN=1 cargo test --test golden_snapshot`.
 
 Další fáze (1–6, dle plánu komplexní revize: pipeline do lib beze změny chování → `ConnectionDetector`/`FindingKindSpec` traity se stejným chováním → stínové aditivní zapojení hypotéz/identity/plannneru/community_id → přepínače s výchozím "staré chování" → změna výchozího chování jen na základě měření → volitelný workspace split) jsou navazující, samostatné kroky.
 
@@ -117,9 +117,9 @@ Dokončení H2 (fúze byla od Deliverable 27 hotová a testovaná, ale "nezapoje
 
 - **`fusion::tests::fuse_same_flow_events_holds_invariants_across_many_random_scenarios`** (`src/fusion.rs`) — generuje náhodné skupiny eventů z fixní tabulky 6 vzájemně odlišných (a směrově neskolidujících) toků + 3 senzorů, a ověřuje: (a) fúze NIKDY nezvýší počet eventů, (b) výstupní počet souhlasí s NEZÁVISLE (ne přes `normalized_event_community_id`, ale přes vlastní sledování "flow slotu") spočítaným očekávaným počtem, (c) determinismus (stejný vstup 2× → stejný výstup), (d) fúzovaná severity u skupiny s ≥2 senzory je přesně MAX ze vstupních — nikdy jiná.
 - **`correlation_v2::tests::detect_windowed_anomalies_linked_holds_structural_invariants_across_many_random_scenarios`** (`src/correlation_v2.rs`) — náhodné connection streamy přes 5 cílů (2 známé, 3 neznámé) a 3 zdroje; ověřuje: (a) `unexpected_traffic` existuje JEN pro klíče s ≥3 nezávisle sečtenými neznámými pozorováními ve stejném okně, (b) `multi_target_pattern.count` nikdy nepřesáhne počet distinktních cílů skutečně přítomných ve výstupu pro ten `src_ip`, (c) determinismus.
-- **Naměřeno** (lokálně, 24 vláken): 200 000 scénářů/test ve výchozím běhu — fusion 1,10 s, correlation_v2 1,65 s. **1 000 000 scénářů** (`BAKULA_FUZZ_SCENARIOS=1000000`): fusion 5,26 s, correlation_v2 8,05 s — žádné porušení invariantu nenalezeno.
+- **Naměřeno** (lokálně, 24 vláken): 200 000 scénářů/test ve výchozím běhu — fusion 1,10 s, correlation_v2 1,65 s. **1 000 000 scénářů** (`SALTICUS_FUZZ_SCENARIOS=1000000`): fusion 5,26 s, correlation_v2 8,05 s — žádné porušení invariantu nenalezeno.
 - **Ověřeno, že testy nejsou tautologické** (stejná disciplína jako u předchozích retrospektivních auditů — rozbít → spadne → vrátit → projde): dočasně rozbity 4 nezávislé body produkčního kódu (`severity_from_score`'s `>=`→`>`, `sensors.len() < 2`→`< 1` ve `fusion.rs`; `count >= 3`→`>= 2`, `targets.len() < 2`→`< 1` v `correlation_v2.rs`) — všechny 4 fuzz test okamžitě a spolehlivě odhalil (s reprodukovatelným seedem konkrétního scénáře), po vrácení opravy znovu prošel.
-- Výchozí počet scénářů (200 000) je zvolen tak, aby testy běžely v `cargo test --lib` v řádu sekund při každém běhu/CI; `BAKULA_FUZZ_SCENARIOS` env var umožňuje záměrný těžší stres-běh bez úpravy kódu.
+- Výchozí počet scénářů (200 000) je zvolen tak, aby testy běžely v `cargo test --lib` v řádu sekund při každém běhu/CI; `SALTICUS_FUZZ_SCENARIOS` env var umožňuje záměrný těžší stres-běh bez úpravy kódu.
 
 ### H5 (connection reuse, DLQ, test se 2 reálnými OS procesy): HOTOVO (30. 10. 2026)
 
@@ -127,7 +127,7 @@ Poslední 2 "probíhá" položky H5 z dashboardu dokončeny. Poprvé je k dispoz
 
 - **Opakované otevírání spojení v rámci jedné operace** (`src/broker.rs`): `claim_one` dřív otevíralo až 4 samostatná Redis spojení na 1 logické volání (vlastní `ensure_group`, `reclaim_stale`'s vlastní `ensure_group` + vlastní spojení pro XAUTOCLAIM, vlastní spojení pro XREADGROUP) — žádné se nikdy nesdílelo. **Honestní zjištění před opravou**: produkční CLI invokace jsou dnes vždy jednorázové (`broker worker-run` = nejvýš 1 claim, pak proces skončí) — plnohodnotný connection POOL přes celý život procesu (např. `r2d2`) by byl nepoužívaná infrastruktura, protože žádný proces broker nevolá opakovaně. Realná, měřená neefektivita je uvnitř JEDNÉ operace — opraveno extrakcí `open_connection`/`_on` variant funkcí (`ensure_group_on`, `reclaim_stale_on`), `claim_one` teď otevírá přesně 1 spojení místo až 4.
 - **DLQ (dead-letter queue)**: `reclaim_stale` dřív nemělo žádný strop — zpráva, kterou konzument nikdy nepotvrdí (poison message), by se XAUTOCLAIM-ovala navždy a navíc by měla prioritu před novou prací (`claim_one_prefers_reclaiming_stale_...`). Teď se počet reklaimů per `stream_id` počítá v Redis HASH (`{stream_key}.reclaim-counts`), a po překročení `RedisBrokerConfig::max_delivery_attempts` (výchozí 5) se zpráva přesune do `{stream_key}.dlq` streamu (`dead_letter_messages` pro čtení) namísto dalšího doručení. **Ověřeno živě proti reálnému Redisu** (ne jen zkompilováno): `messages_exceeding_max_delivery_attempts_move_to_dead_letter_queue` — publikuj → claim → 2 reklaimy pod limitem (`max_delivery_attempts=2`) → 3. reklaim musí přesunout do DLQ a nevrátit volajícímu. Nerozbitelnost ověřena (`>` → `> +10`) — spadlo, vráceno — prošlo.
-- **Test se 2 reálnými, oddělenými OS procesy** (`tests/broker_two_process.rs`, nový): dosavadní "konzument A/B" testy v `broker.rs` byly jen 2 JMÉNA v jednom vlákně/procesu — nikdy nedokázaly crash-recovery mezi SKUTEČNĚ nezávislými procesy. Nový test spouští 2 reálné `bakula-program broker worker-run` binárky (`std::process::Command::spawn`, ne vlákna) soutěžící o 1 už publikovanou zprávu, opakovaně 20× s čerstvým jobem v každém kole — Redis je jediný synchronizační bod, přesně jak by to fungovalo při nasazení na 2 různých strojích. Vyžadovalo malý doplněk CLI (`--stream-key` na `broker publish-due`/`broker worker-run`, výchozí `"bakula.jobs"` beze změny) pro izolaci testovací fronty od produkčního defaultu. **Ověřeno, že test skutečně něco testuje**: dočasně donuceny oba procesy do RŮZNÝCH consumer-group jmen (`bakula-workers-{node_id}`) — okamžitě double-claim (oba procesy dostaly `job_id=10000`), test spadl s přesným popisem; po vrácení (sdílená group) prošlo 20/20 kol, žádný job chybějící ani zdvojený.
+- **Test se 2 reálnými, oddělenými OS procesy** (`tests/broker_two_process.rs`, nový): dosavadní "konzument A/B" testy v `broker.rs` byly jen 2 JMÉNA v jednom vlákně/procesu — nikdy nedokázaly crash-recovery mezi SKUTEČNĚ nezávislými procesy. Nový test spouští 2 reálné `salticus-program broker worker-run` binárky (`std::process::Command::spawn`, ne vlákna) soutěžící o 1 už publikovanou zprávu, opakovaně 20× s čerstvým jobem v každém kole — Redis je jediný synchronizační bod, přesně jak by to fungovalo při nasazení na 2 různých strojích. Vyžadovalo malý doplněk CLI (`--stream-key` na `broker publish-due`/`broker worker-run`, výchozí `"salticus.jobs"` beze změny) pro izolaci testovací fronty od produkčního defaultu. **Ověřeno, že test skutečně něco testuje**: dočasně donuceny oba procesy do RŮZNÝCH consumer-group jmen (`salticus-workers-{node_id}`) — okamžitě double-claim (oba procesy dostaly `job_id=10000`), test spadl s přesným popisem; po vrácení (sdílená group) prošlo 20/20 kol, žádný job chybějící ani zdvojený.
 - Ověřeno: `cargo check --all-targets` čisté, `cargo fmt`/`clippy --all-targets` beze nových warningů (78 na obou stranách `git stash` srovnání — ve skutečnosti o 1 méně než `main`), žádná diakritická korupce. `cargo test --lib` s živým Redisem: **131/132** (jediná zbývající chyba je `identity_lab` vyžadující Docker network, nesouvisí s brokerem). `cargo test --test golden_snapshot`/`broker_two_process` zelené; `cargo test --test e2e` 1 pre-existing nesouvisející chyba (`httpx`, potvrzeno `git stash`).
 
 ### Čtvrtý retrospektivní audit (30. 10. 2026) — na commity `6ca8626`/`d7331ea`/`7da2d4d`: 5 reálných nálezů opraveno
@@ -168,7 +168,7 @@ Všech 5 oprav ověřeno metodou "rozbij → spadne → vrať → projde" (ne je
 
 1. `78487e6` — Suricata `event_type=="alert"` filtr + odolnost proti poškozenému řádku/timestampu; Zeek nahlasí chybu při chybějící `#fields` hlavičce (ne tiché 0) + odolnost proti poškozenému řádku. 5 nových testů.
 2. `aa20cb6` — `storage::is_valid_run_id` (alfanumerické/-/_ only, matchuje skutečný `build_run_id()` formát) na obou místech (`load_report`, `get_run_export`); 2 `.expect()` na hlavičkách nahrazeny bezpečným fallbackem. 6 nových testů.
-3. `d9f9989` — `ensure_csrf_guard_header` (vlastní `X-Bakula-Csrf` hlavička) na `/automation/restart` i `/reset`; UI aktualizováno. 4 nové testy.
+3. `d9f9989` — `ensure_csrf_guard_header` (vlastní `X-Salticus-Csrf` hlavička) na `/automation/restart` i `/reset`; UI aktualizováno. 4 nové testy.
 4. `9809b57` — `triage.rs`'s `overload_findings` filtr doplněn o 3 chybějící typy, matchuje `decision.rs` 1:1. 2 nové testy, golden snapshot aktualizován.
 5. `c9e681f` — `storage::write_atomic` (tmp soubor + `fs::rename`) na `index.json`/`report.json`/`report.md`/`report.txt`/`manifest.json`. 2 nové testy.
 6. `7ebe2e1` — `failure_backoff_seconds` (exponenciální 30s→240s, vzdání se po `MAX_AUTOMATIC_RETRY_ATTEMPTS=5` na ~30 dní, stejný práh jako broker.rs DLQ). 3 nové testy.
@@ -203,7 +203,7 @@ Oba commit `004028b`, oba overeny rozbij→spadne→vrat→projde. CI znovu zele
 Posledni vetsi "zjisteno, neopraveno" polozka z puvodniho auditu - "nikdo jiny nez autor to nerozjede" bylo doslovne pravda (zadny Dockerfile v repu, README mel jen `cargo run` ze zdroju).
 
 - **`Dockerfile`** (multi-stage): Node stage sestavi UI bundle (`npm ci && npm run build:ui`, ne spoleh na commitnuty `ui/` - zabranuje driftu), Rust stage `cargo build --release`, runtime stage `debian:bookworm-slim` s `nmap`+`ca-certificates` (apt), nerootovsky uzivatel, `/data/workspace` jako ocekavany volume. `CMD` nastavuje `--host 0.0.0.0` (vychozi `127.0.0.1` by byl zvenku kontejneru nedosazitelny).
-- **`docker-compose.yml`**: `bakula` + `redis` (H5 broker, stejny image jako CI). Vedome **nastavuje `--require-api-token` jako vychozi** (ne CLI/server.rs vychozi `false`) - presne ten anonymous-admin risk, opravený v `server.rs`, se nemel tise prenest do produkcni kompozice. `BAKULA_API_TOKEN` je povinny (`${VAR:?...}` syntax) - bez nej `docker compose up` spadne na `config.rs`'s fail-closed kontrole, ne tise pobezi bez autentizace.
+- **`docker-compose.yml`**: `salticus` + `redis` (H5 broker, stejny image jako CI). Vedome **nastavuje `--require-api-token` jako vychozi** (ne CLI/server.rs vychozi `false`) - presne ten anonymous-admin risk, opravený v `server.rs`, se nemel tise prenest do produkcni kompozice. `SALTICUS_API_TOKEN` je povinny (`${VAR:?...}` syntax) - bez nej `docker compose up` spadne na `config.rs`'s fail-closed kontrole, ne tise pobezi bez autentizace.
 - **README "Nasazeni" sekce** + `.env.example` + aktualizovany uvodni "Stav" radek (uz ne jen "akademicky prototyp... nejde o nasazeny produkcni nastroj" bez dalsiho vysvetleni - odkazuje na tenhle dokument a jmenuje konkretni zbyvajici mezery, ne vseobecne tvrzeni).
 - **CI smoke test** (`.github/workflows/ci.yml`, novy `docker` job): `docker build` + skutecne spusteni kontejneru + `curl /api/health` dokud neodpovi. **Duvod**: vyvojove prostredi ma rozbite Docker Desktop (daemon se nespousti - stejny problem zdokumentovany uz drive u H5/broker prace), takze `docker build`/`run` nejde overit lokalne. `docker compose config` (nepotrebuje daemon, jen parsuje/merguje YAML) prosel cist. Skutecne sestaveni a beh kontejneru overi az tenhle CI job na push.
 - **Vedome NEprovedeno**: httpx/nuclei nejsou v image zabalene (vlastni release/checksum cyklus z ProjectDiscovery, do Dockerfile se nepridava stazeni binarek bez moznosti to lokalne overit) - zdokumentovano v README jako "mountni/nastav --httpx-bin".
@@ -239,7 +239,7 @@ Pridan novy CI job (`.github/workflows/ci.yml`, `supply-chain`) - `rustsec/audit
 
 Vsechny 3 revize nezavisle konvergovaly ke stejnemu zaveru po videni druhych dvou zprav:
 
-1. **Zadny vlastni packet-path enforcement engine.** Komplexni revize explicitne stahla svuj puvodni navrh gateway-agenta ("drop for now: dedicated gateway-agent binary, DNS RPZ, inline IPS... nikdo nerozhodl tap-vs-inline topologii"). Vsechny 3 revize souhlasi na pragmaticke `enforce.block_ip` broker jobu jako jedinem bezpecnem zpusobu, jak ziskat "tenhle program umi jednat" bez psani noveho packet-path kodu - ale s dodatecnymi mantinely ze skeptickeho kola 2: (a) hardcoded denylist chranenych rozsahu (gateway/DNS/management) kontrolovany PRI VYKONANI, ne jen pri planovani, a vynucen i proti explicitnimu pozadavku; (b) NEZAVISLY periodicky sweep porovnavajici zivy `nft` stav proti audit logu (ne jen jeden naplanovany unblock job - presne ta trida rizika jako nedavny lease-renewal bug v `platform.rs`); (c) dry-run vynucen na fail-closed konfiguracni urovni (jako `BAKULA_API_TOKEN`), ne jen CLI flag default. Prvni skutecne vykonani (ne dry-run) navic vyzaduje explicitni lidske schvaleni - stejny "shadow/propose" vzor jako `verification_planner.rs`.
+1. **Zadny vlastni packet-path enforcement engine.** Komplexni revize explicitne stahla svuj puvodni navrh gateway-agenta ("drop for now: dedicated gateway-agent binary, DNS RPZ, inline IPS... nikdo nerozhodl tap-vs-inline topologii"). Vsechny 3 revize souhlasi na pragmaticke `enforce.block_ip` broker jobu jako jedinem bezpecnem zpusobu, jak ziskat "tenhle program umi jednat" bez psani noveho packet-path kodu - ale s dodatecnymi mantinely ze skeptickeho kola 2: (a) hardcoded denylist chranenych rozsahu (gateway/DNS/management) kontrolovany PRI VYKONANI, ne jen pri planovani, a vynucen i proti explicitnimu pozadavku; (b) NEZAVISLY periodicky sweep porovnavajici zivy `nft` stav proti audit logu (ne jen jeden naplanovany unblock job - presne ta trida rizika jako nedavny lease-renewal bug v `platform.rs`); (c) dry-run vynucen na fail-closed konfiguracni urovni (jako `SALTICUS_API_TOKEN`), ne jen CLI flag default. Prvni skutecne vykonani (ne dry-run) navic vyzaduje explicitni lidske schvaleni - stejny "shadow/propose" vzor jako `verification_planner.rs`.
 2. **Postgres/multi-tenant/K8s/mTLS/OIDC/HA-DR zustavaji odlozeny, trigger-based** (Postgres: 2. realny control-plane uzel; multi-tenant: 2. realny tenant; mTLS: enforcement na jinem hostu nez control plane; OIDC: SSO/2. operatorska organizace; HA/DR: realne SLA; K8s: ops tym o to pozada). Komplexni revize svuj puvodni argument "rozhodnout tvar tenant schematu TED, aby se nemigrovalo 2x" stahl - "zadna migrace schematu se ted nedeje" - a vsechny 3 se shodly na **jen 1-stranovem design dokumentu** (ne kodu, ne nullable sloupci) pro tvar tenant_id - samotny nepouzivany sloupec by vytvarel stejnou falesnou duveru jako neverifikovatelna izolace, jen o vrstvu driv.
 3. **`external_sql.rs` (452 radku, 0 testu) se SMAZE**, ne otestuje nebo opravi dokumentace. Duvod: modul nikdy nemuze spoustet workery (chybi claim/lease/renew/leader-election), takze testovani neceho, co nemuze fungovat, je ztraceny cas.
 4. **Scope-revalidacni oprava je blokujici prvni krok**, ne soucast `verification_planner.rs` prace - vsechny 3 revize nezavisle nasly stejny bug, nejvyssi shoda v celem kole. **Opraveno v tomhle tahu** (viz nize) - `nmap::run_targeted_followup_nmap`/`run_forensic_followup_nmap` ted beru `scope: &[IpNet]` parametr, filtruji cile pres novou `filter_targets_in_scope` (fail-closed - neparsovatelna IP se vyradi), a reportuji vyrazene cile, ne tise je zahazuji. 6 novych testu (2 na samotny filtr, 2 end-to-end overujici, ze se `nmap` binary vubec nespusti kdyz jsou vsechny cile mimo scope, plus 2 existujici upravene na novou signaturu), overeno rozbij→spadne→vrat→projde.
@@ -329,9 +329,9 @@ logice, ne jen jako doporuceni volajicimu:
 2. **`MAX_BLOCK_TTL_SECONDS` = 24 hodin** - povinny strop, "navzdy" blok
    neexistuje (TTL=0 i TTL>strop se odmitaji).
 3. **Dry-run je strukturalni** - `plan_block` vraci jen `BlockIpPlan` (textovy
-   `nft` prikaz), nikdy ho nevykona. `nft` vlastni jen `table inet bakula`/
+   `nft` prikaz), nikdy ho nevykona. `nft` vlastni jen `table inet salticus`/
    `set blocked_ips` s `flags timeout` - kernel sam odstrani prvek po
-   vyprseni TTL i kdyby `bakula` spadnul (self-healing, nezavisi na tom, ze
+   vyprseni TTL i kdyby `salticus` spadnul (self-healing, nezavisi na tom, ze
    nejaky "unblock" job skutecne dobehne - presne ta trida rizika, ktera uz
    jednou zpusobila lease-renewal bug v `platform.rs`).
 
@@ -363,11 +363,11 @@ schvalovanim - zadny zasah do job dispatche, zadna regrese v H5.
   zasah do souboru po odstraneni triggeru je odhalen).
 - Zivotni cyklus `proposed -> approved -> applied -> expired`, vetve
   `rejected` / `failed`. Duplicitni aktivni navrh na stejnou IP se odmita.
-- **Dry-run je vychozi**; skutecny `nft` jen pri `BAKULA_ENFORCEMENT_MODE=enforce`
-  (presny retezec, preklep = dry-run). Chranene rozsahy (+ `BAKULA_PROTECTED_RANGES`)
+- **Dry-run je vychozi**; skutecny `nft` jen pri `SALTICUS_ENFORCEMENT_MODE=enforce`
+  (presny retezec, preklep = dry-run). Chranene rozsahy (+ `SALTICUS_PROTECTED_RANGES`)
   a TTL strop se kontroluji znovu pri aplikaci.
-- Exekutor je `dyn NftExecutor` (`SystemNft` / falesny v testech); `bakula`
-  zalozi vlastni `table inet bakula` atomicky (`nft -f`, jen kdyz neexistuje,
+- Exekutor je `dyn NftExecutor` (`SystemNft` / falesny v testech); `salticus`
+  zalozi vlastni `table inet salticus` atomicky (`nft -f`, jen kdyz neexistuje,
   jen `drop` pravidla) a nikdy nesaha na cizi pravidla.
 - **Nezavisly sweep** (kazdych 60 s a pri cteni seznamu): expirace po TTL +
   drift - prvek v kernelu bez aktivni akce se odstrani, aktivni akce bez
@@ -375,8 +375,8 @@ schvalovanim - zadny zasah do job dispatche, zadna regrese v H5.
 - API: `/api/enforcement/{actions,propose,{id}/approve,{id}/reject}`,
   `/api/audit`, `/api/audit/verify`; mutace vyzaduji auth + CSRF hlavicku,
   oddeleni povinnosti: analytik navrhuje, schvaluje jen operator/admin.
-- Prometheus: `bakula_enforcement_mode`, `bakula_enforcement_actions{status}`,
-  `bakula_audit_entries_total`, `bakula_ops_up`.
+- Prometheus: `salticus_enforcement_mode`, `salticus_enforcement_actions{status}`,
+  `salticus_audit_entries_total`, `salticus_ops_up`.
 
 **`src/verification_exec.rs` - exekuce kontrol** (opt-in `--execute-verification`):
 scope se overuje znovu pri vykonani, kontroly s `requires_approval` se nikdy
@@ -393,8 +393,8 @@ posune az po uspesnem ulozeni behu (at-least-once). Testem nalezena a
 opravena chyba: otisk prvnich 256 B se menil pripisovanim do kratkych souboru
 - otisk ted pokryva jen uz zpracovane bajty.
 
-**`src/logging.rs`** - `tracing`, `BAKULA_LOG_FORMAT=json`, `BAKULA_LOG`; logy
-vzdy na stderr, audit zaznamy pod cilem `bakula::audit`, `TraceLayer` na API.
+**`src/logging.rs`** - `tracing`, `SALTICUS_LOG_FORMAT=json`, `SALTICUS_LOG`; logy
+vzdy na stderr, audit zaznamy pod cilem `salticus::audit`, `TraceLayer` na API.
 
 **Vedome stale odlozeno** (trigger beze zmeny): Postgres/multi-tenant/mTLS/OIDC/
 HA/K8s, vlastni packet-path engine, DNS RPZ, inline IPS. Kalibrace

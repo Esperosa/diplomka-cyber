@@ -13,7 +13,7 @@
 use std::process::Command;
 use std::time::Duration;
 
-use crate::error::{BakulaError, Result};
+use crate::error::{SalticusError, Result};
 use crate::model::HostReport;
 
 const SUBNET: &str = "172.31.9.0/24";
@@ -35,15 +35,15 @@ impl Drop for IdentityNetHandle {
 }
 
 pub fn start_identity_network() -> Result<IdentityNetHandle> {
-    let network_name = format!("bakula-identity-net-{}", uuid::Uuid::new_v4());
+    let network_name = format!("salticus-identity-net-{}", uuid::Uuid::new_v4());
     let status = Command::new("docker")
         .args(["network", "create", "--subnet", SUBNET, &network_name])
         .status()
         .map_err(|error| {
-            BakulaError::Processing(format!("docker network create selhal: {error}"))
+            SalticusError::Processing(format!("docker network create selhal: {error}"))
         })?;
     if !status.success() {
-        return Err(BakulaError::Processing(
+        return Err(SalticusError::Processing(
             "docker network create pro identity lab se nepodarilo.".to_string(),
         ));
     }
@@ -53,7 +53,7 @@ pub fn start_identity_network() -> Result<IdentityNetHandle> {
     // zaznamy z predchoziho kola misto cerstveho razeseni. Zmereno rucne pred
     // zapsanim do kodu: bez flush selhavalo kolo 3 (NAT/swap) se 100% packet loss,
     // protoze scanner se snazil poslat ping na uz neexistujici stary MAC z kola 1.
-    let scanner_name = format!("bakula-identity-scanner-{}", uuid::Uuid::new_v4());
+    let scanner_name = format!("salticus-identity-scanner-{}", uuid::Uuid::new_v4());
     let status = Command::new("docker")
         .args([
             "run",
@@ -70,13 +70,13 @@ pub fn start_identity_network() -> Result<IdentityNetHandle> {
         ])
         .status()
         .map_err(|error| {
-            BakulaError::Processing(format!("docker run (scanner) selhal: {error}"))
+            SalticusError::Processing(format!("docker run (scanner) selhal: {error}"))
         })?;
     if !status.success() {
         let _ = Command::new("docker")
             .args(["network", "rm", &network_name])
             .status();
-        return Err(BakulaError::Processing(
+        return Err(SalticusError::Processing(
             "docker run pro ARP scanner kontejner se nepodarilo spustit.".to_string(),
         ));
     }
@@ -115,9 +115,9 @@ pub fn spawn_host_with_mac_ip(
             "nginx:alpine",
         ])
         .status()
-        .map_err(|error| BakulaError::Processing(format!("docker run (host) selhal: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("docker run (host) selhal: {error}")))?;
     if !status.success() {
-        return Err(BakulaError::Processing(format!(
+        return Err(SalticusError::Processing(format!(
             "docker run pro host {container_name} ({ip}, {mac}) se nepodarilo spustit."
         )));
     }
@@ -157,7 +157,7 @@ pub fn real_arp_lookup(handle: &IdentityNetHandle, ip: &str) -> Result<Option<St
                 ip,
             ])
             .status()
-            .map_err(|error| BakulaError::Processing(format!("ping selhal: {error}")))?;
+            .map_err(|error| SalticusError::Processing(format!("ping selhal: {error}")))?;
         if status.success() {
             ping_ok = true;
             break;
@@ -165,7 +165,7 @@ pub fn real_arp_lookup(handle: &IdentityNetHandle, ip: &str) -> Result<Option<St
         std::thread::sleep(Duration::from_millis(500));
     }
     if !ping_ok {
-        return Err(BakulaError::Processing(format!(
+        return Err(SalticusError::Processing(format!(
             "ping na {ip} ze scanneru neuspel po 5 pokusech - host neni dostupny"
         )));
     }
@@ -173,7 +173,7 @@ pub fn real_arp_lookup(handle: &IdentityNetHandle, ip: &str) -> Result<Option<St
     let output = Command::new("docker")
         .args(["exec", &handle.scanner_name, "ip", "neigh", "show", ip])
         .output()
-        .map_err(|error| BakulaError::Processing(format!("ip neigh show selhal: {error}")))?;
+        .map_err(|error| SalticusError::Processing(format!("ip neigh show selhal: {error}")))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Format: "172.31.9.10 dev eth0 lladdr 02:42:ac:11:00:a1 REACHABLE"
     let mac = stdout
@@ -227,7 +227,7 @@ mod tests {
         const IP_1: &str = "172.31.9.10";
         const IP_2: &str = "172.31.9.20";
 
-        let host1 = "bakula-identity-host1";
+        let host1 = "salticus-identity-host1";
         let result = spawn_host_with_mac_ip(&net, host1, MAC_A, IP_1);
         if let Err(error) = result {
             stop_identity_network(net);
@@ -237,7 +237,7 @@ mod tests {
         let mac1 = real_arp_lookup(&net, IP_1);
         remove_host(host1);
 
-        let host1_renewed = "bakula-identity-host1-renewed";
+        let host1_renewed = "salticus-identity-host1-renewed";
         let result = spawn_host_with_mac_ip(&net, host1_renewed, MAC_A, IP_2);
         if let Err(error) = result {
             remove_host(host1_renewed);
@@ -247,7 +247,7 @@ mod tests {
         let mac2 = real_arp_lookup(&net, IP_2);
         remove_host(host1_renewed);
 
-        let host_swap = "bakula-identity-host-swap";
+        let host_swap = "salticus-identity-host-swap";
         let result = spawn_host_with_mac_ip(&net, host_swap, MAC_B, IP_1);
         if let Err(error) = result {
             remove_host(host_swap);

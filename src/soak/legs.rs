@@ -348,7 +348,7 @@ pub fn broker_leg(uri: &str, stop: &AtomicBool, legs: &SharedLegs) {
     while !stop.load(Ordering::SeqCst) {
         let consumers = sizes[(round_no as usize) % sizes.len()];
         let config = RedisBrokerConfig {
-            stream_key: format!("bakula.soak.{}.{}", std::process::id(), round_no),
+            stream_key: format!("salticus.soak.{}.{}", std::process::id(), round_no),
             ..RedisBrokerConfig::for_uri(uri)
         };
         match run_broker_round(&config, consumers, 1500, round_no, stop) {

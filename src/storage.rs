@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::{RunIndex, RunIndexEntry, RunReport},
     narrative,
 };
@@ -84,7 +84,7 @@ impl Workspace {
         fs::create_dir_all(&raw_dir)?;
         write_atomic(
             &run_dir.join("report.json"),
-            &serde_json::to_vec_pretty(report).map_err(BakulaError::Json)?,
+            &serde_json::to_vec_pretty(report).map_err(SalticusError::Json)?,
         )?;
         write_atomic(
             &run_dir.join("report.md"),
@@ -189,13 +189,13 @@ impl Workspace {
 
     pub fn load_report(&self, run_id: &str) -> Result<RunReport> {
         if !is_valid_run_id(run_id) {
-            return Err(BakulaError::Processing(format!(
+            return Err(SalticusError::Processing(format!(
                 "Neplatny run_id: {run_id}"
             )));
         }
         let path = self.root.join("runs").join(run_id).join("report.json");
         let data = fs::read(path)?;
-        serde_json::from_slice(&data).map_err(BakulaError::Json)
+        serde_json::from_slice(&data).map_err(SalticusError::Json)
     }
 
     pub fn list_runs(&self) -> Result<Vec<RunIndexEntry>> {
@@ -247,13 +247,13 @@ impl Workspace {
             return Ok(RunIndex::default());
         }
         let bytes = fs::read(path)?;
-        serde_json::from_slice(&bytes).map_err(BakulaError::Json)
+        serde_json::from_slice(&bytes).map_err(SalticusError::Json)
     }
 
     fn sync_index(&self, index: &RunIndex) -> Result<()> {
         write_atomic(
             &self.root.join("runs").join("index.json"),
-            &serde_json::to_vec_pretty(index).map_err(BakulaError::Json)?,
+            &serde_json::to_vec_pretty(index).map_err(SalticusError::Json)?,
         )
     }
 
@@ -262,7 +262,7 @@ impl Workspace {
             .file_name()
             .and_then(|item| item.to_str())
             .ok_or_else(|| {
-                BakulaError::Processing(format!("Neplatny run adresar: {}", run_dir.display()))
+                SalticusError::Processing(format!("Neplatny run adresar: {}", run_dir.display()))
             })?
             .to_string();
         let mut files = Vec::new();
@@ -275,7 +275,7 @@ impl Workspace {
         };
         write_atomic(
             &run_dir.join("manifest.json"),
-            &serde_json::to_vec_pretty(&manifest).map_err(BakulaError::Json)?,
+            &serde_json::to_vec_pretty(&manifest).map_err(SalticusError::Json)?,
         )?;
         Ok(())
     }
@@ -332,7 +332,7 @@ fn collect_manifest_files(root: &Path, current: &Path, files: &mut Vec<StoredFil
         let relative = path
             .strip_prefix(root)
             .map_err(|error| {
-                BakulaError::Processing(format!(
+                SalticusError::Processing(format!(
                     "Nelze odvodit relativni cestu pro {}: {error}",
                     path.display()
                 ))

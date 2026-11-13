@@ -7,7 +7,7 @@ use std::{fs, path::Path, process::Command};
 use tempfile::TempDir;
 
 fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_bakula-program")
+    env!("CARGO_BIN_EXE_salticus-program")
 }
 
 fn run(extra: &[&str]) -> serde_json::Value {
@@ -57,7 +57,7 @@ fn run(extra: &[&str]) -> serde_json::Value {
     args.extend(extra.iter().map(|item| item.to_string()));
     let status = Command::new(bin())
         .args(&args)
-        .env("BAKULA_INSPECTION_TIMEOUT_MS", "300")
+        .env("SALTICUS_INSPECTION_TIMEOUT_MS", "300")
         .status()
         .expect("beh");
     assert!(status.success());

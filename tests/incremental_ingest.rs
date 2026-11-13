@@ -6,7 +6,7 @@ use std::{fs, process::Command};
 use tempfile::TempDir;
 
 fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_bakula-program")
+    env!("CARGO_BIN_EXE_salticus-program")
 }
 
 fn run_cycle(workspace: &std::path::Path, scenarios: &std::path::Path, name: &str) -> u64 {

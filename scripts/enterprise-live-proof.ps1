@@ -7,29 +7,29 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-$pgUri = "postgres://bakula:bakula@127.0.0.1:$PgPort/bakula"
+$pgUri = "postgres://salticus:salticus@127.0.0.1:$PgPort/salticus"
 $redisUri = "redis://127.0.0.1:$RedisPort/"
 
 function Wait-Postgres {
   param([string]$ContainerName)
   for ($i = 0; $i -lt 30; $i++) {
-    docker exec $ContainerName pg_isready -U bakula -d bakula *> $null
+    docker exec $ContainerName pg_isready -U salticus -d salticus *> $null
     if ($LASTEXITCODE -eq 0) { return }
     Start-Sleep -Seconds 1
   }
   throw "PostgreSQL se nerozbehl vcas."
 }
 
-if (docker ps -a --format '{{.Names}}' | Select-String -SimpleMatch 'bakula-pg-proof') {
-  docker rm -f bakula-pg-proof | Out-Null
+if (docker ps -a --format '{{.Names}}' | Select-String -SimpleMatch 'salticus-pg-proof') {
+  docker rm -f salticus-pg-proof | Out-Null
 }
-if (docker ps -a --format '{{.Names}}' | Select-String -SimpleMatch 'bakula-redis-proof') {
-  docker rm -f bakula-redis-proof | Out-Null
+if (docker ps -a --format '{{.Names}}' | Select-String -SimpleMatch 'salticus-redis-proof') {
+  docker rm -f salticus-redis-proof | Out-Null
 }
 
-docker run -d --name bakula-pg-proof -e POSTGRES_USER=bakula -e POSTGRES_PASSWORD=bakula -e POSTGRES_DB=bakula -p "${PgPort}:5432" postgres:16-alpine | Out-Null
-docker run -d --name bakula-redis-proof -p "${RedisPort}:6379" redis:7-alpine | Out-Null
-Wait-Postgres -ContainerName bakula-pg-proof
+docker run -d --name salticus-pg-proof -e POSTGRES_USER=salticus -e POSTGRES_PASSWORD=salticus -e POSTGRES_DB=salticus -p "${PgPort}:5432" postgres:16-alpine | Out-Null
+docker run -d --name salticus-redis-proof -p "${RedisPort}:6379" redis:7-alpine | Out-Null
+Wait-Postgres -ContainerName salticus-pg-proof
 
 if (Test-Path .\workspace_enterpriseproof) { Remove-Item -Recurse -Force .\workspace_enterpriseproof }
 if (Test-Path .\workspace_brokerproof) { Remove-Item -Recurse -Force .\workspace_brokerproof }

@@ -1,4 +1,4 @@
-//! Engine v3 v produkční pipeline (krok 1): `[engine] mode = "v3"` v `bakula.toml`.
+//! Engine v3 v produkční pipeline (krok 1): `[engine] mode = "v3"` v `salticus.toml`.
 //! Dva po sobě jdoucí běhy nad stejnými daty: první výskyt se zobrazí, opakovaný
 //! stejný stav se podruhé nezobrazí (paměť nálezů v `engine-state.sqlite` přežije
 //! konec procesu), legacy režim výstup nemění (pole `findingLifecycle` chybí).
@@ -9,7 +9,7 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_bakula-program")
+    env!("CARGO_BIN_EXE_salticus-program")
 }
 
 fn generate(scenarios: &Path) {
@@ -93,7 +93,7 @@ fn v3_memory_shows_first_occurrence_and_suppresses_repeat_across_processes() {
 
     let workspace = temp.path().join("ws-v3");
     fs::create_dir_all(&workspace).unwrap();
-    fs::write(workspace.join("bakula.toml"), "[engine]\nmode = \"v3\"\n").unwrap();
+    fs::write(workspace.join("salticus.toml"), "[engine]\nmode = \"v3\"\n").unwrap();
     run(&workspace, &scenarios, "prvni");
     run(&workspace, &scenarios, "druhy");
     assert!(workspace.join("engine-state.sqlite").exists());
@@ -171,7 +171,7 @@ fn v3_behavior_layer_reports_outbound_ids_alert_and_persists_state() {
 
     let workspace = temp.path().join("ws-v3");
     fs::create_dir_all(&workspace).unwrap();
-    fs::write(workspace.join("bakula.toml"), "[engine]\nmode = \"v3\"\n").unwrap();
+    fs::write(workspace.join("salticus.toml"), "[engine]\nmode = \"v3\"\n").unwrap();
     run(&workspace, &scenarios, "egress");
     let runs = reports(&workspace);
     let egress: Vec<&Value> = runs[0]["findings"]
@@ -214,7 +214,7 @@ fn v3_closure_audit_samples_review_disables_kind_and_survives_restart() {
     generate(&scenarios);
     let workspace = temp.path().join("ws-v3");
     fs::create_dir_all(&workspace).unwrap();
-    fs::write(workspace.join("bakula.toml"), "[engine]\nmode = \"v3\"\n").unwrap();
+    fs::write(workspace.join("salticus.toml"), "[engine]\nmode = \"v3\"\n").unwrap();
     fs::write(
         workspace.join("closure-audit.json"),
         r#"{"sample_rate": 1.0, "min_samples": 1}"#,
@@ -258,12 +258,12 @@ fn v3_closure_audit_samples_review_disables_kind_and_survives_restart() {
     // clovek oznaci prvni vzorek jako omyl (cesta API)
     let db = workspace.join("engine-state.sqlite");
     {
-        let store = bakula_program::engine_state::EngineStateStore::open(&db).unwrap();
-        let audit: bakula_program::closure_audit::ClosureAudit =
+        let store = salticus_program::engine_state::EngineStateStore::open(&db).unwrap();
+        let audit: salticus_program::closure_audit::ClosureAudit =
             store.load("closure_audit").unwrap().unwrap();
         let sample = &audit.samples[0];
         assert_eq!(sample.kind, "maintenance");
-        bakula_program::closure_audit::submit_review(
+        salticus_program::closure_audit::submit_review(
             store.conn(),
             sample.id,
             true,

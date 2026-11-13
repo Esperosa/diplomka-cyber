@@ -22,7 +22,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::HostReport,
     scope_policy::ScopePolicy,
     verification_planner::HypothesisVerificationPlan,
@@ -81,7 +81,7 @@ impl CheckRunner for LocalRunner {
             }
             "cve_intel_relookup" => cve_relookup(asset, hosts),
             "read_only_content_inspection" => read_only_inspection(asset, hosts),
-            other => Err(BakulaError::Processing(format!(
+            other => Err(SalticusError::Processing(format!(
                 "metoda {other} nema lokalni exekutor"
             ))),
         }
@@ -92,7 +92,7 @@ fn cve_relookup(asset: &str, hosts: &[HostReport]) -> Result<String> {
     let host = hosts
         .iter()
         .find(|host| host.ip == asset)
-        .ok_or_else(|| BakulaError::Processing(format!("host {asset} neni v inventari")))?;
+        .ok_or_else(|| SalticusError::Processing(format!("host {asset} neni v inventari")))?;
     let mut total = 0usize;
     let mut worst: f64 = 0.0;
     let mut exploit_context = 0usize;
@@ -118,8 +118,8 @@ fn read_only_inspection(asset: &str, hosts: &[HostReport]) -> Result<String> {
     let host = hosts
         .iter()
         .find(|host| host.ip == asset)
-        .ok_or_else(|| BakulaError::Processing(format!("host {asset} neni v inventari")))?;
-    let timeout_ms = std::env::var("BAKULA_INSPECTION_TIMEOUT_MS")
+        .ok_or_else(|| SalticusError::Processing(format!("host {asset} neni v inventari")))?;
+    let timeout_ms = std::env::var("SALTICUS_INSPECTION_TIMEOUT_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(5_000);
@@ -129,7 +129,7 @@ fn read_only_inspection(asset: &str, hosts: &[HostReport]) -> Result<String> {
         // Cil je typicky self-signed vnitrni sluzba; kontrola je cista inspekce
         // bez prenosu tajemstvi, takze overeni certifikatu by jen potlacilo nalez.
         .danger_accept_invalid_certs(true)
-        .user_agent("Bakula-read-only-inspection")
+        .user_agent("Salticus-read-only-inspection")
         .build()?;
 
     let mut lines = Vec::new();
@@ -159,7 +159,7 @@ fn read_only_inspection(asset: &str, hosts: &[HostReport]) -> Result<String> {
         }
     }
     if lines.is_empty() {
-        Err(BakulaError::Processing(format!(
+        Err(SalticusError::Processing(format!(
             "{asset} nema otevreny webovy port k inspekci"
         )))
     } else {
@@ -480,7 +480,7 @@ mod tests {
                 .unwrap()
                 .push((method.to_string(), asset.to_string()));
             if self.fail {
-                Err(BakulaError::Processing("simulovane selhani".to_string()))
+                Err(SalticusError::Processing("simulovane selhani".to_string()))
             } else {
                 Ok(format!("ok {method} {asset}"))
             }

@@ -34,7 +34,7 @@ labs/datasets/iot23/CTU-IoT-Malware-Capture-3-1/
 tests/golden/*.actual.json
 dump.rdb
 
-# Docker nasazeni (README "Nasazeni") - .env nese skutecny BAKULA_API_TOKEN,
+# Docker nasazeni (README "Nasazeni") - .env nese skutecny SALTICUS_API_TOKEN,
 # nikdy nepatri do gitu. .env.example (sablona bez hodnoty) zustava trackovana.
 .env
 

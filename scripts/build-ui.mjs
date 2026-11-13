@@ -61,14 +61,14 @@ const indexHtml = `<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
-  <title>Skákavka</title>
-  <meta name="description" content="Skákavka: korelace aktivního a pasivního pohledu na síť.">
+  <title>Salticus</title>
+  <meta name="description" content="Salticus: korelace aktivního a pasivního pohledu na síť.">
   ${brandLinks.join(NL)}
   <link rel="stylesheet" href="/styles.css?v=${cacheBust}">
 </head>
 <body>
   <div id="app"></div>
-  <noscript>Skákavka potřebuje zapnutý JavaScript.</noscript>
+  <noscript>Salticus potřebuje zapnutý JavaScript.</noscript>
   <script type="module" src="/app.js?v=${cacheBust}"></script>
 </body>
 </html>

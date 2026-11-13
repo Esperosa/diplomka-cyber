@@ -658,7 +658,7 @@ pub fn render_markdown(state: &PersistedState, elapsed: f64, finished: bool) -> 
     let _ = writeln!(out, "\n## Reprodukovatelnost\n");
     let _ = writeln!(
         out,
-        "Kazdy blok ma otisk v `blocks.jsonl`; `bakula-program soak verify --out <adresar> --samples N` znovu prehraje nahodne bloky z (seed, id site) a porovna otisky bit po bitu."
+        "Kazdy blok ma otisk v `blocks.jsonl`; `salticus-program soak verify --out <adresar> --samples N` znovu prehraje nahodne bloky z (seed, id site) a porovna otisky bit po bitu."
     );
     out
 }

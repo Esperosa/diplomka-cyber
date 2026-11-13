@@ -913,11 +913,11 @@ mod tests {
 
     /// Vychozi pocet scenaru je zvoleny tak, aby test bezel v radu sekund pri
     /// kazdem `cargo test`. Pro tezsi, zamerny stres-beh (uzivatel chtel "idealne
-    /// pres milion") nastav `BAKULA_FUZZ_SCENARIOS=1000000 cargo test --lib
+    /// pres milion") nastav `SALTICUS_FUZZ_SCENARIOS=1000000 cargo test --lib
     /// fusion::tests::fuse_same_flow_events_holds_invariants_across_many_random_scenarios`.
     #[test]
     fn fuse_same_flow_events_holds_invariants_across_many_random_scenarios() {
-        let total_scenarios: usize = std::env::var("BAKULA_FUZZ_SCENARIOS")
+        let total_scenarios: usize = std::env::var("SALTICUS_FUZZ_SCENARIOS")
             .ok()
             .and_then(|value| value.parse().ok())
             .unwrap_or(200_000);

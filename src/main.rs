@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use bakula_program::{
+use salticus_program::{
     ai, automation, broker, config, evaluation,
     model::{AppConfig, RunReport},
     pipeline::{
@@ -21,9 +21,9 @@ use ipnet::IpNet;
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "bakula",
+    name = "salticus",
     version,
-    about = "Skakavka (drive Bakula) - korelace aktivniho a pasivniho pohledu na sit."
+    about = "Salticus (drive Salticus) - korelace aktivniho a pasivniho pohledu na sit."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -357,7 +357,7 @@ struct ReadinessArgs {
 
 #[derive(Args, Debug)]
 struct ConfigArgs {
-    #[arg(long, default_value = "bakula.toml")]
+    #[arg(long, default_value = "salticus.toml")]
     path: PathBuf,
 }
 
@@ -562,9 +562,9 @@ struct BrokerPublishArgs {
     db: PathBuf,
     #[arg(long)]
     broker_uri: String,
-    /// Prepis vychozi "bakula.jobs" - umoznuje izolovane fronty (napr. testy se
+    /// Prepis vychozi "salticus.jobs" - umoznuje izolovane fronty (napr. testy se
     /// 2 oddelenymi OS procesy proti stejnemu Redisu, aniz by se potkaly s jinou praci).
-    #[arg(long, default_value = "bakula.jobs")]
+    #[arg(long, default_value = "salticus.jobs")]
     stream_key: String,
 }
 
@@ -579,7 +579,7 @@ struct BrokerWorkerArgs {
     #[arg(long, default_value_t = 120)]
     lease_s: i64,
     /// Viz `BrokerPublishArgs::stream_key`.
-    #[arg(long, default_value = "bakula.jobs")]
+    #[arg(long, default_value = "salticus.jobs")]
     stream_key: String,
 }
 
@@ -590,11 +590,11 @@ struct DemoArgs {
 }
 
 #[global_allocator]
-static ALLOCATOR: bakula_program::soak::alloc::CountingAlloc =
-    bakula_program::soak::alloc::CountingAlloc;
+static ALLOCATOR: salticus_program::soak::alloc::CountingAlloc =
+    salticus_program::soak::alloc::CountingAlloc;
 
 fn main() -> anyhow::Result<()> {
-    bakula_program::logging::init();
+    salticus_program::logging::init();
     let cli = Cli::parse();
     match cli.command {
         Command::Simulace(SimulaceCommand::Generuj(args)) => {
@@ -662,7 +662,7 @@ fn main() -> anyhow::Result<()> {
             let config_path = args
                 .config
                 .clone()
-                .unwrap_or_else(|| args.workspace.join("bakula.toml"));
+                .unwrap_or_else(|| args.workspace.join("salticus.toml"));
             let mut config = config::load_or_default(&config_path)?;
             config.workspace_root = args.workspace.to_string_lossy().to_string();
             config.host = args.host;
@@ -977,9 +977,9 @@ fn main() -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&message)?);
         }
         Command::Endpoint(EndpointCommand::Ingest(args)) => {
-            let format: bakula_program::endpoint::Format =
+            let format: salticus_program::endpoint::Format =
                 args.format.parse().map_err(anyhow::Error::msg)?;
-            let limits = bakula_program::endpoint::correlate::Limits::default();
+            let limits = salticus_program::endpoint::correlate::Limits::default();
             let meta = std::fs::metadata(&args.file)?;
             anyhow::ensure!(
                 meta.len() <= (limits.max_batch_bytes as u64) * 64,
@@ -989,10 +989,10 @@ fn main() -> anyhow::Result<()> {
             // velky soubor se cte po davkach do limitu, aby neslo vycerpat pamet
             let text = std::fs::read_to_string(&args.file)?;
             std::fs::create_dir_all(&args.workspace)?;
-            let mut store = bakula_program::engine_state::EngineStateStore::open(
+            let mut store = salticus_program::engine_state::EngineStateStore::open(
                 &args.workspace.join("engine-state.sqlite"),
             )?;
-            let mut total = bakula_program::endpoint::persist::IngestSummary::default();
+            let mut total = salticus_program::endpoint::persist::IngestSummary::default();
             let mut start = 0usize;
             while start < text.len() {
                 let mut end = (start + limits.max_batch_bytes).min(text.len());
@@ -1003,7 +1003,7 @@ fn main() -> anyhow::Result<()> {
                 if end < text.len() {
                     end = text[start..end].rfind('\n').map_or(end, |i| start + i + 1);
                 }
-                let part = bakula_program::endpoint::persist::ingest_text(
+                let part = salticus_program::endpoint::persist::ingest_text(
                     store.conn_mut(),
                     format,
                     &text[start..end],
@@ -1022,7 +1022,7 @@ fn main() -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&total)?);
         }
         Command::Soak(SoakCommand::Run(args)) => {
-            let mut cfg = bakula_program::soak::runner::SoakConfig::with_defaults(args.out.clone());
+            let mut cfg = salticus_program::soak::runner::SoakConfig::with_defaults(args.out.clone());
             cfg.wall_hours = args.wall_hours;
             cfg.max_networks = args.max_networks;
             if let Some(threads) = args.threads {
@@ -1034,9 +1034,9 @@ fn main() -> anyhow::Result<()> {
             cfg.checkpoint_secs = args.checkpoint_secs.max(1);
             cfg.report_secs = args.report_secs.max(1);
             cfg.legs = !args.no_legs;
-            cfg.engine = bakula_program::engine::EngineConfig {
+            cfg.engine = salticus_program::engine::EngineConfig {
                 mode: args.engine.parse().map_err(anyhow::Error::msg)?,
-                v3: bakula_program::engine::V3Features::recommended()
+                v3: salticus_program::engine::V3Features::recommended()
                     .disable_list(&args.v3_off)
                     .and_then(|v| v.enable_list(&args.v3_on))
                     .map_err(anyhow::Error::msg)?,
@@ -1064,12 +1064,12 @@ fn main() -> anyhow::Result<()> {
                 "industrial" => (false, true),
                 other => anyhow::bail!("neznama velikost {other} (mix | xxxl | industrial)"),
             };
-            cfg.world.type_mask = bakula_program::soak::episode::parse_type_mask(&args.v3_mask)
+            cfg.world.type_mask = salticus_program::soak::episode::parse_type_mask(&args.v3_mask)
                 .map_err(anyhow::Error::msg)?;
             cfg.world.families = args.families.parse().map_err(anyhow::Error::msg)?;
             cfg.world.coverage = args.coverage.parse().map_err(anyhow::Error::msg)?;
             if let Some(text) = &args.noise_mix {
-                cfg.mix.noise = bakula_program::soak::runner::NetworkMix::parse_noise(text)
+                cfg.mix.noise = salticus_program::soak::runner::NetworkMix::parse_noise(text)
                     .map_err(anyhow::Error::msg)?;
             }
             if !(0.0..=1.0).contains(&args.xxxl_share) || !(0.0..=1.0).contains(&args.cf_share) {
@@ -1077,20 +1077,20 @@ fn main() -> anyhow::Result<()> {
             }
             cfg.mix.xxxl_share = args.xxxl_share;
             cfg.mix.cf_share = args.cf_share;
-            bakula_program::soak::runner::run(cfg, args.resume)?;
+            salticus_program::soak::runner::run(cfg, args.resume)?;
         }
         Command::Soak(SoakCommand::Verify(args)) => {
             let (ok, total) =
-                bakula_program::soak::runner::verify(&args.out, args.samples, args.seed)?;
+                salticus_program::soak::runner::verify(&args.out, args.samples, args.seed)?;
             println!("verifikace: {ok}/{total} bloku bit po bitu shodnych");
             if ok != total {
                 anyhow::bail!("reprodukovatelnost porusena: {} bloku se lisi", total - ok);
             }
         }
         Command::Soak(SoakCommand::Report(args)) => {
-            let state = bakula_program::soak::runner::load_state(&args.out)?;
+            let state = salticus_program::soak::runner::load_state(&args.out)?;
             let markdown =
-                bakula_program::soak::report::render_markdown(&state, state.elapsed_wall_s, true);
+                salticus_program::soak::report::render_markdown(&state, state.elapsed_wall_s, true);
             println!("{markdown}");
         }
         Command::Demo(DemoCommand::E2e(args)) => {
@@ -1236,7 +1236,7 @@ fn main() -> anyhow::Result<()> {
 fn current_exe_invocation() -> String {
     env::current_exe()
         .map(|path| format!("\"{}\"", path.display()))
-        .unwrap_or_else(|_| "bakula-program.exe".to_string())
+        .unwrap_or_else(|_| "salticus-program.exe".to_string())
 }
 
 fn run_autopilot(args: AutopilotArgs) -> anyhow::Result<automation::AutomationReport> {
@@ -1744,7 +1744,7 @@ fn prepare_worker_workspace(workspace: &Path) -> anyhow::Result<()> {
         fs::remove_dir_all(workspace)?;
     }
     fs::create_dir_all(workspace)?;
-    let config_path = workspace.join("bakula.toml");
+    let config_path = workspace.join("salticus.toml");
     let mut app_config = AppConfig::default();
     app_config.workspace_root = workspace.to_string_lossy().to_string();
     app_config.retention.max_runs = 10_000;

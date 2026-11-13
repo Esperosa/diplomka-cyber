@@ -9,7 +9,7 @@ use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::RunReport,
 };
 
@@ -102,7 +102,7 @@ pub fn discover_scenarios(root: &Path) -> Result<Vec<PathBuf>> {
 pub fn load_manifest(path: &Path) -> Result<ScenarioManifest> {
     let content = fs::read(path)?;
     serde_json::from_slice(&content)
-        .map_err(|error| BakulaError::Processing(format!("Nelze nacist manifest scenare: {error}")))
+        .map_err(|error| SalticusError::Processing(format!("Nelze nacist manifest scenare: {error}")))
 }
 
 pub fn validate_scenario(
@@ -277,7 +277,7 @@ pub fn save_verification_report(
     let path = verification_dir.join("latest.json");
     fs::write(
         &path,
-        serde_json::to_vec_pretty(report).map_err(BakulaError::Json)?,
+        serde_json::to_vec_pretty(report).map_err(SalticusError::Json)?,
     )?;
     Ok(path)
 }
@@ -290,7 +290,7 @@ pub fn load_latest_verification_report(
         return Ok(None);
     }
     let bytes = fs::read(path)?;
-    let report = serde_json::from_slice(&bytes).map_err(BakulaError::Json)?;
+    let report = serde_json::from_slice(&bytes).map_err(SalticusError::Json)?;
     Ok(Some(report))
 }
 

@@ -9,12 +9,12 @@
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params};
 
-use crate::error::{BakulaError, Result};
+use crate::error::{SalticusError, Result};
 
 pub const MAX_DAYS: i64 = 30;
 
-fn db_error(error: rusqlite::Error) -> BakulaError {
-    BakulaError::Processing(format!("novelty_consent SQLite chyba: {error}"))
+fn db_error(error: rusqlite::Error) -> SalticusError {
+    SalticusError::Processing(format!("novelty_consent SQLite chyba: {error}"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -67,12 +67,12 @@ pub fn grant(
     at: DateTime<Utc>,
 ) -> Result<DateTime<Utc>> {
     if host.parse::<std::net::IpAddr>().is_err() || peer.parse::<std::net::IpAddr>().is_err() {
-        return Err(BakulaError::Processing(
+        return Err(SalticusError::Processing(
             "souhlas jen pro presne IP adresy".into(),
         ));
     }
     if !matches!(proto, "tcp" | "udp") || port == 0 {
-        return Err(BakulaError::Processing(
+        return Err(SalticusError::Processing(
             "souhlas jen pro tcp nebo udp a konkretni port".into(),
         ));
     }

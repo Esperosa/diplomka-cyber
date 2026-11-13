@@ -31,7 +31,7 @@ use std::path::Path;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 
-use crate::error::{BakulaError, Result};
+use crate::error::{SalticusError, Result};
 use crate::eval::ground_truth::{GroundTruthLabel, LabeledDataset};
 use crate::eval::source::{DatasetSourceInfo, ScenarioSource};
 use crate::passive::ConnectionObservation;
@@ -53,7 +53,7 @@ impl ScenarioSource for Ctu13Source {
         let mut lines = content.lines();
         let header = lines
             .next()
-            .ok_or_else(|| BakulaError::Processing("CTU-13 soubor je prazdny.".to_string()))?;
+            .ok_or_else(|| SalticusError::Processing("CTU-13 soubor je prazdny.".to_string()))?;
         let columns: HashMap<&str, usize> = header
             .split(',')
             .enumerate()
@@ -62,7 +62,7 @@ impl ScenarioSource for Ctu13Source {
 
         let column = |name: &str| -> Result<usize> {
             columns.get(name).copied().ok_or_else(|| {
-                BakulaError::Processing(format!("CTU-13 header postrada sloupec '{name}'."))
+                SalticusError::Processing(format!("CTU-13 header postrada sloupec '{name}'."))
             })
         };
         let idx_start_time = column("StartTime")?;

@@ -8,9 +8,9 @@ use sha2::{Digest, Sha256};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{BakulaError, Result, intel};
+use crate::{SalticusError, Result, intel};
 
-pub const SKOKY_MODEL: &str = "bakula-skoky:latest";
+pub const SKOKY_MODEL: &str = "salticus-skoky:latest";
 pub const SKOKY_BASE_MODEL: &str = "qwen3:8b";
 pub const SKOKY_MODELFILE_PATH: &str = "models/skoky/Modelfile";
 
@@ -65,7 +65,7 @@ pub fn model_profile() -> AiModelProfile {
         model_name: SKOKY_MODEL.to_string(),
         base_model: SKOKY_BASE_MODEL.to_string(),
         runner: "ollama".to_string(),
-        purpose: "Lokální český vysvětlovací chatbot nad auditním během Bakula.".to_string(),
+        purpose: "Lokální český vysvětlovací chatbot nad auditním během Salticus.".to_string(),
         language: "cs + en, odpovědi primárně česky".to_string(),
         recommended_memory: "cca 8-12 GB RAM podle kvantizace a běžícího prostředí".to_string(),
         setup_command: ".\\scripts\\setup-skoky-ai.ps1 -Pull".to_string(),
@@ -159,7 +159,7 @@ pub fn training_context_block() -> String {
 }
 
 pub fn skoky_system_prompt() -> &'static str {
-    "Jsi Skoky, lokální český cybersecurity kopilot nad jedním konkrétním během Bakula. Odpovídej česky, věcně a srozumitelně i pro člověka, který není ajťák. Každá odpověď musí přímo reagovat na poslední dotaz, ne jen zopakovat nález. Drž se jen dodaného JSON kontextu, důkazů, zdrojů a agentních rozhodovacích stop. Rozlišuj potvrzený fakt, pracovní hypotézu, indukci z opakovaných vzorců, dedukci z pravidla a chybějící ověření. Když se uživatel ptá 'jak to opravím' nebo 'co mám dělat já', napiš konkrétní postup v očíslovaných krocích: vlastník cíle, ověření služby, nápravné opatření, ověření po změně. Ber Vulners jako volitelný zdroj; základní veřejný stack je NVD, CISA KEV, FIRST EPSS, CIRCL, OSV.dev a MITRE ATT&CK kontext. Když něco v kontextu není, řekni to stručně a navrhni, jaký zdroj dat to má ověřit. Běžná odpověď má mít 4 až 8 krátkých vět nebo odrážek. Vždy uveď: co vidíš, proč to vadí nebo nevadí, co udělat teď, jak ověřit výsledek. U agentního rozhodování popiš, který agent má smysl spustit, který nechat běžet, který vypnout a proč. Nepiš marketingově, nevymýšlej incidenty, nevytvářej falešné CVE a nezobrazuj interní chain-of-thought, tagy <think> ani text začínající slovem Thinking."
+    "Jsi Skoky, lokální český cybersecurity kopilot nad jedním konkrétním během Salticus. Odpovídej česky, věcně a srozumitelně i pro člověka, který není ajťák. Každá odpověď musí přímo reagovat na poslední dotaz, ne jen zopakovat nález. Drž se jen dodaného JSON kontextu, důkazů, zdrojů a agentních rozhodovacích stop. Rozlišuj potvrzený fakt, pracovní hypotézu, indukci z opakovaných vzorců, dedukci z pravidla a chybějící ověření. Když se uživatel ptá 'jak to opravím' nebo 'co mám dělat já', napiš konkrétní postup v očíslovaných krocích: vlastník cíle, ověření služby, nápravné opatření, ověření po změně. Ber Vulners jako volitelný zdroj; základní veřejný stack je NVD, CISA KEV, FIRST EPSS, CIRCL, OSV.dev a MITRE ATT&CK kontext. Když něco v kontextu není, řekni to stručně a navrhni, jaký zdroj dat to má ověřit. Běžná odpověď má mít 4 až 8 krátkých vět nebo odrážek. Vždy uveď: co vidíš, proč to vadí nebo nevadí, co udělat teď, jak ověřit výsledek. U agentního rozhodování popiš, který agent má smysl spustit, který nechat běžet, který vypnout a proč. Nepiš marketingově, nevymýšlej incidenty, nevytvářej falešné CVE a nezobrazuj interní chain-of-thought, tagy <think> ani text začínající slovem Thinking."
 }
 
 pub fn modelfile_contents() -> String {
@@ -259,9 +259,9 @@ pub fn diagnose() -> AiDiagnostic {
         public_sources_total,
         modelfile_sha256: sha256_hex(modelfile.as_bytes()),
         recommended_env: vec![
-            "BAKULA_LLM_PROVIDER=ollama".to_string(),
+            "SALTICUS_LLM_PROVIDER=ollama".to_string(),
             format!("OLLAMA_ASSISTANT_MODEL={SKOKY_MODEL}"),
-            "BAKULA_LLM_TIMEOUT_SECONDS=45".to_string(),
+            "SALTICUS_LLM_TIMEOUT_SECONDS=45".to_string(),
             "OLLAMA_NUM_GPU=-1".to_string(),
         ],
         gpu_runtime_hint,
@@ -279,13 +279,13 @@ pub fn setup_ollama_model(modelfile_path: &Path, pull_base_model: bool) -> Resul
     write_modelfile(modelfile_path)?;
     let before = diagnose();
     if !before.ollama_cli_available {
-        return Err(BakulaError::Config(
+        return Err(SalticusError::Config(
             "Ollama není dostupná v PATH. Nainstaluj Ollama a spusť tento příkaz znovu."
                 .to_string(),
         ));
     }
     if !before.ollama_server_available {
-        return Err(BakulaError::Config(
+        return Err(SalticusError::Config(
             "Ollama CLI existuje, ale server neodpovídá. Spusť Ollama aplikaci nebo službu."
                 .to_string(),
         ));
@@ -296,7 +296,7 @@ pub fn setup_ollama_model(modelfile_path: &Path, pull_base_model: bool) -> Resul
             "Stažení základního modelu qwen3:8b selhalo.",
         )?;
     } else if !before.base_model_present {
-        return Err(BakulaError::Config(format!(
+        return Err(SalticusError::Config(format!(
             "Základní model {SKOKY_BASE_MODEL} není stažený. Spusť setup s --pull nebo `ollama pull {SKOKY_BASE_MODEL}`."
         )));
     }
@@ -307,7 +307,7 @@ pub fn setup_ollama_model(modelfile_path: &Path, pull_base_model: bool) -> Resul
             "-f",
             &modelfile_path.to_string_lossy(),
         ]),
-        "Vytvoření projektového modelu bakula-skoky selhalo.",
+        "Vytvoření projektového modelu salticus-skoky selhalo.",
     )?;
     Ok(diagnose())
 }
@@ -315,7 +315,7 @@ pub fn setup_ollama_model(modelfile_path: &Path, pull_base_model: bool) -> Resul
 pub fn smoke_prompt(prompt: &str) -> Result<String> {
     let diagnostic = diagnose();
     if !diagnostic.tuned_model_present {
-        return Err(BakulaError::Config(format!(
+        return Err(SalticusError::Config(format!(
             "Model {SKOKY_MODEL} není připravený. Spusť `{}`.",
             diagnostic.profile.setup_command
         )));
@@ -408,7 +408,7 @@ fn require_success(output: CommandOutput, message: &str) -> Result<()> {
         .filter(|item| !item.is_empty())
         .collect::<Vec<_>>()
         .join(" | ");
-    Err(BakulaError::Processing(if detail.is_empty() {
+    Err(SalticusError::Processing(if detail.is_empty() {
         message.to_string()
     } else {
         format!("{message} {detail}")
@@ -434,7 +434,7 @@ fn has_model(models: &[String], expected: &str) -> bool {
 fn next_steps_for_status(status: &str) -> Vec<String> {
     match status {
         "ready" => {
-            vec!["Model je připravený. UI chat bude používat bakula-skoky:latest.".to_string()]
+            vec!["Model je připravený. UI chat bude používat salticus-skoky:latest.".to_string()]
         }
         "base-ready" => vec![format!(
             "Základní model existuje. Vytvoř projektový profil příkazem `ollama create {SKOKY_MODEL} -f {SKOKY_MODELFILE_PATH}`."
@@ -480,10 +480,10 @@ mod tests {
     #[test]
     fn ollama_list_parser_reads_model_names() {
         let models = parse_ollama_list(
-            "NAME               ID              SIZE      MODIFIED\nqwen3:8b           abc             5 GB      today\nbakula-skoky:latest def            5 GB      now\n",
+            "NAME               ID              SIZE      MODIFIED\nqwen3:8b           abc             5 GB      today\nsalticus-skoky:latest def            5 GB      now\n",
         );
         assert!(has_model(&models, "qwen3:8b"));
-        assert!(has_model(&models, "bakula-skoky:latest"));
+        assert!(has_model(&models, "salticus-skoky:latest"));
     }
 
     #[test]

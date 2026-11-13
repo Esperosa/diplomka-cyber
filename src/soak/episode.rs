@@ -25,7 +25,7 @@ use crate::{
     correlation, decision,
     enforcement::{BlockIpRequest, ProtectedRanges},
     engine::{EngineConfig, EngineMode},
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     finding_memory::{
         Disposition, Escalation, FindingKey, FindingState, Observation, key_for_finding,
         split_service_key,
@@ -239,7 +239,7 @@ impl CheckRunner for SimRunner<'_> {
                 }),
         ) % 100;
         if roll < 4 {
-            return Err(BakulaError::Processing(format!(
+            return Err(SalticusError::Processing(format!(
                 "simulovany timeout nastroje {method} proti {asset}"
             )));
         }
@@ -249,7 +249,7 @@ impl CheckRunner for SimRunner<'_> {
         let device = self
             .model
             .device_by_ip(asset)
-            .ok_or_else(|| BakulaError::Processing(format!("{asset} neni v modelu")))?;
+            .ok_or_else(|| SalticusError::Processing(format!("{asset} neni v modelu")))?;
         let lines: Vec<String> = self.model.devices[device as usize]
             .services
             .iter()
@@ -262,7 +262,7 @@ impl CheckRunner for SimRunner<'_> {
             })
             .collect();
         if lines.is_empty() {
-            Err(BakulaError::Processing(format!(
+            Err(SalticusError::Processing(format!(
                 "{asset} nema otevreny webovy port k inspekci"
             )))
         } else {
@@ -891,10 +891,10 @@ fn run_episode_inner(
         ..ExecutionBudget::default()
     };
 
-    // rucni profil (krok 4): BAKULA_SOAK_CYCLE_TRACE=1 vypise cas fazi kazdeho cyklu
-    let trace_cycles = std::env::var_os("BAKULA_SOAK_CYCLE_TRACE").is_some();
+    // rucni profil (krok 4): SALTICUS_SOAK_CYCLE_TRACE=1 vypise cas fazi kazdeho cyklu
+    let trace_cycles = std::env::var_os("SALTICUS_SOAK_CYCLE_TRACE").is_some();
     // rucni diagnostika pameti: velikosti slozek stavu v3 kazdych 48 cyklu
-    let state_trace = std::env::var_os("BAKULA_SOAK_STATE_TRACE").is_some();
+    let state_trace = std::env::var_os("SALTICUS_SOAK_STATE_TRACE").is_some();
     let mut trace_sums: BTreeMap<String, f64> = BTreeMap::new();
     let mut trace_lines: Vec<String> = Vec::new();
     // krok 8: koncova telemetrie (simulovany agenti, sklad s limity, verdikty hostu)
@@ -994,9 +994,9 @@ fn run_episode_inner(
         if restart_cycles.contains(&cycle) {
             let restart_started = Instant::now();
             let json = serde_json::to_string(&resolver)
-                .map_err(|e| BakulaError::Processing(format!("serializace identity: {e}")))?;
+                .map_err(|e| SalticusError::Processing(format!("serializace identity: {e}")))?;
             resolver = serde_json::from_str(&json)
-                .map_err(|e| BakulaError::Processing(format!("obnova identity: {e}")))?;
+                .map_err(|e| SalticusError::Processing(format!("obnova identity: {e}")))?;
             if let Some(runtime) = v3.as_mut() {
                 runtime.restart()?;
             }

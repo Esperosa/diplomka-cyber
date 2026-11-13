@@ -152,10 +152,10 @@ Výstup:
 
 Detekované kontrolované nálezy:
 
-- `bakula-basic-auth-over-http`
-- `bakula-prometheus-metrics-exposed`
-- `bakula-swagger-ui-exposed`
-- `bakula-directory-listing-exposed`
+- `salticus-basic-auth-over-http`
+- `salticus-prometheus-metrics-exposed`
+- `salticus-swagger-ui-exposed`
+- `salticus-directory-listing-exposed`
 
 UI server byl spuštěn nad:
 

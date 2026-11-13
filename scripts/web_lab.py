@@ -3,7 +3,7 @@ import threading
 
 
 class BaseLabHandler(BaseHTTPRequestHandler):
-    server_version = "BakulaLab/1.0"
+    server_version = "SalticusLab/1.0"
 
     def log_message(self, fmt, *args):
         return
@@ -23,8 +23,8 @@ class MainSiteHandler(BaseLabHandler):
     def do_GET(self):
         self._write(
             200,
-            """<!doctype html><html><head><title>Bakula Demo Web</title></head>
-            <body><h1>Bakula Demo Web</h1><p>Řízená cílová aplikace pro HTTPX fingerprinting.</p></body></html>""",
+            """<!doctype html><html><head><title>Salticus Demo Web</title></head>
+            <body><h1>Salticus Demo Web</h1><p>Řízená cílová aplikace pro HTTPX fingerprinting.</p></body></html>""",
         )
 
 
@@ -43,7 +43,7 @@ class MetricsHandler(BaseLabHandler):
         if self.path == "/metrics":
             self._write(
                 200,
-                "# HELP bakula_requests_total Example metric\n# TYPE bakula_requests_total counter\nbakula_requests_total 42\n",
+                "# HELP salticus_requests_total Example metric\n# TYPE salticus_requests_total counter\nsalticus_requests_total 42\n",
                 content_type="text/plain; version=0.0.4",
             )
             return
@@ -94,7 +94,7 @@ def main():
         start_server(18083, SwaggerHandler),
         start_server(18084, ListingHandler),
     ]
-    print("Bakula web lab běží na:")
+    print("Salticus web lab běží na:")
     print("  http://127.0.0.1:18080/")
     print("  http://127.0.0.1:18081/")
     print("  http://127.0.0.1:18082/metrics")

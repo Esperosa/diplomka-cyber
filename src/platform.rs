@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
-    error::{BakulaError, Result},
+    error::{SalticusError, Result},
     model::AppConfig,
 };
 
@@ -35,7 +35,7 @@ impl Role {
             "operator" => Ok(Self::Operator),
             "analyst" => Ok(Self::Analyst),
             "viewer" => Ok(Self::Viewer),
-            other => Err(BakulaError::Config(format!(
+            other => Err(SalticusError::Config(format!(
                 "Neplatna role {other}. Povolené role: admin, operator, analyst, viewer."
             ))),
         }
@@ -417,7 +417,7 @@ pub fn create_or_update_user(path: &Path, username: &str, role: Role) -> Result<
     )
     .map_err(to_processing_error)?;
     load_user_by_username(&conn, username)?
-        .ok_or_else(|| BakulaError::Processing(format!("Uzivatel {username} nebyl ulozen.")))
+        .ok_or_else(|| SalticusError::Processing(format!("Uzivatel {username} nebyl ulozen.")))
 }
 
 pub fn issue_token(path: &Path, username: &str, token_name: &str) -> Result<IssuedToken> {
@@ -432,8 +432,8 @@ pub fn issue_token_with_ttl(
 ) -> Result<IssuedToken> {
     let conn = open_connection(path)?;
     let user = load_user_by_username(&conn, username)?
-        .ok_or_else(|| BakulaError::Processing(format!("Uzivatel {username} neexistuje.")))?;
-    let raw_token = format!("bakula_{}_{}", username, Uuid::new_v4().simple());
+        .ok_or_else(|| SalticusError::Processing(format!("Uzivatel {username} neexistuje.")))?;
+    let raw_token = format!("salticus_{}_{}", username, Uuid::new_v4().simple());
     let token_hash = hash_token(&raw_token);
     let created_at = Utc::now();
     let expires_at = ttl_days
@@ -574,7 +574,7 @@ pub fn list_nodes(path: &Path) -> Result<Vec<NodeRecord>> {
                     .map(|value| parse_dt(&value).map_err(to_rusqlite_error))
                     .transpose()?,
                 capabilities: serde_json::from_str(&capabilities_json)
-                    .map_err(|error| to_rusqlite_error(BakulaError::Json(error)))?,
+                    .map_err(|error| to_rusqlite_error(SalticusError::Json(error)))?,
                 software_version: row.get(6)?,
                 desired_version: row.get(7)?,
                 ready: row.get::<_, i64>(8)? != 0,
@@ -618,7 +618,7 @@ pub fn upsert_node_heartbeat(
 ) -> Result<NodeRecord> {
     let conn = open_connection(path)?;
     let now = now_string();
-    let caps = serde_json::to_string(capabilities).map_err(BakulaError::Json)?;
+    let caps = serde_json::to_string(capabilities).map_err(SalticusError::Json)?;
     conn.execute(
         "
         INSERT INTO nodes (
@@ -637,7 +637,7 @@ pub fn upsert_node_heartbeat(
     list_nodes(path)?
         .into_iter()
         .find(|item| item.node_id == node_id)
-        .ok_or_else(|| BakulaError::Processing(format!("Node {node_id} nebyl ulozen.")))
+        .ok_or_else(|| SalticusError::Processing(format!("Node {node_id} nebyl ulozen.")))
 }
 
 pub fn register_managed_node(
@@ -649,7 +649,7 @@ pub fn register_managed_node(
     ready: bool,
 ) -> Result<NodeRecord> {
     let conn = open_connection(path)?;
-    let caps = serde_json::to_string(capabilities).map_err(BakulaError::Json)?;
+    let caps = serde_json::to_string(capabilities).map_err(SalticusError::Json)?;
     conn.execute(
         "
         INSERT INTO nodes (
@@ -678,7 +678,7 @@ pub fn register_managed_node(
     list_nodes(path)?
         .into_iter()
         .find(|item| item.node_id == node_id)
-        .ok_or_else(|| BakulaError::Processing(format!("Node {node_id} nebyl ulozen.")))
+        .ok_or_else(|| SalticusError::Processing(format!("Node {node_id} nebyl ulozen.")))
 }
 
 pub fn acquire_leader_lease(path: &Path, node_id: &str, ttl_seconds: i64) -> Result<bool> {
@@ -764,7 +764,7 @@ pub fn set_ha_policy(
     )
     .map_err(to_processing_error)?;
     get_ha_policy(path)?.ok_or_else(|| {
-        BakulaError::Processing("HA policy se nepodarilo nahrat po ulozeni.".to_string())
+        SalticusError::Processing("HA policy se nepodarilo nahrat po ulozeni.".to_string())
     })
 }
 
@@ -877,7 +877,7 @@ pub fn mark_node_ready(path: &Path, node_id: &str, software_version: &str) -> Re
     list_nodes(path)?
         .into_iter()
         .find(|item| item.node_id == node_id)
-        .ok_or_else(|| BakulaError::Processing(format!("Node {node_id} nebyl nalezen.")))
+        .ok_or_else(|| SalticusError::Processing(format!("Node {node_id} nebyl nalezen.")))
 }
 
 pub fn enqueue_job(
@@ -890,7 +890,7 @@ pub fn enqueue_job(
     let conn = open_connection(path)?;
     let now = Utc::now();
     let next = next_run_at.unwrap_or(now);
-    let spec_json = serde_json::to_string(spec).map_err(BakulaError::Json)?;
+    let spec_json = serde_json::to_string(spec).map_err(SalticusError::Json)?;
     conn.execute(
         "
         INSERT INTO jobs (
@@ -955,7 +955,7 @@ pub fn claim_due_job(
         tx.commit().map_err(to_processing_error)?;
         return Ok(None);
     };
-    let spec = serde_json::from_str::<PipelineJobSpec>(&spec_json).map_err(BakulaError::Json)?;
+    let spec = serde_json::from_str::<PipelineJobSpec>(&spec_json).map_err(SalticusError::Json)?;
     tx.execute(
         "
         UPDATE jobs
@@ -1041,7 +1041,7 @@ pub fn claim_job_by_id(
         tx.commit().map_err(to_processing_error)?;
         return Ok(None);
     };
-    let spec = serde_json::from_str::<PipelineJobSpec>(&spec_json).map_err(BakulaError::Json)?;
+    let spec = serde_json::from_str::<PipelineJobSpec>(&spec_json).map_err(SalticusError::Json)?;
     tx.execute(
         "
         UPDATE jobs
@@ -1291,7 +1291,7 @@ where
             let fenced =
                 mark_job_succeeded(path, job.id, node_id, &run_id, job.schedule_interval_s)?;
             if !fenced {
-                return Err(BakulaError::Processing(format!(
+                return Err(SalticusError::Processing(format!(
                     "Job {} ({}) dobehl uspesne, ale jeho lease uz drzi jiny worker - vysledek {run_id} se NEZAPSAL (claimed_by fence)",
                     job.id, job.name
                 )));
@@ -1301,12 +1301,12 @@ where
         Err(error) => {
             let fenced = mark_job_failed(path, job.id, node_id, &error, job.schedule_interval_s)?;
             if !fenced {
-                return Err(BakulaError::Processing(format!(
+                return Err(SalticusError::Processing(format!(
                     "Job {} ({}) selhal ({error}), ale jeho lease uz drzi jiny worker - chybovy stav se NEZAPSAL (claimed_by fence)",
                     job.id, job.name
                 )));
             }
-            Err(BakulaError::Processing(format!(
+            Err(SalticusError::Processing(format!(
                 "Job {} ({}) selhal: {error}",
                 job.id, job.name
             )))
@@ -1505,7 +1505,7 @@ fn parse_dt(value: &str) -> Result<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .map(|item| item.with_timezone(&Utc))
         .map_err(|error| {
-            BakulaError::Processing(format!("Nelze zpracovat datum/cas {value}: {error}"))
+            SalticusError::Processing(format!("Nelze zpracovat datum/cas {value}: {error}"))
         })
 }
 
@@ -1523,11 +1523,11 @@ fn collect_rows<T>(
     Ok(items)
 }
 
-fn to_processing_error(error: rusqlite::Error) -> BakulaError {
-    BakulaError::Processing(format!("SQLite chyba: {error}"))
+fn to_processing_error(error: rusqlite::Error) -> SalticusError {
+    SalticusError::Processing(format!("SQLite chyba: {error}"))
 }
 
-fn to_rusqlite_error(error: BakulaError) -> rusqlite::Error {
+fn to_rusqlite_error(error: SalticusError) -> rusqlite::Error {
     rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
 }
 

@@ -13,7 +13,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{BakulaError, Result};
+use crate::error::{SalticusError, Result};
 
 /// Minimální počet (vážených) vzorků pro použitelnou kalibraci.
 pub const MIN_SAMPLES: f64 = 200.0;
@@ -92,14 +92,14 @@ impl IsotonicCalibrator {
 
     pub fn load(path: &std::path::Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)?;
-        let calibrator: Self = serde_json::from_str(&text).map_err(BakulaError::Json)?;
+        let calibrator: Self = serde_json::from_str(&text).map_err(SalticusError::Json)?;
         if calibrator.knots.is_empty()
             || calibrator
                 .knots
                 .iter()
                 .any(|(s, p)| !s.is_finite() || !(0.0..=1.0).contains(p))
         {
-            return Err(BakulaError::Config(format!(
+            return Err(SalticusError::Config(format!(
                 "neplatna kalibrace {}",
                 path.display()
             )));

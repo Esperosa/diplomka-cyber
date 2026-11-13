@@ -13,7 +13,7 @@ import type {
   VerificationLatest,
 } from "./types";
 
-const TOKEN_KEY = "bakulaApiToken";
+const TOKEN_KEY = "salticusApiToken";
 
 export class ApiError extends Error {
   constructor(
@@ -33,7 +33,7 @@ export function getToken(): string {
     if (legacy) {
       window.sessionStorage.setItem(TOKEN_KEY, legacy);
       window.localStorage.removeItem(TOKEN_KEY);
-      window.localStorage.removeItem("bakulaApiTokenDismissed");
+      window.localStorage.removeItem("salticusApiTokenDismissed");
     }
     return window.sessionStorage.getItem(TOKEN_KEY)?.trim() ?? "";
   } catch {
@@ -58,7 +58,7 @@ function headersFor(method: string, extra?: Record<string, string>): HeadersInit
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   // Vlastni hlavicka brani cross-site <form> POSTu (CSRF); server ji vyzaduje u mutaci.
-  if (method !== "GET") headers["X-Bakula-Csrf"] = "1";
+  if (method !== "GET") headers["X-Salticus-Csrf"] = "1";
   return headers;
 }
 

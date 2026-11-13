@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use crate::{
-    BakulaError, Result, ai, intel,
+    SalticusError, Result, ai, intel,
     model::{
         CveRecord, Finding, HostReport, MonitoringLane, NetworkAsset, RunReport, ServiceReport,
         Severity, TriageAction,
@@ -367,7 +367,7 @@ where
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
     };
-    let requested = env_text("BAKULA_LLM_PROVIDER")
+    let requested = env_text("SALTICUS_LLM_PROVIDER")
         .unwrap_or_else(|| "auto".to_string())
         .trim()
         .to_ascii_lowercase();
@@ -391,29 +391,29 @@ where
     if requested == "openai-compatible"
         || requested == "local-openai"
         || env_text("OPENAI_COMPATIBLE_BASE_URL").is_some()
-        || env_text("BAKULA_LLM_BASE_URL").is_some()
+        || env_text("SALTICUS_LLM_BASE_URL").is_some()
     {
         return Some(LlmConfig {
             provider: LlmProvider::OpenAiCompatible,
             model: env_text("OPENAI_COMPATIBLE_MODEL")
-                .or_else(|| env_text("BAKULA_LOCAL_LLM_MODEL"))
-                .or_else(|| env_text("BAKULA_LLM_MODEL"))
+                .or_else(|| env_text("SALTICUS_LOCAL_LLM_MODEL"))
+                .or_else(|| env_text("SALTICUS_LLM_MODEL"))
                 .or_else(|| env_text("OPENAI_ASSISTANT_MODEL"))
                 .unwrap_or_else(|| "Qwen/Qwen3-8B".to_string()),
             base_url: env_text("OPENAI_COMPATIBLE_BASE_URL")
-                .or_else(|| env_text("BAKULA_LLM_BASE_URL"))
+                .or_else(|| env_text("SALTICUS_LLM_BASE_URL"))
                 .unwrap_or_else(|| "http://127.0.0.1:8000/v1".to_string()),
             api_key: env_text("OPENAI_COMPATIBLE_API_KEY")
-                .or_else(|| env_text("BAKULA_LLM_API_KEY")),
+                .or_else(|| env_text("SALTICUS_LLM_API_KEY")),
         });
     }
 
     Some(LlmConfig {
         provider: LlmProvider::Ollama,
         model: env_text("OLLAMA_ASSISTANT_MODEL")
-            .or_else(|| env_text("BAKULA_LOCAL_LLM_MODEL"))
+            .or_else(|| env_text("SALTICUS_LOCAL_LLM_MODEL"))
             .or_else(|| env_text("OLLAMA_MODEL"))
-            .or_else(|| env_text("BAKULA_LLM_MODEL"))
+            .or_else(|| env_text("SALTICUS_LLM_MODEL"))
             .unwrap_or_else(|| ai::SKOKY_MODEL.to_string()),
         base_url: env_text("OLLAMA_BASE_URL")
             .unwrap_or_else(|| "http://127.0.0.1:11434".to_string()),
@@ -762,7 +762,7 @@ async fn fetch_vulners_sources(
     tokio::task::spawn_blocking(move || {
         let provider = vuln::build_provider(&cache_dir, "vulners", false, false)?;
         let records = provider.query_by_cpe(&cpe)?;
-        Ok::<_, BakulaError>(
+        Ok::<_, SalticusError>(
             records
                 .into_iter()
                 .take(3)
@@ -774,7 +774,7 @@ async fn fetch_vulners_sources(
         )
     })
     .await
-    .map_err(|error| BakulaError::Processing(format!("Vulners helpdesk task selhal: {error}")))?
+    .map_err(|error| SalticusError::Processing(format!("Vulners helpdesk task selhal: {error}")))?
 }
 
 async fn answer_with_llm(
@@ -800,10 +800,10 @@ async fn answer_with_openai_responses(
     request: &AssistantRequest,
 ) -> Result<String> {
     let api_key = config.api_key.as_deref().ok_or_else(|| {
-        BakulaError::Config("Chybí OPENAI_API_KEY pro helpdesk model.".to_string())
+        SalticusError::Config("Chybí OPENAI_API_KEY pro helpdesk model.".to_string())
     })?;
     let client = reqwest::Client::builder()
-        .user_agent("bakula-program/0.1")
+        .user_agent("salticus-program/0.1")
         .timeout(llm_timeout(25))
         .build()?;
 
@@ -825,7 +825,7 @@ async fn answer_with_openai_responses(
         .json()
         .await?;
     extract_openai_text(&response).ok_or_else(|| {
-        BakulaError::Processing("OpenAI helpdesk nevrátil textovou odpověď.".to_string())
+        SalticusError::Processing("OpenAI helpdesk nevrátil textovou odpověď.".to_string())
     })
 }
 
@@ -835,7 +835,7 @@ async fn answer_with_chat_completions(
     request: &AssistantRequest,
 ) -> Result<String> {
     let client = reqwest::Client::builder()
-        .user_agent("bakula-program/0.1")
+        .user_agent("salticus-program/0.1")
         .timeout(llm_timeout(25))
         .build()?;
     let payload = serde_json::json!({
@@ -862,7 +862,7 @@ async fn answer_with_chat_completions(
         .json()
         .await?;
     extract_chat_completion_text(&response).ok_or_else(|| {
-        BakulaError::Processing("OpenAI-compatible helpdesk nevrátil textovou odpověď.".to_string())
+        SalticusError::Processing("OpenAI-compatible helpdesk nevrátil textovou odpověď.".to_string())
     })
 }
 
@@ -872,7 +872,7 @@ async fn answer_with_ollama(
     request: &AssistantRequest,
 ) -> Result<String> {
     let client = reqwest::Client::builder()
-        .user_agent("bakula-program/0.1")
+        .user_agent("salticus-program/0.1")
         .timeout(llm_timeout(22))
         .build()?;
     let payload = serde_json::json!({
@@ -910,7 +910,7 @@ async fn answer_with_ollama(
         .filter(|text| !text.is_empty())
         .map(ToString::to_string)
         .ok_or_else(|| {
-            BakulaError::Processing("Ollama helpdesk nevrátil textovou odpověď.".to_string())
+            SalticusError::Processing("Ollama helpdesk nevrátil textovou odpověď.".to_string())
         })
 }
 
@@ -921,7 +921,7 @@ async fn answer_with_ollama_stream(
     tx: &mpsc::Sender<AssistantStreamEvent>,
 ) -> Result<String> {
     let client = reqwest::Client::builder()
-        .user_agent("bakula-program/0.1")
+        .user_agent("salticus-program/0.1")
         .timeout(llm_timeout(75))
         .build()?;
     let payload = serde_json::json!({
@@ -1062,7 +1062,7 @@ fn clean_stream_chunk(text: &str) -> String {
 }
 
 fn llm_timeout(default_secs: u64) -> Duration {
-    let seconds = env_text("BAKULA_LLM_TIMEOUT_SECONDS")
+    let seconds = env_text("SALTICUS_LLM_TIMEOUT_SECONDS")
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(default_secs)
         .clamp(3, 120);
@@ -1596,7 +1596,7 @@ fn ui_navigation_steps(finding: &FindingSummary) -> Vec<String> {
 
 fn verification_steps(finding: &FindingSummary) -> Vec<String> {
     let text = finding_text(finding);
-    let mut steps = vec!["1. Spusť nový běh Bakula nad stejným cílem.".to_string()];
+    let mut steps = vec!["1. Spusť nový běh Salticus nad stejným cílem.".to_string()];
     if text.contains("timeout") || text.contains("retry") || text.contains("flow") {
         steps.push("2. V pasivní části musí zmizet opakované timeout/retry vzory nebo musí mít jasný legitimní důvod.".to_string());
     } else if text.contains("telnet") || text.contains("ftp") || text.contains("plaintext") {
@@ -1867,7 +1867,7 @@ mod tests {
     #[test]
     fn llm_provider_can_be_switched_explicitly() {
         let openai = llm_config_from_lookup(|key| match key {
-            "BAKULA_LLM_PROVIDER" => Some("openai".to_string()),
+            "SALTICUS_LLM_PROVIDER" => Some("openai".to_string()),
             "OPENAI_API_KEY" => Some("test-key".to_string()),
             "OPENAI_ASSISTANT_MODEL" => Some("gpt-test".to_string()),
             _ => None,
@@ -1878,9 +1878,9 @@ mod tests {
         assert_eq!(openai.api_key.as_deref(), Some("test-key"));
 
         let compatible = llm_config_from_lookup(|key| match key {
-            "BAKULA_LLM_PROVIDER" => Some("openai-compatible".to_string()),
-            "BAKULA_LLM_BASE_URL" => Some("http://127.0.0.1:8000/v1".to_string()),
-            "BAKULA_LOCAL_LLM_MODEL" => Some("Qwen/Qwen3-8B".to_string()),
+            "SALTICUS_LLM_PROVIDER" => Some("openai-compatible".to_string()),
+            "SALTICUS_LLM_BASE_URL" => Some("http://127.0.0.1:8000/v1".to_string()),
+            "SALTICUS_LOCAL_LLM_MODEL" => Some("Qwen/Qwen3-8B".to_string()),
             _ => None,
         })
         .expect("compatible config");

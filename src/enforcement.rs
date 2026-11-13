@@ -121,8 +121,8 @@ pub fn plan_block(
     })
 }
 
-/// Nazev nftables setu pro danou rodinu adres - `bakula` vlastni jen svoji
-/// `table inet bakula` a v ni 2 sety (IPv4/IPv6), nikdy se nedotyka operatorovych
+/// Nazev nftables setu pro danou rodinu adres - `salticus` vlastni jen svoji
+/// `table inet salticus` a v ni 2 sety (IPv4/IPv6), nikdy se nedotyka operatorovych
 /// existujicich pravidel/tabulek/NAT.
 pub fn set_name_for(addr: &IpAddr) -> &'static str {
     match addr {
@@ -132,7 +132,7 @@ pub fn set_name_for(addr: &IpAddr) -> &'static str {
 }
 
 /// `flags timeout` znamena, ze kernel sam odstrani prvek po vyprseni TTL i kdyby
-/// `bakula` spadnul - self-healing bez zavislosti na tom, ze nejaky "unblock" job
+/// `salticus` spadnul - self-healing bez zavislosti na tom, ze nejaky "unblock" job
 /// skutecne dobehne (presne ten typ rizika, ktery uz jednou zpusobil
 /// lease-renewal bug v `platform.rs`).
 fn render_nft_add_element(addr: &IpAddr, ip: &str, ttl_seconds: u64) -> Vec<String> {
@@ -140,7 +140,7 @@ fn render_nft_add_element(addr: &IpAddr, ip: &str, ttl_seconds: u64) -> Vec<Stri
         "add".to_string(),
         "element".to_string(),
         "inet".to_string(),
-        "bakula".to_string(),
+        "salticus".to_string(),
         set_name_for(addr).to_string(),
         format!("{{ {ip} timeout {ttl_seconds}s }}"),
     ]
@@ -153,7 +153,7 @@ pub fn render_nft_delete_element(ip: &str) -> Option<Vec<String>> {
         "delete".to_string(),
         "element".to_string(),
         "inet".to_string(),
-        "bakula".to_string(),
+        "salticus".to_string(),
         set_name_for(&addr).to_string(),
         format!("{{ {ip} }}"),
     ])
@@ -165,7 +165,7 @@ pub fn render_nft_delete_element(ip: &str) -> Option<Vec<String>> {
 /// nikdy `flush ruleset`, nikdy zmena cizich tabulek.
 pub fn render_setup_ruleset() -> String {
     let mut text = String::new();
-    text.push_str("table inet bakula {\n");
+    text.push_str("table inet salticus {\n");
     text.push_str("\tset blocked_ips { type ipv4_addr; flags timeout; }\n");
     text.push_str("\tset blocked_ips6 { type ipv6_addr; flags timeout; }\n");
     for hook in ["input", "forward"] {
@@ -203,7 +203,7 @@ mod tests {
             .expect("obycejna IP s platnym TTL se musi naplanovat");
         assert_eq!(plan.ip, "203.0.113.50");
         assert_eq!(plan.ttl_seconds, 3600);
-        assert!(plan.nft_command.contains(&"bakula".to_string()));
+        assert!(plan.nft_command.contains(&"salticus".to_string()));
     }
 
     #[test]
@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn setup_ruleset_contains_only_drop_rules_in_own_table() {
         let ruleset = render_setup_ruleset();
-        assert!(ruleset.starts_with("table inet bakula {"));
+        assert!(ruleset.starts_with("table inet salticus {"));
         assert!(!ruleset.contains("flush"));
         assert!(!ruleset.contains("reject"));
         assert_eq!(ruleset.matches(" drop").count(), 4);
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn plan_block_never_touches_a_pre_existing_table_or_ruleset() {
         // Regresni pojistka proti budoucimu rozsireni, ktere by omylem zacalo
-        // generovat `flush`/`delete table`/jiny prikaz mimo vlastni "bakula" set.
+        // generovat `flush`/`delete table`/jiny prikaz mimo vlastni "salticus" set.
         let plan = plan_block(&request("203.0.113.50", 60), &protected()).unwrap();
         assert_eq!(plan.nft_command[0], "add");
         assert!(!plan.nft_command.contains(&"flush".to_string()));
