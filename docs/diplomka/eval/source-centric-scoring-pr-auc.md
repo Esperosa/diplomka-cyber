@@ -1,6 +1,6 @@
 # Jádro: proč ablace A ztrácí, a jak ji reálně zlepšit (Deliverable 28)
 
-**Status: naměřeno (29. 10. 2026).** Reakce na přímý požadavek: negativní výsledek ("ablace A prohrává s triviálním baseline na všech 3 scénářích", Deliverable 18/20) se nemá jen honestně zdokumentovat — má se zjistit, **jestli a jak se dá reálně zlepšit**. Tohle je ta diagnóza a první konkrétní, měřený krok ke zlepšení.
+**Status: naměřeno (29. 10. 2026).** Reakce na zjištění: negativní výsledek ("ablace A prohrává s triviálním baseline na všech 3 scénářích", Deliverable 18/20) se nemá jen honestně zdokumentovat — má se zjistit, **jestli a jak se dá reálně zlepšit**. Tohle je ta diagnóza a první konkrétní, měřený krok ke zlepšení.
 
 ## Diagnostická otázka
 
@@ -110,7 +110,7 @@ Botnet-42 held-out: LOSO F1-optimalni prah (z treninku)=77435.366  -> test preci
 
 ## Dodatek (30.10.2026): rozšíření na N=13 odhalilo skutečný reálný protipříklad + opraven skrytý nedeterminismus v `pr_auc`
 
-**Impuls**: uživatel výslovně odmítl N=3 jako statisticky/datově průkazné. CTU-13 dataset registry rozšířen na všech 13 standardních scénářů (7 různých rodin/technik — viz `dataset-registry.md`).
+**Důvod rozšíření**: N=3 není statisticky ani datově průkazné. CTU-13 dataset registry rozšířen na všech 13 standardních scénářů (7 různých rodin/technik — viz `dataset-registry.md`).
 
 **Vážnější nález před samotným rozšířením čísel**: `src/eval/stats.rs::pr_auc` zpracovávalo vzorky se **shodným skóre jednotlivě, ne jako skupinu** — u vázaných hodnot pak výsledek závisel na **relativním pořadí vstupu**, které u volajících se skóre uloženým v `HashMap` (`score_source_hosts`, `score_connection_keys`) **není mezi běhy procesu stabilní** (Rust `HashMap` používá per-proces náhodný hash seed). Přímo změřeno: 3 po sobě jdoucí běhy stejného testu na stejných datech daly **8/13, 9/13 a 11/13** scénářů splňujících "lift ≥ 2×" a medián zdroj-centrického liftu se lišil mezi 3.09× a 5.40× — číslo, které se mění mezi spuštěními na identických datech, **nelze nazvat statisticky průkazným**, bez ohledu na velikost N. Opraveno: vázané skóre se teď zpracovává jako jedna skupina (TP/FP připočteny najednou, bod na PR křivce spočítaný jednou za skupinu) — výsledek pak závisí jen na multisetu (skóre, label) dvojic, ne na jejich pořadí. Ověřeno: 4 opakované běhy po opravě dávají bajtově identický výstup. Regresní test (`pr_auc_is_independent_of_input_order_within_tied_scores`) i analogický test pro `IsotonicCalibrator::fit` (`fit_is_independent_of_input_order_within_tied_scores`) — oba ověřeny rozbij→spadne→vrať→projde.
 

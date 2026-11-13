@@ -1,9 +1,8 @@
 # Tvar multi-tenant schematu (design dokument, ne kod)
 
 **Status: design dokument, zadny kod, zadna migrace. Vedome.** Rozhodnuto po
-2-kolove 3-agentni debate 31.10.2026 (`docs/diplomka/produkcni-plan.md`,
-"Druhe kolo zmeny ramce"): vsichni 3 agenti (Opus comprehensive, pragmatik,
-skeptik) se shodli, ze samotny `tenant_id` sloupec/pole v kodu BY BYL horsi
+dvou kolech nezavisle revize 31.10.2026 (`docs/diplomka/produkcni-plan.md`,
+"Druhe kolo zmeny ramce"): vsechny tri nezavisle revize se shodly, ze samotny `tenant_id` sloupec/pole v kodu BY BYL horsi
 nez nic - vytvarel by stejnou falesnou duveru jako neverifikovatelna
 izolacni hranice (nikdo nema 2. realneho tenanta, proti kteremu by se dalo
 overit, ze izolace skutecne funguje), jen o vrstvu driv. Tenhle dokument
@@ -66,5 +65,5 @@ nezapomel v tomhle jednom z 30 dotazu".
 
 Neni to zavazek, ze multi-tenant se postavi v urcitem terminu. Je to jen
 to, aby rozhodnuti o TVARU bylo zapsane predem, az prijde realny trigger -
-presne to, co vsichni 3 agenti v kole 2 oznacili jako jedinou bezpecnou
+presne to, co vsechny tri revize v kole 2 oznacily jako jedinou bezpecnou
 verzi "rozhodnout tvar ted" bez rizika falesne duvery z predcasneho kodu.

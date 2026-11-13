@@ -16,7 +16,7 @@
 
 ## Interpretace
 
-Tohle je přesně ten "modest effort, dny ne týdny" kus, který všichni 3 agenti v produkčním auditu identifikovali jako kritickou cestu k H2 — a je hotový, cross-senzorově ověřený proti dvěma nezávislým reálným implementacím (ne proti jedné, a ne proti psané specifikaci, která by mohla mít nejasnosti v interpretaci).
+Tohle je přesně ten "modest effort, dny ne týdny" kus, který všechny tři nezávislé revize v produkčním auditu identifikovali jako kritickou cestu k H2 — a je hotový, cross-senzorově ověřený proti dvěma nezávislým reálným implementacím (ne proti jedné, a ne proti psané specifikaci, která by mohla mít nejasnosti v interpretaci).
 
 ## Co ještě H2 potřebuje — honestně, ne zamlčeno
 

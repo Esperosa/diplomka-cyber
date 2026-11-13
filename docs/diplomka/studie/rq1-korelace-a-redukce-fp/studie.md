@@ -22,7 +22,7 @@ Největší omezení: většina čísel je z preprintů, starých datasetů (DAR
 
 ## 2. Metodika a PRISMA
 
-Postup podle protokolu: dotazy přes WebSearch, každá kandidátní práce otevřena jako plný text (stažení PDF a převod na text), hodnoty čtené z textu a tabulek. Kde je tabulka po převodu nečitelná (rozbité sloupce), je to uvedeno v poznámce řádku a hodnota je buď vynechána, nebo označena jako odvozená.
+Postup podle protokolu: dotazy přes webové vyhledávání, každá kandidátní práce otevřena jako plný text (stažení PDF a převod na text), hodnoty čtené z textu a tabulek. Kde je tabulka po převodu nečitelná (rozbité sloupce), je to uvedeno v poznámce řádku a hodnota je buď vynechána, nebo označena jako odvozená.
 
 | Krok PRISMA | Počet |
 |---|---:|
@@ -205,7 +205,7 @@ Neúspěšné hypotézy se zveřejní stejně jako úspěšné.
 - **Hostitelská vs. síťová telemetrie:** NoDoze, RapSheet, HOLMES jsou hostitelské; přenos na Zeek/Suricata je extrapolace.
 - **Metriky nejsou srovnatelné:** počty alertů, alarmů, grafů, skupin, AUC, purity.
 - **Převod PDF:** v tabulkách RBA (Tab. 4) a DeepCASE (Tab. I) se sloupce rozpadly; kde jsem pořadí odvozoval, je to uvedeno. Axelssonův exponent 1e-5 se v převodu ztratil a čtu ho z věty „on the order of 1 [10^-5]“.
-- **Kontrola druhým agentem (protokol §9) proběhla** (`kontrola-RQ1.md`, 56 z 56 řádků, věcná chybovost 0 %, 5 drobných chyb, verdikt PŘIJATO S OPRAVAMI). Opravy jsou zapsány v `revize-RQ1.md`. Nezkontrolovanými zůstaly detaily: „po 1 měsíci ručního režimu“ (045), „labely od analytika“ (033), číslování sekcí Tedesco (056), venue Kruegel (021-023) a tvrzení „nezávislá validace chybí“ (017, v extrakci nahrazeno tvrzením autora o podhodnocení).
+- **Kontrola druhým kontrolorem (protokol §9) proběhla** (`kontrola-RQ1.md`, 56 z 56 řádků, věcná chybovost 0 %, 5 drobných chyb, verdikt PŘIJATO S OPRAVAMI). Opravy jsou zapsány v `revize-RQ1.md`. Nezkontrolovanými zůstaly detaily: „po 1 měsíci ručního režimu“ (045), „labely od analytika“ (033), číslování sekcí Tedesco (056), venue Kruegel (021-023) a tvrzení „nezávislá validace chybí“ (017, v extrakci nahrazeno tvrzením autora o podhodnocení).
 - **Citační řetězení** nebylo provedeno systematicky (viz oddíl 2).
 - **Moje vlastní výpočty** jsou označeny „vlastní výpočet“ (např. 3 991 / 177 504; 44 / 9 186; podíly z status.md).
 

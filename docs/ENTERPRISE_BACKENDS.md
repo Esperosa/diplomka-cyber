@@ -9,16 +9,16 @@ Tato dokumentace shrnuje klicove doplnky nad puvodni platformni vrstvu:
 
 `external_sql.rs` (452 radku Postgres CRUD pro users/tokens/jobs/nodes/
 ha_policy, plus vlastni `bakula-program external-sql ...` CLI podstrom)
-byl **smazan**, ne opraven/otestovan. Rozhodnuto po 2-kolove 3-agentni
-debate (`docs/diplomka/produkcni-plan.md`, "Druhe kolo zmeny ramce"):
+byl **smazan**, ne opraven/otestovan. Rozhodnuto po dvou kolech
+nezavisle revize (`docs/diplomka/produkcni-plan.md`, "Druhe kolo zmeny ramce"):
 modul mel 0 testu, 0 CI coverage, nebyl volan z `server.rs` ani
 `broker.rs`, a `jobs` tabulka nemela `spec_json`/`claimed_by`/
 `claim_until`/`attempts` sloupce ani claim/mark funkce - nebyla to
 nahradni implementace `platform.rs`'s SQLite store, jen oddelena
 administrativni vrstva, co nikdo nevyuzival a nikdy nemohla spoustet
 workery bez reimplementace poloviny `platform.rs`. Testovat kod, ktery
-nemuze nikdy fungovat, by byl ztraceny cas - smazani bylo shoda vsech 3
-agentu (Opus comprehensive, pragmatik, skeptik) v obou kolech debaty.
+nemuze nikdy fungovat, by byl ztraceny cas - smazani bylo shodne
+rozhodnuti vsech tri nezavislych revizi v obou kolech.
 
 Skutecna Postgres migrace (pro realny multi-host H5, viz
 `docs/diplomka/produkcni-plan.md`) zustava odlozena na konkretni trigger

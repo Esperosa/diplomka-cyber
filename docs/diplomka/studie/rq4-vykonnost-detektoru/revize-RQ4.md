@@ -2,7 +2,7 @@
 
 Datum: 2026-10-31. Autor-revizor. Vstup: `kontrola-RQ4.md` (verdikt PŘIJATO S OPRAVAMI). Měnil jsem jen `extrakce.csv`, `studie.md`, `neovereno.md` a tento soubor. Původní (chybné) hodnoty jsou jen zde, v hlavním textu ne.
 
-Ověření: zdroje jsem znovu stáhl do `F:\claude-tmp\revize4\` (curl, `pdftotext -layout`): Daihes (arXiv 2008.02003), Barradas (uwaterloo.ca), Parssegny (2506.08922), Nguyen-Huu (2609.27311), Anderson 2016 (1607.01639) a 2020 (2009.01939), Palau (2006.06122), Nadler (1709.08395), Drichel (2006.11103), Elaoumari (2512.20423), Kushwaha (2208.13524), Clausen (NSS20.pdf), Hynek (Springer OA). Sloupec „ověřil jsem sám“ říká, že jsem hodnotu našel v textu PDF.
+Ověření: zdroje jsem znovu stáhl do `<pracovní adresář>/revize4\` (curl, `pdftotext -layout`): Daihes (arXiv 2008.02003), Barradas (uwaterloo.ca), Parssegny (2506.08922), Nguyen-Huu (2609.27311), Anderson 2016 (1607.01639) a 2020 (2009.01939), Palau (2006.06122), Nadler (1709.08395), Drichel (2006.11103), Elaoumari (2512.20423), Kushwaha (2208.13524), Clausen (NSS20.pdf), Hynek (Springer OA). Sloupec „ověřil jsem sám“ říká, že jsem hodnotu našel v textu PDF.
 
 ## 1. Opravy v extrakci
 
@@ -68,4 +68,4 @@ Identifikováno ~275; po deduplikaci ~85; po screeningu 45; plný text 35 původ
 - RQ4-051 a RQ4-015: jen abstrakt (V2).
 - Fig. 6 v Clausen (TPR při FP 0,4 % v závislosti na chaffu) není v textu v číslech; tvrzení „detekce nemožná u všech metod“ lze ověřit jen z grafu.
 - Přesné přiřazení hodnot 0,7/0,9/1,1 % ke klasifikátorům u RQ4-031 a sloupců rodina/proces u RQ4-018 závisí na čtení rozbitého layoutu tabulek; hodnoty jsou správně, přiřazení u 031 jsem proto ponechal jako rozsah.
-- Kontrolu opravených hodnot neprovedl druhý agent.
+- Kontrolu opravených hodnot neprovedl druhý kontrolor.

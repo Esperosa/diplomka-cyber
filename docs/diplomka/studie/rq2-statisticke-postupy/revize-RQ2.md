@@ -1,6 +1,6 @@
 # Revize RQ2 po nezávislé kontrole (audit trail)
 
-Datum revize: 2026-10-31. Vstup: `kontrola-RQ2.md` (verdikt PŘIJATO S OPRAVAMI). Změněné soubory: `extrakce.csv` (12 řádků), `studie.md`, tento soubor. `neovereno.md` beze změny (žádný řádek se nepodařilo neověřit, viz §4). Zdroje jsem znovu stáhl do `F:\claude-tmp\rq2rev\` (curl, `pdftotext -layout`) a hodnoty hledal v textu sám; kontrolora jsem nepřebíral slepě. Ve všech opravovaných bodech se kontrolor nemýlil. Původní verze pro srovnání: `F:\claude-tmp\rq2rev\extrakce.pre-revize.csv`, `studie.pre-revize.md`.
+Datum revize: 2026-10-31. Vstup: `kontrola-RQ2.md` (verdikt PŘIJATO S OPRAVAMI). Změněné soubory: `extrakce.csv` (12 řádků), `studie.md`, tento soubor. `neovereno.md` beze změny (žádný řádek se nepodařilo neověřit, viz §4). Zdroje jsem znovu stáhl do `<pracovní adresář>/rq2rev\` (curl, `pdftotext -layout`) a hodnoty hledal v textu sám; kontrolora jsem nepřebíral slepě. Ve všech opravovaných bodech se kontrolor nemýlil. Původní verze pro srovnání: `<pracovní adresář>/rq2rev\extrakce.pre-revize.csv`, `studie.pre-revize.md`.
 
 ## 1. Opravy v extrakci (původní hodnota zde, ne v hlavním textu)
 
@@ -51,7 +51,7 @@ Navazující úpravy `studie.md`: §1 abstrakt (body 2, 3, 6, 7), §2 PRISMA + m
 
 1. Řádky ze vzorku kontrolora, které jsem při revizi znovu neotevíral (např. 044, MAWIFlow Obr. 3d, čteno kontrolorem z vykreslené stránky), přebírám z kontroly. Jedno čtení tabulky z obrázku nemám nezávisle potvrzené.
 2. RQ2-038: hodnoty 0,99 (CIC) a 0,96 (UGR'16) jsou jen v textu úvodu, ne v tabulce; identifikace dvojice 2017 -> 2018 je inference z hodnoty 60,62; 0,687 v úvodu vs 68,77 v Tab. 5.
-3. Lévy-Leduc & Roueff: hodnoty z preprintu arXiv 0908.2310, ne z finální sazby Annals of Applied Statistics (Project Euclid za ochranou). Schmidl: PDF z vldb.org, DOI neotevřeno. Soule: uvedená URL USENIX dnes vrací HTML, ne PDF; hodnoty jsem ověřil na dříve staženém PDF téže práce (`F:\claude-tmp\rq2\pdf\soule2.pdf`).
+3. Lévy-Leduc & Roueff: hodnoty z preprintu arXiv 0908.2310, ne z finální sazby Annals of Applied Statistics (Project Euclid za ochranou). Schmidl: PDF z vldb.org, DOI neotevřeno. Soule: uvedená URL USENIX dnes vrací HTML, ne PDF; hodnoty jsem ověřil na dříve staženém PDF téže práce (`<pracovní adresář>/rq2\pdf\soule2.pdf`).
 4. 018: jednotka „falešný alarm“ u CUSUM na agregátu není vymezena tak přímo jako u TopRank; srovnání zůstává nečisté.
 5. Žádný řádek se nepřesouval do `neovereno.md`: u všech 53 řádků byla hodnota nalezena ve zdroji. Řádky 007–009 zůstávají V2 (abstrakt); netvoří opěru žádného Z.
 6. Z5b a Z1b jsou ponechány v tabulce jako označené nepodložené / nízké, ne smazány.

@@ -1,6 +1,6 @@
 # RQ2: Statistické postupy a jejich doložený vliv na FPR/TPR u síťových anomálií
 
-Datum: 2026-10-31. Protokol: `docs/diplomka/studie/00-protokol.md` v1.0. Data: `extrakce.csv` (53 řádků, id `RQ2-001` až `RQ2-053`), `hledani.csv` (28 dotazů), `neovereno.md`. Zdrojové texty (PDF a jejich textové výtahy) jsou mimo repozitář v `F:\claude-tmp\rq2\` (revizní stažení v `F:\claude-tmp\rq2rev\`). Všechny doslovné citace v `extrakce.csv` byly strojově ověřeny proti textu staženého PDF (53/53 nalezeno). Proběhla nezávislá kontrola (`kontrola-RQ2.md`, verdikt PŘIJATO S OPRAVAMI) a revize (`revize-RQ2.md`); stav po revizi popisuje tento text, původní hodnoty chyb jsou jen v revizním logu.
+Datum: 2026-10-31. Protokol: `docs/diplomka/studie/00-protokol.md` v1.0. Data: `extrakce.csv` (53 řádků, id `RQ2-001` až `RQ2-053`), `hledani.csv` (28 dotazů), `neovereno.md`. Zdrojové texty (PDF a jejich textové výtahy) jsou mimo repozitář v `<pracovní adresář>/rq2\` (revizní stažení v `<pracovní adresář>/rq2rev\`). Všechny doslovné citace v `extrakce.csv` byly strojově ověřeny proti textu staženého PDF (53/53 nalezeno). Proběhla nezávislá kontrola (`kontrola-RQ2.md`, verdikt PŘIJATO S OPRAVAMI) a revize (`revize-RQ2.md`); stav po revizi popisuje tento text, původní hodnoty chyb jsou jen v revizním logu.
 
 ## 1. Abstrakt a hlavní závěry
 
@@ -20,7 +20,7 @@ Silné stránky studie: doslovně ověřené citace, uvedené negativní výsled
 
 ## 2. Metodika a PRISMA
 
-Hledání: WebSearch (28 dotazů, viz `hledani.csv`; 7 dotazů typu „proti“: kritika, selhání, drift, base-rate, chybějící srovnání), plné texty přes PDF stažené a převedené `pdftotext` (WebFetch na PDF vracel nečitelný binární obsah). Období 2015-2026, starší práce označeny `seminal=ano` (Ringberg 2007, Soule 2005, Münz & Carle 2008, Brauckhoff 2010, Lévy-Leduc & Roueff 2009). Hodnoty a citace v `extrakce.csv` pocházejí z textu PDF; citace (<= 25 slov) byly strojově porovnány s textem. Citační řetězení bylo omezené (viz §8); do plného textu se nedostaly Sommer & Paxson 2010, INSOMNIA 2021 ani Brauckhoff INFOCOM 2009 (servery odmítly spojení nebo vrátily 403).
+Hledání: webové vyhledávání (28 dotazů, viz `hledani.csv`; 7 dotazů typu „proti“: kritika, selhání, drift, base-rate, chybějící srovnání), plné texty přes PDF stažené a převedené `pdftotext` (přímé načtení PDF vracelo nečitelný binární obsah). Období 2015-2026, starší práce označeny `seminal=ano` (Ringberg 2007, Soule 2005, Münz & Carle 2008, Brauckhoff 2010, Lévy-Leduc & Roueff 2009). Hodnoty a citace v `extrakce.csv` pocházejí z textu PDF; citace (<= 25 slov) byly strojově porovnány s textem. Citační řetězení bylo omezené (viz §8); do plného textu se nedostaly Sommer & Paxson 2010, INSOMNIA 2021 ani Brauckhoff INFOCOM 2009 (servery odmítly spojení nebo vrátily 403).
 
 | Krok PRISMA | Počet | Poznámka |
 |---|---:|---|
@@ -32,7 +32,7 @@ Hledání: WebSearch (28 dotazů, viz `hledani.csv`; 7 dotazů typu „proti“:
 | Zahrnuto do extrakce | 31 děl, 53 řádků | |
 | z toho V3 / V2 | 30 děl (50 řádků) / 1 dílo (3 řádky) | V2: abstrakt disertace Brauckhoff (tělo 300 tis. znaků nečteno) |
 | Řádky s číselnou hodnotou | 42 | cíl 40 splněn těsně |
-| Nezávislá kontrola (protokol §9) | 37 z 53 řádků (70 %) | 2026-10-31, nezávislý agent; vzorek A = 29 řádků, na nichž stály závěry se střední/vysokou jistotou, vzorek B = 8 řádků ručně napříč zdroji (bez seedu); věcná chybovost 0/37 (0 %), drobné chyby 6/37 (16 %), neověřitelné 0; verdikt **PŘIJATO S OPRAVAMI** (`kontrola-RQ2.md`) |
+| Nezávislá kontrola (protokol §9) | 37 z 53 řádků (70 %) | 2026-10-31, nezávislý kontrolor; vzorek A = 29 řádků, na nichž stály závěry se střední/vysokou jistotou, vzorek B = 8 řádků ručně napříč zdroji (bez seedu); věcná chybovost 0/37 (0 %), drobné chyby 6/37 (16 %), neověřitelné 0; verdikt **PŘIJATO S OPRAVAMI** (`kontrola-RQ2.md`) |
 | Revize po kontrole | 16 dosud nekontrolovaných řádků znovu ověřeno u zdroje; upraveno 12 řádků extrakce | viz `revize-RQ2.md`: opraveny drobné chyby (001, 018, 031, 038, 039, 046, 050; URL u 014, 015, 051), při vlastním ověření nalezena další nepřesnost (047) a doplněn dataset u 052, sníženo nebo rozděleno 6 závěrů (Z1, Z4, Z5, Z6, Z8, Z9); neověřitelné řádky žádné, takže `neovereno.md` se nerozrostlo |
 
 Cíle protokolu: >= 30 přečtených zdrojů (splněno: 31 zahrnutých + 11 vyřazených), >= 20 s V3/V2 (31), >= 40 číselných řádků (42), nezávislá kontrola >= 30 % a >= 20 řádků (splněno: 70 %, 37). Po revizi je znovu zdrojem ověřeno všech 53 řádků (37 kontrolorem, 16 autorem revize; řádky 007 až 009 jen na úrovni abstraktu, V2). Strojová kontrola citací nenahrazuje kontrolu čtení tabulek; ta proběhla nezávisle jen u vzorku. Z původních hodnot chyb nic nezůstalo v hlavním textu, původní znění je v revizním logu.

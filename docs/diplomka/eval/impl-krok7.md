@@ -1,6 +1,6 @@
 # Implementace, krok 7: zadržení, invarianty a detekce bez neřízených slepých míst
 
-Datum 2026-11-05. Výchozí stav: krok 6 hotov (`impl-krok6.md` včetně review kol 1 až 3). `legacy` je výchozí, v3 volitelné s presetem kroku 6 (`v3k6` = preset kroku 5 + `sensor_strict` + `novelty`). Council (Claude Opus 5.5, GPT-6.1 Sol, DeepSeek) hodnotil krok 6 na 7, 6 a 6,5 z 10: návrh 8 až 8,5, důkazy 4 až 5,5. Doporučil krok 7 v pořadí zadržení a invarianty (A), detekce (B), evaluace (C).
+Datum 2026-11-05. Výchozí stav: krok 6 hotov (`impl-krok6.md` včetně revizních kol 1 až 3). `legacy` je výchozí, v3 volitelné s presetem kroku 6 (`v3k6` = preset kroku 5 + `sensor_strict` + `novelty`). Nezávislá revize kroku 6 (tři hodnotitelé) dala 7, 6 a 6,5 z 10: návrh 8 až 8,5, důkazy 4 až 5,5. Doporučila krok 7 v pořadí zadržení a invarianty (A), detekce (B), evaluace (C).
 
 Čísla, ze kterých se vychází, jsou z kroku 6 (držené seedy 20261701 a 20261801, rameno `v3k6` proti `legacy`, `k6/held-*.md`), ne z kroku 5:
 
@@ -122,7 +122,7 @@ Index S zůstává definovaný jako v kroku 5, hranice pásem `--edges 0.1718,0.
 
 ### B2. Ramena
 
-Jedna binárka (release, `CARGO_TARGET_DIR=F:/claude-tmp/target-soak`, commit zapsaný v sekci D). Společné volby: `--block-size 2 --no-legs --no-feedback --counterfactual --max-networks 40`, šum 1×, bez kalibrace. Zátěž: 2 ramena současně, 3 vlákna každé, priorita Idle, kontrola zatížení před spuštěním.
+Jedna binárka (release, `CARGO_TARGET_DIR=<pracovní adresář>/target-soak`, commit zapsaný v sekci D). Společné volby: `--block-size 2 --no-legs --no-feedback --counterfactual --max-networks 40`, šum 1×, bez kalibrace. Zátěž: 2 ramena současně, 3 vlákna každé, priorita Idle, kontrola zatížení před spuštěním.
 
 | rameno | konfigurace |
 |---|---|
@@ -328,7 +328,7 @@ Všechna okna spadají do studeného startu (< 48 h). Zralé období v žádném
 
 - `soak verify --samples 6` nad drženým výstupem `v3k7-20261901`: 6 ze 6 bloků bit po bitu shodných.
 - Golden snapshot (legacy) je zelený (`cargo test --test golden_snapshot`).
-- Svět `full` bez nových přepínačů: kód kroku 7 (`749047d`) dává na 40 sítích seedu 20261701 bajtově stejný `networks.jsonl` jako výstup kroku 6 (`8828834`). Na seedu 20261801 se liší 2 sítě ze 40 (8 a 25), a to jen ve výsledcích žebříku. Abych zjistil příčinu, sestavil jsem stav těsně před krokem 7 (`24be082`) a pustil 26 sítí seedu 20261801: proti kroku 7 se neliší žádná síť, proti `8828834` tytéž 2 sítě. Rozdíl tedy způsobily opravy z review kol 2 a 3 kroku 6 (`fceb31e`, reset uložených případů novosti v žebříku) až po drženém běhu kroku 6, ne krok 7. Zpětná kompatibilita kroku 7 je doložená. Výstupy kroku 6 nejsou bajtově reprodukovatelné aktuálním kódem kroku 6: změna leží jen v počtu rozhodnutí žebříku na 2 sítích ze 80 a čísla kroku 6 nemění.
+- Svět `full` bez nových přepínačů: kód kroku 7 (`749047d`) dává na 40 sítích seedu 20261701 bajtově stejný `networks.jsonl` jako výstup kroku 6 (`8828834`). Na seedu 20261801 se liší 2 sítě ze 40 (8 a 25), a to jen ve výsledcích žebříku. Abych zjistil příčinu, sestavil jsem stav těsně před krokem 7 (`24be082`) a pustil 26 sítí seedu 20261801: proti kroku 7 se neliší žádná síť, proti `8828834` tytéž 2 sítě. Rozdíl tedy způsobily opravy z revizních kol 2 a 3 kroku 6 (`fceb31e`, reset uložených případů novosti v žebříku) až po drženém běhu kroku 6, ne krok 7. Zpětná kompatibilita kroku 7 je doložená. Výstupy kroku 6 nejsou bajtově reprodukovatelné aktuálním kódem kroku 6: změna leží jen v počtu rozhodnutí žebříku na 2 sítích ze 80 a čísla kroku 6 nemění.
 - Dotčené testy po změně presetu prošly (`engine::`, `eval::`, `soak::`, `behavior::`, 138 testů). Celá knihovna před změnou presetu: 513 prošlo, 0 selhalo (`--skip broker::`). Integrační `engine_v3`: 3 ze 3.
 
 **R: splněno.**

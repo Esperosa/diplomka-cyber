@@ -2,7 +2,7 @@
 
 Stav: rychlá rešerše (datum 2026-10-31). Jde o první průchod, ne o systematickou přehledovou studii.
 
-Metoda: WebSearch (standard) a WebFetch, 8 bodů projektu, u každého bodu 3 až 4 dotazy (akademické i praktické: arXiv, USENIX, ACM, IEEE, vendor dokumentace, patenty). Kandidáti otevřeni přes WebFetch. Většina zdrojů je ověřena jen na úrovni abstraktu nebo snippetu, plné texty jsou uvedeny explicitně.
+Metoda: webové vyhledávání a přímé otevření zdrojů, 8 bodů projektu, u každého bodu 3 až 4 dotazy (akademické i praktické: arXiv, USENIX, ACM, IEEE, vendor dokumentace, patenty). Kandidáti otevřeni přes přímé načtení stránky. Většina zdrojů je ověřena jen na úrovni abstraktu nebo snippetu, plné texty jsou uvedeny explicitně.
 
 Poznámka k úplnosti: „nenalezeno" v této tabulce znamená jen, že nic nenašlo těchto několik dotazů. Neznamená, že to neexistuje. Chybí IEEE Xplore, ACM DL a USENIX jako přímé prohledávání, GitHub code search a patentové databáze v plné šíři.
 

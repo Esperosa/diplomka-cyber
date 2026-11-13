@@ -19,7 +19,7 @@ Důsledek pro Skákavku: deduktivní a pravděpodobnostní jádro dává smysl h
 
 ## Metodika a PRISMA
 
-**Zdroje a dotazy.** 29 dotazů přes WebSearch (pokrývá Google Scholar, arXiv, USENIX, NDSS, IEEE, ACM), z toho 5 dotazů „proti“ (unreliable, fails, missed attacks, poor performance, prompt injection) a 3 opakované dotazy na MLN a ProbLog, které ověřují mezeru. Citační řetězení proběhlo u Alert-Bench → AIDA (plný text), ORTHRUS → Flash, Simpler → Kairos/Orthrus/Nodlink, NoDoze → RapSheet a Kairos → Unicorn.
+**Zdroje a dotazy.** 29 dotazů přes webové vyhledávání (pokrývá Google Scholar, arXiv, USENIX, NDSS, IEEE, ACM), z toho 5 dotazů „proti“ (unreliable, fails, missed attacks, poor performance, prompt injection) a 3 opakované dotazy na MLN a ProbLog, které ověřují mezeru. Citační řetězení proběhlo u Alert-Bench → AIDA (plný text), ORTHRUS → Flash, Simpler → Kairos/Orthrus/Nodlink, NoDoze → RapSheet a Kairos → Unicorn.
 
 **Čtení.** Plné texty jsem stáhl jako PDF z arXiv, USENIX, NDSS a z institucionálních stránek a převedl je nástrojem `pdftotext`. Hodnoty jsem četl přímo z tabulek a textu. U každého řádku V3 je uvedeno místo v textu a doslovná citace.
 

@@ -20,7 +20,7 @@ Neodpovídá se: výkon RITA na reálném provozu (jediná nezávislá zkouška 
 
 ## 2. Metodika a PRISMA
 
-Zdroje: WebSearch (kombinace indexů, USA), stažení PDF přes curl a `pdftotext` (všechny hodnoty čteny z textu, ne ze shrnutí), WebFetch pro abstrakty. Datum 2026-10-31. Období 2015-2026, starší jen označené `seminal=ano` (Jung 2004, Javed 2013, Maiolini 2009). Dotazy jsou v `hledani.csv`; 28 dotazů, z toho „proti“: 8 (beacon evasion, DNS FP z CDN/AV, port scan FP, DGA limitace, DoH limitace, JA3 limitace, cross-dataset CTU-13, DNS low-and-slow). Citační řetězení: u Hopper (SAL, Latte, rare-edge), Euler (Argus, Pikachu, GL-GV), Nadler (DoH diplomka), Clausen (osm SSD metod) jsem prošel reference, ale jen u Euler/Bowman/Larroche jsem referencovaný článek skutečně otevřel. Požadavek protokolu „aspoň 5 klíčových prací se zpětným i dopředným řetězením“ proto splněn pouze zpětně a částečně (přiznáno).
+Zdroje: webové vyhledávání (kombinace indexů, USA), stažení PDF přes curl a `pdftotext` (všechny hodnoty čteny z textu, ne ze shrnutí), přímé načtení stránky pro abstrakty. Datum 2026-10-31. Období 2015-2026, starší jen označené `seminal=ano` (Jung 2004, Javed 2013, Maiolini 2009). Dotazy jsou v `hledani.csv`; 28 dotazů, z toho „proti“: 8 (beacon evasion, DNS FP z CDN/AV, port scan FP, DGA limitace, DoH limitace, JA3 limitace, cross-dataset CTU-13, DNS low-and-slow). Citační řetězení: u Hopper (SAL, Latte, rare-edge), Euler (Argus, Pikachu, GL-GV), Nadler (DoH diplomka), Clausen (osm SSD metod) jsem prošel reference, ale jen u Euler/Bowman/Larroche jsem referencovaný článek skutečně otevřel. Požadavek protokolu „aspoň 5 klíčových prací se zpětným i dopředným řetězením“ proto splněn pouze zpětně a částečně (přiznáno).
 
 PRISMA (počty jsou moje evidence; „identifikováno“ jsou řádky výsledků hledání, ne unikátní práce):
 
@@ -39,7 +39,7 @@ Důvody vyloučení na úrovni screeningu: bez metriky (blogy, tutoriály), pate
 
 ### Nezávislá kontrola a revize
 
-Nezávislá kontrola proběhla 2026-10-31 (`kontrola-RQ4.md`, druhý agent bez znalosti závěrů): vzorek všech 56 řádků V3/V2 (100 %), plné texty staženy znovu. Výsledek: 44 OK, 9 drobných chyb, 1 věcná chyba (RQ4-050), 2 neověřitelné řádky (RQ4-033, 034, Lee a Lee, uzavřený přístup); věcná chybovost 1/54 = 1,9 % (limit 5 %), drobná 9/54 = 16,7 %, neověřitelných 2/56 = 3,6 %; žádná vymyšlená citace. Verdikt: PŘIJATO S OPRAVAMI. Po kontrole se změnilo: 54 řádků (033 a 034 přesunuty do `neovereno.md`), RQ4-051 přeznačen na V2, opraveny hodnoty nebo umístění v 17 řádcích, závěry Z3, Z6, Z7, Z8, Z10, Z12, Z14, Z15 sníženy nebo přeformulovány, upraveny abstrakt, §6 a hypotézy H4-3, H4-6, H4-7, H4-8. Původní chybné hodnoty a postup oprav jsou jen v `revize-RQ4.md` (audit trail). U dotčených hodnot jsem zdroje znovu otevřel (viz `revize-RQ4.md`).
+Nezávislá kontrola proběhla 2026-10-31 (`kontrola-RQ4.md`, druhý kontrolor bez znalosti závěrů): vzorek všech 56 řádků V3/V2 (100 %), plné texty staženy znovu. Výsledek: 44 OK, 9 drobných chyb, 1 věcná chyba (RQ4-050), 2 neověřitelné řádky (RQ4-033, 034, Lee a Lee, uzavřený přístup); věcná chybovost 1/54 = 1,9 % (limit 5 %), drobná 9/54 = 16,7 %, neověřitelných 2/56 = 3,6 %; žádná vymyšlená citace. Verdikt: PŘIJATO S OPRAVAMI. Po kontrole se změnilo: 54 řádků (033 a 034 přesunuty do `neovereno.md`), RQ4-051 přeznačen na V2, opraveny hodnoty nebo umístění v 17 řádcích, závěry Z3, Z6, Z7, Z8, Z10, Z12, Z14, Z15 sníženy nebo přeformulovány, upraveny abstrakt, §6 a hypotézy H4-3, H4-6, H4-7, H4-8. Původní chybné hodnoty a postup oprav jsou jen v `revize-RQ4.md` (audit trail). U dotčených hodnot jsem zdroje znovu otevřel (viz `revize-RQ4.md`).
 
 Hodnocení kvality: `E` a `riziko_zkreseni` podle §6 protokolu. Žádný zdroj není E1 (systematický přehled s kvantitativní syntézou); Larroche 2026 (RQ4-039/040) a Clausen (RQ4-048 až 050) jsou nejblíže E2 (re-evaluace/nezávislé srovnání).
 
@@ -221,9 +221,9 @@ Formát: změna → očekávaný efekt (rozsah z důkazů) → metrika → scén
 
 ## 8. Hrozby validity
 
-- Silné zkreslení výběrem: WebSearch vrací shrnutí, ne systematický index; nepoužil jsem ACM DL/IEEE Xplore přímo. Paywallované práce (Stergiopoulos, ETDetector, Song 2001) jsou V1.
+- Silné zkreslení výběrem: webové vyhledávání vrací shrnutí, ne systematický index; nepoužil jsem ACM DL/IEEE Xplore přímo. Paywallované práce (Stergiopoulos, ETDetector, Song 2001) jsou V1.
 - 33 položek V1/V0 se nepromítlo do závěrů, ale mohou obsahovat protichůdné výsledky (např. UC Davis: osminásobný nárůst FPR TRW při vzorkování 1/10).
-- Nezávislá kontrola proběhla (`kontrola-RQ4.md`, 100 % řádků; věcná chybovost 1,9 %); revizi provedl autor-revizor a opravené hodnoty druhý agent znovu nekontroloval.
+- Nezávislá kontrola proběhla (`kontrola-RQ4.md`, 100 % řádků; věcná chybovost 1,9 %); revizi provedl autor-revizor a opravené hodnoty druhý kontrolor znovu nekontroloval.
 - Několik zahrnutých zdrojů jsou preprinty 2026 (Larroche 2026, Nguyen-Huu, Sohail, Gurappa) nebo MSc práce (Elaoumari) a nebyly recenzovány.
 - Čísla z tabulek PDF mají některá riziko chyby extrakce (RQ4-016 Tab. V rozbitá, RQ4-038 sloupce P); označeno v řádcích.
 - Autor studie provedl několik odvozených výpočtů (precision z TP/FP, FP/den z FP/18 dní, 865 FP, počty toků z procent u RQ4-009), označeno „odhad autora studie“.

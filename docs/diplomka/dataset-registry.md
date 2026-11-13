@@ -28,7 +28,7 @@ Registr datových zdrojů pro `src/eval/` (replay a baseline měření korelačn
 
 ### Rozšíření 30.10.2026 — 7 dalších scénářů (committed) + 1 velký (gitignored)
 
-**Impuls**: stejný jako u CTU-13 výše — N=2 (jen 1 malware rodina) bylo uživatelem odmítnuto jako nedostatečné. IoT-23 má 20 individuálních scénářů na mirroru; doplněno 7 malých (pod 3 MB, committed) + zaznamenán 1 větší (24 MB, gitignored, zatím nezapojený do testu).
+**Důvod rozšíření**: stejný jako u CTU-13 výše — N=2 (jen 1 malware rodina) je jako vzorek nedostatečné. IoT-23 má 20 individuálních scénářů na mirroru; doplněno 7 malých (pod 3 MB, committed) + zaznamenán 1 větší (24 MB, gitignored, zatím nezapojený do testu).
 
 **Reálný bug nalezený při rozšíření**: `CTU-IoT-Malware-Capture-34-1` má `tunnel_parents`/`label`/`det_label` jako **3 řádně oddělené tab-pole** (novější verze CTU labelovacího skriptu), ne smáčknutý kombinovaný formát jako 44-1/Somfy-01. Bez opravy `extract_label` (`src/eval/sources/iot23.rs`) by se každý řádek tiše vyhodnotil jako "Unknown" (fail-safe z dřívější N9 opravy) — celý scénář by tiše změřil 0 known klíčů, ne viditelně selhal. Opraveno: `extract_label` teď nejdřív zkusí přesný klíč `"label"` (nový formát), až pak fallback na kombinované pole (starý formát). Ověřeno rozbij→spadne→vrať→projde (2 nové testy, oba spadly se `0 malicious`/`"Unknown" != "Benign"` před oprava).
 
@@ -91,7 +91,7 @@ curl -s "$base/CTU-IoT-Malware-Capture-3-1/bro/conn.log.labeled" -o labs/dataset
 
 **Deliverable 18 (29.10.2026) — rozšíření ze 1 na 3 scénáře, 2 další malware rodiny.** Důvod offsetu u Botnet-42: první 30 MB (chronologický začátek 6,15h capture) obsahovalo 0 Botnet-labelovaných flows — malware aktivita v téhle capture začíná později. Ověřeno přímo (`curl` sondy na 150MB/250MB offsetu), ne odhadnuto. Výřez proto sestaven jako: hlavičkový řádek z bytu 0 (CSV header, nutný pro `src/eval/sources/ctu13.rs::column()` lookup podle jména) + 30 MB dat od bytu 150 000 000, první (potenciálně useknutý) řádek dat zahozen. **Honestní poznámka k Botnet-51**: tahle scénář má v adresáři i druhý soubor (`capture20110818.binetflow.labeled`, jiné jméno sloupců `Label(Normal:CC:Background)` + extra `CCDetector` sloupec) — NEpoužitý, protože nemá stejné schéma jako ostatní 2 scénáře; ověřeno přímo (`curl -r 0-500`), ne předpokládáno ze jména souboru.
 
-**Oprava 29.10.2026:** všechny tři SHA-256 hashe v této tabulce byly dřív useknuté o 1 hex znak (63 místo 64) — chyba při přepisu z `sha256sum` výstupu, odhalená nezávislou kontrolou (Opus Plan agent). Opraveno zde na skutečné hashe.
+**Oprava 29.10.2026:** všechny tři SHA-256 hashe v této tabulce byly dřív useknuté o 1 hex znak (63 místo 64) — chyba při přepisu z `sha256sum` výstupu, odhalená nezávislou kontrolou. Opraveno zde na skutečné hashe.
 
 **Reprodukce stažení** (HTTP Range request — "reprezentativní výřez", ne bezhlavé stažení celého souboru, per návrh sekce 7):
 ```
@@ -105,7 +105,7 @@ cat header.tmp body.tmp > labs/datasets/ctu13/Botnet-42/capture20110810.binetflo
 
 ### Rozšíření 30.10.2026 — zbývajících 10 scénářů, plná sada 13/13
 
-**Impuls**: uživatel výslovně odmítl N=3 jako statisticky/datově průkazné ("dataset testů je stále moc malý"). CTU-13 (akademický paper "An empirical comparison of botnet detection methods", mcfp.weebly.com) má přesně 13 scénářů — tahle session doplnila zbývajících 10, čímž je **poprvé pokryta celá, standardní, publikovaná CTU-13 sada, ne jen výběr 3**.
+**Důvod rozšíření**: N=3 není statisticky ani datově průkazné. CTU-13 (akademický paper "An empirical comparison of botnet detection methods", mcfp.weebly.com) má přesně 13 scénářů — bylo doplněno zbývajících 10, čímž je **poprvé pokryta celá, standardní, publikovaná CTU-13 sada, ne jen výběr 3**.
 
 **Rodina u každého scénáře ověřena PŘÍMO na `mcfp.felk.cvut.cz`** (jméno exe vzorku a/nebo capture název v adresáři scénáře), **ne odhadnuta ze zapamatované mapovací tabulky** — stejná disciplína, co tento projekt už jednou vynutila opravu (Virut/RBot mix-up, viz historie výše v tomto dokumentu). Dva scénáře se od často citované "scénář 6 = Menti, scénář 8 = Murlo" tabulky skutečně liší: přímo zjištěno **Donbot** (Botnet-47) a **Qvod** (Botnet-49), ne Menti/Murlo. Dva scénáře (Botnet-46, Botnet-53) nemají u zdroje jednoznačné jméno rodiny (jen capture technika "fast-flux" / generické "bot") — zapsáno honestně jako neoznačené, ne domyšlené.
 

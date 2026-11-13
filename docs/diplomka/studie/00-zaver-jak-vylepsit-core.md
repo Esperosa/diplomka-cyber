@@ -574,7 +574,7 @@ Ve v1.0 bylo pořadí seřazené podle metodické čistoty (P1 až P4), a oprava
 
 Předpoklady:
 - jeden vývojář a jeden stroj, na kterém běží `bakula-soak-*`. Do těchto procesů se nezasahuje a A/B běhy se pouští jen ve volném okně (pragmatik E4),
-- commit po kusech, push až po dokončené sekci (CLAUDE.md),
+- commit po logických celcích, push až po dokončené sekci,
 - dny jsou odhad pragmatika upravený autorem (přidaná diagnostika R13), ne měření.
 
 ### 5A.1 Nejmenší sada změn a pořadí
@@ -833,7 +833,7 @@ Celkem odhadem desítky hodin místo ≈ 180 h ve v1.0. Po E0 se odhad přepoč�
 - **RQ1:** řádky RQ1-057 a RQ1-058 (doplněny po kontrole); detaily RQ1-033, -045, -056, -021 až -023 (revize-RQ1 §E). Rozpor v čtení Tab. 4 RBA (RQ1-038) mezi kontrolorem a revizorem dopadá na R9 a X17. Závěry Z6, Z7, Z9, Z12, Z13 nebyly nezávisle prověřeny.
 - **RQ2:** 16 řádků ověřil jen autor revize (mimo jiné RQ2-006 až -011, -020, -034, -035, -037, -043, -045, -047, -048, -049, -053). Na RQ2-043 stojí rekalibrace po ~100 štítcích v R12. RQ2-044 přečten z obrázku.
 - **RQ3:** RQ3-028, -032, -033, -047, -048, -050, -051, -055, -057 ověřil jen autor revize. Na RQ3-050 a -051 stojí randomizace v R10.
-- **RQ4:** opravené hodnoty 17 řádků po kontrole druhý agent znovu nekontroloval. RQ4-015 a -051 jsou jen V2.
+- **RQ4:** opravené hodnoty 17 řádků po kontrole druhý kontrolor znovu nekontroloval. RQ4-015 a -051 jsou jen V2.
 - **RQ5:** druhou revizi nedělal nezávislý kontrolor, opravené řádky (mimo jiné 023, 041, 047, 052, 053) nejsou nezávisle ověřeny; mimo vzorek zůstaly RQ5-010, -029, -056, -059. Fakta o kódu soaku (S1 až S11) jsem zčásti ověřil sám (§4.4); S8 a S9 ne.
 - **RQ6:** 25 z 51 řádků bez nezávislé kontroly, mimo jiné RQ6-004, -005 (sebe-revize), -047 (Zhai, opora M45 a M46), -049, -019, -020, -027 až -029, -036, -037, -039.
 - **Audit 01:** neověřil jsem A35 (paniky; v [v2b] 0), hypotézu zastaralého inventáře u `unexpected_traffic`, chování na reálném Zeeku (A06 plyne z kódu) ani S8 a S9.

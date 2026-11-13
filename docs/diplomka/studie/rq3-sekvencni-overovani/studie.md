@@ -21,7 +21,7 @@ Přečetli jsme 30 zdrojů, z nich 27 vstoupilo do extrakce (26 × V3, 1 × V2).
 
 ## 2. Metodika a PRISMA
 
-Strategie podle protokolu §3: WebSearch (24 dotazů, 4 negativní, viz `hledani.csv`), plný text stahován přes curl a převáděn `pdftotext -layout`, hodnoty čteny z tabulek a textu. WebFetch sám vracel u PDF jen binární text, proto bylo čtení z lokálně převedeného PDF. Období 2015 až 2026, starší práce označeny `seminal=ano` (TRW 2004, RBS 2004). Citační řetězení: u TRW (dopředu: Schechter 2004, Jung 2008, Alsaleh 2011, BotSniffer, BotProbe), u AI² (Chen 2023 navazuje), u Carbon Filter (NoDoze, RapSheet), u DeepCASE (AACT, imbalance 2025), u Kruegel 2004 (jen sekundárně). Systematické průchody referencí všech 5 klíčových prací jsme neudělali; je to omezení.
+Strategie podle protokolu §3: webové vyhledávání (24 dotazů, 4 negativní, viz `hledani.csv`), plný text stahován přes curl a převáděn `pdftotext -layout`, hodnoty čteny z tabulek a textu. Přímé načtení stránky sám vracel u PDF jen binární text, proto bylo čtení z lokálně převedeného PDF. Období 2015 až 2026, starší práce označeny `seminal=ano` (TRW 2004, RBS 2004). Citační řetězení: u TRW (dopředu: Schechter 2004, Jung 2008, Alsaleh 2011, BotSniffer, BotProbe), u AI² (Chen 2023 navazuje), u Carbon Filter (NoDoze, RapSheet), u DeepCASE (AACT, imbalance 2025), u Kruegel 2004 (jen sekundárně). Systematické průchody referencí všech 5 klíčových prací jsme neudělali; je to omezení.
 
 | Krok PRISMA | Počet | Poznámka |
 |---|---:|---|
@@ -37,7 +37,7 @@ Důvody vyloučení souhrnně: nedostupný plný text (8), žádná metrika tri�
 
 Rozdělení extrakčních řádků podle V: V3 = 56, V2 = 1, V1/V0 = 0 (V1/V0 jsou jen v `neovereno.md`). Řádky s číselnou hodnotou výsledku: zhruba 45 (zbytek jsou kvalitativní limity/evaze s popisem; sloupec `hodnota` je u nich označen "kvalitativně").
 
-Nezávislá kontrola (§9 protokolu), 2026-10-31: druhý agent znovu stáhl zdroje a ověřil 48 z 57 řádků (84 %; povinně všechny řádky opírající závěry se střední jistotou, plus všechny řádky šesti klíčových zdrojů, plus systematický doplněk). Věcná chyba: 1 (2,1 %, metadata řádku 054), drobné chyby 12 (chybějící podmínky u čísel, umístění), neověřitelné 0. Verdikt PŘIJATO S OPRAVAMI. Po kontrole: provedeny opravy extrakce, přeformulovány závěry Z1, Z2, Z4, Z7, Z8, Z12, Z13; 9 řádků kontrola neověřila, proto je autor revize znovu otevřel a potvrdil (028, 032, 033, 047, 048, 050, 051, 055, 057; 048 jen na úrovni V2). Jedna oprava kontroly (010, Tab.5) se po novém ověření nepotvrdila. Původní hodnoty a podrobnosti: `revize-RQ3.md`.
+Nezávislá kontrola (§9 protokolu), 2026-10-31: druhý kontrolor znovu stáhl zdroje a ověřil 48 z 57 řádků (84 %; povinně všechny řádky opírající závěry se střední jistotou, plus všechny řádky šesti klíčových zdrojů, plus systematický doplněk). Věcná chyba: 1 (2,1 %, metadata řádku 054), drobné chyby 12 (chybějící podmínky u čísel, umístění), neověřitelné 0. Verdikt PŘIJATO S OPRAVAMI. Po kontrole: provedeny opravy extrakce, přeformulovány závěry Z1, Z2, Z4, Z7, Z8, Z12, Z13; 9 řádků kontrola neověřila, proto je autor revize znovu otevřel a potvrdil (028, 032, 033, 047, 048, 050, 051, 055, 057; 048 jen na úrovni V2). Jedna oprava kontroly (010, Tab.5) se po novém ověření nepotvrdila. Původní hodnoty a podrobnosti: `revize-RQ3.md`.
 
 Úrovně důkazu: E1 1 řádek (přehled bez kvantitativní syntézy), E3 většina, E4 6 řádků (provozní data: Carbon Filter, AACT, DeepCASE, kazuistika Samanis), E5 4 řádky (diskuse bez dat). E2 (více datasetů s replikací) nemá žádná práce v RQ3.
 

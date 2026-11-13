@@ -1,6 +1,6 @@
 # Nezávislá kontrola extrakce RQ2 (protokol §9)
 
-Datum kontroly: 2026-10-31. Kontrolor: nezávislý agent, bez znalosti závěrů studie před výběrem vzorku. `extrakce.csv` ani `studie.md` nebyly měněny.
+Datum kontroly: 2026-10-31. Kontrolor: nezávislý kontrolor, bez znalosti závěrů studie před výběrem vzorku. `extrakce.csv` ani `studie.md` nebyly měněny.
 
 ## 1. Vzorek a postup
 
@@ -14,7 +14,7 @@ Datum kontroly: 2026-10-31. Kontrolor: nezávislý agent, bez znalosti závěrů
   - Z9: 022, 027, 036, 050
 - Vzorek B (doplňkový, ruční výběr z ostatních řádků, bez seedu): 001, 002, 003, 013, 019, 041, 042, 052. Výběr nebyl náhodný, ale zvolen napříč zdroji, které ve vzorku A chyběly (Münz, Nguyen, Li, Alalawi, další řádky Wu a NetGuard).
 - Celkem ověřeno 37 z 53 řádků (70 %). Požadavek (aspoň 30 % a aspoň 20 řádků) splněn.
-- Způsob ověření: zdroj stažen čerstvě přes curl z uvedené URL (arXiv PDF, princeton.edu, ceur-ws.org, thesai.org, tum.de), převeden `pdftotext -layout`, hodnoty a citace dohledány v textu. U tabulky v RQ2-044 (MAWIFlow) byl text z PDF rozházený, proto jsem stránku vykreslil jako obrázek a tabulku přečetl vizuálně. Použité PDF jsem nečerpal z `F:\claude-tmp\rq*pdf\`.
+- Způsob ověření: zdroj stažen čerstvě přes curl z uvedené URL (arXiv PDF, princeton.edu, ceur-ws.org, thesai.org, tum.de), převeden `pdftotext -layout`, hodnoty a citace dohledány v textu. U tabulky v RQ2-044 (MAWIFlow) byl text z PDF rozházený, proto jsem stránku vykreslil jako obrázek a tabulku přečetl vizuálně. Použité PDF jsem nečerpal z `<pracovní adresář>/rq*pdf\`.
 - Obchází se: DOI `10.14778/3538598.3538602` (Schmidl) přes curl nevrátil PDF, ověřeno na PDF z vldb.org (`pvldb/vol15/p1779-wenig.pdf`). DOI `10.1214/08-AOAS232` (Lévy-Leduc) je za ochranou Project Euclid (Incapsula), ověřeno na arXiv verzi 0908.2310 (stejná práce; „Table 1“ a strana 14 odpovídají citaci v řádku). Hodnoty u těchto dvou řádků jsou z preprintové verze, ne z finálního časopisu.
 
 ## 2. Tabulka kontrolovaných řádků

@@ -82,7 +82,7 @@ Kampaň s jedinou drženou rodinou je držená celá a v ladicím světě se nev
 
 ### A3. Ramena a běh
 
-Jedna binárka (release, `CARGO_TARGET_DIR=F:/claude-tmp/target-soak`), commit zapsaný v sekci H. Párově po sítích:
+Jedna binárka (release, `CARGO_TARGET_DIR=<pracovní adresář>/target-soak`), commit zapsaný v sekci H. Párově po sítích:
 
 | rameno | konfigurace |
 |---|---|
@@ -181,7 +181,7 @@ U každého slepého místa se uvádí, jaký obecný signál by ho mohl zachyti
   - křivky skrytosti, osy, rodiny × osy, souběhy, kampaně, LOFO, poruchy a registr slepých míst podle A8;
   - prahy K1 až K8 a párové rozdíly s bootstrapem po sítích.
 
-**Zpětná kompatibilita.** Výchozí svět (`--coverage off`) dává bajtově stejný `networks.jsonl` (bez časových polí) jako binárka před krokem 5. Ověřeno na 6 sítích seedu 20261411, v3 s kontrafaktuálem: 0 rozdílů (`F:\claude-tmp\k5\scripts\cmp_networks.py`). `cargo test --lib soak::` prošlo (65 testů), včetně `run_stop_resume…verify_confirms_reproducibility`. Nové testy:
+**Zpětná kompatibilita.** Výchozí svět (`--coverage off`) dává bajtově stejný `networks.jsonl` (bez časových polí) jako binárka před krokem 5. Ověřeno na 6 sítích seedu 20261411, v3 s kontrafaktuálem: 0 rozdílů (`<pracovní adresář>/k5\scripts\cmp_networks.py`). `cargo test --lib soak::` prošlo (65 testů), včetně `run_stop_resume…verify_confirms_reproducibility`. Nové testy:
 
 - tempo, rozptyl, objem, zdroje a index S;
 - `off` nemění plán, `tuning` nemá držené části;
@@ -365,7 +365,7 @@ Ve držených rodinách:
 
 Engine pro ně nemá žádný kontext a nové vnější cíle nebo bouře neúspěšných spojení vypadají jako útok. Žádná z poruch se neladila, laděné nové poruchy mají vysoké FP také (66,3 %). Rozdíl je tedy hlavně v tom, jak moc daná porucha útok připomíná, ne v přeučení.
 
-**Veřejné datasety (C).** Vývojová část proběhla jednou na začátku G (bez ladění), zamčená testovací část `behavior_anchor_k5_test_once` jednou hned po ní. Výstupy jsou v `F:\claude-tmp\k5\anchor-k5-dev.out` a `anchor-k5-test.out`.
+**Veřejné datasety (C).** Vývojová část proběhla jednou na začátku G (bez ladění), zamčená testovací část `behavior_anchor_k5_test_once` jednou hned po ní. Výstupy jsou v `<pracovní adresář>/k5\anchor-k5-dev.out` a `anchor-k5-test.out`.
 
 | výřez | část | toků | škodlivých | behaviorální vrstva: škodliví / neškodní vnitřní hosté s nálezem | pasivní detektory D: TP / FP / FN / TN klíčů služby |
 |---|---|---:|---:|---|---|

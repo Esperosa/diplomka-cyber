@@ -1,12 +1,12 @@
 # Kontrola RQ1 (protokol §9): nezávislé ověření extrakce
 
-Datum: 2026-10-31. Kontrolor: nezávislý agent (bez účasti na extrakci). Kontrolované soubory: `extrakce.csv` (56 řádků, všechny V3), `studie.md` (jen tabulka Závěry a souvisící oddíly). Soubory `extrakce.csv` ani `studie.md` jsem neměnil.
+Datum: 2026-10-31. Kontrolor: nezávislý kontrolor (bez účasti na extrakci). Kontrolované soubory: `extrakce.csv` (56 řádků, všechny V3), `studie.md` (jen tabulka Závěry a souvisící oddíly). Soubory `extrakce.csv` ani `studie.md` jsem neměnil.
 
 ## 1. Vzorek a postup
 
 - **Vzorek:** všech 56 řádků (100 %), tedy víc než požadované minimum (30 % a aspoň 20 řádků). Povinná část (řádky, o které se opírají závěry s jistotou vysoká/střední: Z1 až Z5, Z11, Z14) je v tom obsažena celá: 001-005, 011-014, 017-025, 031-032, 037-040, 046, 048, 049, 056 a navíc zbytek.
 - **Hloubka kontroly se liší:** u řádků 001-015, 017-027, 028, 030-035, 036-046, 048-056 jsem porovnal hodnotu, jednotky, dataset, konfiguraci a (kde je v poli) doslovnou citaci s čerstvým zdrojem. U několika sekundárních detailů jsem to neudělal (viz "Nezkontrolované detaily").
-- **Zdroje:** všechny PDF jsem stáhl znovu (curl / Invoke-WebRequest, adresář `%TEMP%\kon1`, ne z `F:\claude-tmp\rq*pdf\`), převedl `pdftotext -layout` a hodnoty hledal v textu a tabulkách. WebFetch jsem nepoužil, protože pro PDF dává stažení plného textu přesnější výsledek. Ověřené URL: všech 26 zdrojů se otevřelo (Julisch v PowerShellu jednou selhal, přes curl OK; DOI odkazy na Springer (052-054) vrací HTML s plným textem, citace v něm jsou).
+- **Zdroje:** všechny PDF jsem stáhl znovu (curl / Invoke-WebRequest, adresář `%TEMP%\kon1`, ne z `<pracovní adresář>/rq*pdf\`), převedl `pdftotext -layout` a hodnoty hledal v textu a tabulkách. Přímé načtení stránky jsem nepoužil, protože pro PDF dává stažení plného textu přesnější výsledek. Ověřené URL: všech 26 zdrojů se otevřelo (Julisch v PowerShellu jednou selhal, přes curl OK; DOI odkazy na Springer (052-054) vrací HTML s plným textem, citace v něm jsou).
 - **Tvrzení V (plný text):** potvrzeno u všech zdrojů; vždy šlo o plný text s tabulkami, ne jen abstrakt.
 - **Tabulky rozbité při převodu:** u RBA (Tab. 4) a DeepCASE (Tab. I) jsem pořadí sloupců ověřil z hlavičky v mém převodu. Odvozené pořadí kolegy je správné (RBA: Rarity 0,31 až 0,48 a Aperiodicity 0,47 až 0,57; DeepCASE: Overall 90,53 / Precision 96,39 / Recall 91,47 / F1 93,41 / Accuracy 91,47 / Underest. <0,01 %).
 
@@ -102,7 +102,7 @@ Studie (`studie.md`):
 6. **Oddíl 1, bod 4 a závěr Z5:** přepsat (viz přesazení č. 1).
 7. **Z8 a oddíl 4 "Rozpor 2":** přepsat (viz přesazení č. 2).
 8. **Z10 a H1-8:** vysvětlit rozdíl 34 % vs 61 % (viz přesazení č. 3).
-9. **Oddíl 8:** věta "Kontrola druhým agentem (protokol §9) neproběhla ... Chybovost je tedy neznámá" je po této kontrole zastaralá; doplnit odkaz na `kontrola-RQ1.md` (věcná chybovost 0 %).
+9. **Oddíl 8:** věta "Kontrola druhým kontrolorem (protokol §9) neproběhla ... Chybovost je tedy neznámá" je po této kontrole zastaralá; doplnit odkaz na `kontrola-RQ1.md` (věcná chybovost 0 %).
 
 ## 5. Přesazené závěry (jistota vyšší než důkaz)
 

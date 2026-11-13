@@ -1,30 +1,30 @@
 datum;zdroj;dotaz;pocet_vysledku;prohlizeno;poznamka
-2026-10-31;WebSearch (Google Scholar/web);alert correlation Datalog logic reasoning intrusion detection evaluation;10;10;Morin 2009, Zhou 2007 TISSEC, Bouzar-Benlabiod 2015, Kenaza 2021, zadna Datalog prace s merenim FP
-2026-10-31;WebSearch;LLM SOC alert triage evaluation hallucination benchmark;10;10;Alert-Bench (NeurIPS 2026 WS), SecAlertBench (GitHub), Elastic blog (vyrobce)
-2026-10-31;WebSearch;provenance graph intrusion detection false positive evaluation critical analysis;10;10;prumyslova evaluace PIDS 2603.22982, PIDSMaker 2601.22983,, login: kritika ground truth
-2026-10-31;WebSearch;SecAlertBench Tier-1 alert triage large language models arXiv;10;8;jen README artefaktu, arXiv nenalezen, diplomova prace Turku (V1)
-2026-10-31;WebSearch;AIT Log Data Set LLM alert triage agentic workflow four models true positive arXiv Oslo FFI;7;7;Eilertsen et al. 2604.25846, CORTEX
-2026-10-31;WebSearch;CyberSOCEval benchmark LLM SOC malware analysis threat intelligence reasoning results;10;6;arXiv 2509.20166, sekundarni zdroj uvadi jina cisla nez PDF v2
-2026-10-31;WebSearch;"Towards Agentic Investigation of Security Alerts" arXiv;10;4;arXiv 2604.25846 potvrzen
-2026-10-31;WebSearch;NoDoze combatting threat alert fatigue automated provenance triage NDSS 2019 pdf false alarms reduction;10;5;PDF na cs.virginia.edu 404, otevreno pres ndss-symposium.org
-2026-10-31;WebSearch;Goyal "Sometimes, You Aren't What You Do" mimicry attacks provenance intrusion detection NDSS 2023;10;4;NDSS PDF otevren
-2026-10-31;WebSearch;CORTEX collaborative LLM agents high-stakes alert triage arXiv false positives results;10;4;arXiv 2510.00311
-2026-10-31;WebSearch;Large Language Models are unreliable for cyber threat intelligence arXiv 2025 (proti);10;5;Mezzi et al. 2503.23175 (negativni vysledek)
-2026-10-31;WebSearch;ExCyTIn-Bench LLM agents cyber threat investigation benchmark results;10;4;arXiv 2507.14201 (v3 s novejsimi modely)
-2026-10-31;WebSearch;Bayesian network intrusion alert verification evaluation false positive reduction;10;8;Tabia & Leray 2010, Zhai et al. ACSAC 2004, Kruegel 2003 (nedostupny)
-2026-10-31;WebSearch;Markov logic network cyber attack alert correlation multi-step evaluation;10;10;zadna MLN prace, jen HMM a Markovovy retezce
-2026-10-31;WebSearch;probabilistic logic programming ProbLog security attack graph intrusion;10;8;zadne ProbLog mereni na alertech, Hindriks MSc (V1)
-2026-10-31;WebSearch;"99% False Positives" qualitative study SOC analysts perspectives network security alerts USENIX;10;4;Alahmadi et al. USENIX Sec 2022
-2026-10-31;WebSearch;explainable AI intrusion detection user study SOC analysts trust explanations evaluation;10;6;Rastogi et al. 2503.02065, FFI SHAP/LIME (V1)
-2026-10-31;WebSearch;AACT automated alert classification triage SOC deployment arXiv Turcotte 2025;10;4;arXiv 2505.09843
-2026-10-31;WebSearch;abductive reasoning intrusion alerts explanation hypotheses evaluation answer set programming;10;6;Ramkumar et al. 2412.10738 (abdukce, ASP), Li et al. 2512.04908 (bez metriky)
-2026-10-31;WebSearch;"Markov logic" intrusion detection alerts multistage attack scenario recognition evaluation (opakovany dotaz);10;10;opet zadna MLN prace, mezera potvrzena
-2026-10-31;WebSearch;prompt injection attacks against LLM security log analysis SOC agents evaluation attack success rate (proti);10;6;Poisoning the Watchtower 2605.24421, LogInject 2607.14493, NeuralTrust (vyrobce)
-2026-10-31;WebSearch;randomized controlled trial Security Copilot security analysts accuracy speed arXiv;10;5;Bono 2511.13860 (Microsoft, stret zajmu)
-2026-10-31;WebSearch;large language models network intrusion detection zero-shot evaluation poor performance flows limitations (proti);10;6;2408.04342, 2510.17883
-2026-10-31;WebSearch;SOC-bench OR "SOC benchmark" LLM agents incident investigation ransomware evaluation 2026;10;5;SOC-bench jen navrh bez vysledku (vyloucen), SIABench 2603.06422
-2026-10-31;WebSearch;Ning Cui Reeves constructing attack scenarios through correlation of intrusion alerts CCS 2002 pdf DARPA 2000 false alerts;10;5;plny text nedostupny (4 URL selhaly) -> V1
-2026-10-31;WebSearch;"Markov logic networks" alert correlation intrusion OR "network attack" OR cybersecurity experiment;10;10;treti MLN dotaz, opet nic
-2026-10-31;WebSearch;user study security analysts LLM-generated explanations alerts trust over-reliance automation bias experiment;10;6;2601.22653 (N=24), CMS konference (V1)
-2026-10-31;WebSearch;LLM security triage fails missed attacks false negatives benign bias evaluation (proti);10;7;SIR-Bench 2604.12040, otraveni 2511.02600, AIDA/Alert-Bench
-2026-10-31;WebSearch;AIDA agentic alert investigation 1,247 alerts 40.4% false negative 3.1% arXiv (citacni retezeni);10;3;arXiv 2610.10608 = plny text Alert-Bench
+2026-10-31;webové vyhledávání (Google Scholar/web);alert correlation Datalog logic reasoning intrusion detection evaluation;10;10;Morin 2009, Zhou 2007 TISSEC, Bouzar-Benlabiod 2015, Kenaza 2021, zadna Datalog prace s merenim FP
+2026-10-31;webové vyhledávání;LLM SOC alert triage evaluation hallucination benchmark;10;10;Alert-Bench (NeurIPS 2026 WS), SecAlertBench (GitHub), Elastic blog (vyrobce)
+2026-10-31;webové vyhledávání;provenance graph intrusion detection false positive evaluation critical analysis;10;10;prumyslova evaluace PIDS 2603.22982, PIDSMaker 2601.22983,, login: kritika ground truth
+2026-10-31;webové vyhledávání;SecAlertBench Tier-1 alert triage large language models arXiv;10;8;jen README artefaktu, arXiv nenalezen, diplomova prace Turku (V1)
+2026-10-31;webové vyhledávání;AIT Log Data Set LLM alert triage agentic workflow four models true positive arXiv Oslo FFI;7;7;Eilertsen et al. 2604.25846, CORTEX
+2026-10-31;webové vyhledávání;CyberSOCEval benchmark LLM SOC malware analysis threat intelligence reasoning results;10;6;arXiv 2509.20166, sekundarni zdroj uvadi jina cisla nez PDF v2
+2026-10-31;webové vyhledávání;"Towards Agentic Investigation of Security Alerts" arXiv;10;4;arXiv 2604.25846 potvrzen
+2026-10-31;webové vyhledávání;NoDoze combatting threat alert fatigue automated provenance triage NDSS 2019 pdf false alarms reduction;10;5;PDF na cs.virginia.edu 404, otevreno pres ndss-symposium.org
+2026-10-31;webové vyhledávání;Goyal "Sometimes, You Aren't What You Do" mimicry attacks provenance intrusion detection NDSS 2023;10;4;NDSS PDF otevren
+2026-10-31;webové vyhledávání;CORTEX collaborative LLM agents high-stakes alert triage arXiv false positives results;10;4;arXiv 2510.00311
+2026-10-31;webové vyhledávání;Large Language Models are unreliable for cyber threat intelligence arXiv 2025 (proti);10;5;Mezzi et al. 2503.23175 (negativni vysledek)
+2026-10-31;webové vyhledávání;ExCyTIn-Bench LLM agents cyber threat investigation benchmark results;10;4;arXiv 2507.14201 (v3 s novejsimi modely)
+2026-10-31;webové vyhledávání;Bayesian network intrusion alert verification evaluation false positive reduction;10;8;Tabia & Leray 2010, Zhai et al. ACSAC 2004, Kruegel 2003 (nedostupny)
+2026-10-31;webové vyhledávání;Markov logic network cyber attack alert correlation multi-step evaluation;10;10;zadna MLN prace, jen HMM a Markovovy retezce
+2026-10-31;webové vyhledávání;probabilistic logic programming ProbLog security attack graph intrusion;10;8;zadne ProbLog mereni na alertech, Hindriks MSc (V1)
+2026-10-31;webové vyhledávání;"99% False Positives" qualitative study SOC analysts perspectives network security alerts USENIX;10;4;Alahmadi et al. USENIX Sec 2022
+2026-10-31;webové vyhledávání;explainable AI intrusion detection user study SOC analysts trust explanations evaluation;10;6;Rastogi et al. 2503.02065, FFI SHAP/LIME (V1)
+2026-10-31;webové vyhledávání;AACT automated alert classification triage SOC deployment arXiv Turcotte 2025;10;4;arXiv 2505.09843
+2026-10-31;webové vyhledávání;abductive reasoning intrusion alerts explanation hypotheses evaluation answer set programming;10;6;Ramkumar et al. 2412.10738 (abdukce, ASP), Li et al. 2512.04908 (bez metriky)
+2026-10-31;webové vyhledávání;"Markov logic" intrusion detection alerts multistage attack scenario recognition evaluation (opakovany dotaz);10;10;opet zadna MLN prace, mezera potvrzena
+2026-10-31;webové vyhledávání;prompt injection attacks against LLM security log analysis SOC agents evaluation attack success rate (proti);10;6;Poisoning the Watchtower 2605.24421, LogInject 2607.14493, NeuralTrust (vyrobce)
+2026-10-31;webové vyhledávání;randomized controlled trial Security Copilot security analysts accuracy speed arXiv;10;5;Bono 2511.13860 (Microsoft, stret zajmu)
+2026-10-31;webové vyhledávání;large language models network intrusion detection zero-shot evaluation poor performance flows limitations (proti);10;6;2408.04342, 2510.17883
+2026-10-31;webové vyhledávání;SOC-bench OR "SOC benchmark" LLM agents incident investigation ransomware evaluation 2026;10;5;SOC-bench jen navrh bez vysledku (vyloucen), SIABench 2603.06422
+2026-10-31;webové vyhledávání;Ning Cui Reeves constructing attack scenarios through correlation of intrusion alerts CCS 2002 pdf DARPA 2000 false alerts;10;5;plny text nedostupny (4 URL selhaly) -> V1
+2026-10-31;webové vyhledávání;"Markov logic networks" alert correlation intrusion OR "network attack" OR cybersecurity experiment;10;10;treti MLN dotaz, opet nic
+2026-10-31;webové vyhledávání;user study security analysts LLM-generated explanations alerts trust over-reliance automation bias experiment;10;6;2601.22653 (N=24), CMS konference (V1)
+2026-10-31;webové vyhledávání;LLM security triage fails missed attacks false negatives benign bias evaluation (proti);10;7;SIR-Bench 2604.12040, otraveni 2511.02600, AIDA/Alert-Bench
+2026-10-31;webové vyhledávání;AIDA agentic alert investigation 1,247 alerts 40.4% false negative 3.1% arXiv (citacni retezeni);10;3;arXiv 2610.10608 = plny text Alert-Bench

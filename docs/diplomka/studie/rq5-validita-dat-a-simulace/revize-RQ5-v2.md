@@ -6,7 +6,7 @@ Datum: 2026-11-01. Podklad: `kontrola-RQ5-v2.md` (verdikt PŘIJATO S OPRAVAMI, v
 
 ## 1. Postup
 
-- Zdroje jsem 2026-11-01 stáhl znovu (curl, jen veřejné URL, žádné osobní údaje) do nového adresáře `F:\claude-tmp\rq5v2rev\` a převedl přes `pdftotext -layout`. Tabulky, kde text přeházel sloupce (NetDiffusion Tab. 4, Majorczyk slajd 21), jsem ověřil obrazově (`pdftoppm` a prohlédnutí PNG). Venue a DOI jsem ověřil přes Crossref API.
+- Zdroje jsem 2026-11-01 stáhl znovu (curl, jen veřejné URL, žádné osobní údaje) do nového adresáře `<pracovní adresář>/rq5v2rev\` a převedl přes `pdftotext -layout`. Tabulky, kde text přeházel sloupce (NetDiffusion Tab. 4, Majorczyk slajd 21), jsem ověřil obrazově (`pdftoppm` a prohlédnutí PNG). Venue a DOI jsem ověřil přes Crossref API.
 - Hodnotu z kontroly jsem nepřebíral, každou jsem našel ve zdroji. Kde jsem zdroj neotevřel nebo jsem ověřil jen část, je to uvedeno ve sloupci „ověření“.
 - Mimo adresář RQ5 jsem nic nezměnil. Kód soaku jsem nečetl znovu; stav commitu `a293d2b` jsem ověřil jen čtením `git log` (čas 2026-10-31 23:40:07 +0100).
 

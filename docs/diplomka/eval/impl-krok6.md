@@ -44,7 +44,7 @@ Seedy kroků 1 až 5 se nepoužívají. Ladicí svět `--coverage tuning --famil
 
 ### B2. Ramena
 
-Jedna binárka (release, `CARGO_TARGET_DIR=F:/claude-tmp/target-soak`, commit zapsaný v sekci D). Párově po sítích, společné volby `--block-size 2 --no-legs --no-feedback --counterfactual --max-networks 40`, šum 1×, bez kalibrace. Zátěž: kvůli dvěma běžícím 72h během nejvýš 2 ramena současně, 2 až 3 vlákna každé, priorita Idle, před spuštěním kontrola zatížení.
+Jedna binárka (release, `CARGO_TARGET_DIR=<pracovní adresář>/target-soak`, commit zapsaný v sekci D). Párově po sítích, společné volby `--block-size 2 --no-legs --no-feedback --counterfactual --max-networks 40`, šum 1×, bez kalibrace. Zátěž: kvůli dvěma běžícím 72h během nejvýš 2 ramena současně, 2 až 3 vlákna každé, priorita Idle, před spuštěním kontrola zatížení.
 
 | rameno | konfigurace |
 |---|---|
@@ -186,7 +186,7 @@ Ladicí svět neobsahuje dlouhé držené útoky, na kterých v kroku 5 selhal K
 - `cargo test --lib`: 486 prošlo, 5 selhalo, všechny `broker::tests` (známá výjimka, chybí Redis);
 - integrační testy: golden snapshot, engine_v3, case_memory_learning, incremental_ingest, mas_deep a verification_execution zelené; `e2e` autopilot selhal (známá výjimka, httpx); broker_two_process vyžaduje Redis;
 - `cargo clippy --all-targets`: lib 89, lib test 97, bin 3, e2e 1, tedy stejně jako HEAD před krokem 6;
-- kotvy (preset se změnil, takže jednou dev a jednou zamčené části, 2026-11-05 kolem 12:10, výstup `F:\claude-tmp\k6\anchor.out`): výsledky jsou totožné s kroky 4 a 5. Zamčená CTU-13 a IoT-23: 2 ze 30 škodlivých a 1 ze 112 neškodných hostů. CIC-IDS2017 a UNSW-NB15: 0 nálezů. Novost potřebuje zralý profil (48 h), krátké výřezy ji nespustí.
+- kotvy (preset se změnil, takže jednou dev a jednou zamčené části, 2026-11-05 kolem 12:10, výstup `<pracovní adresář>/k6\anchor.out`): výsledky jsou totožné s kroky 4 a 5. Zamčená CTU-13 a IoT-23: 2 ze 30 škodlivých a 1 ze 112 neškodných hostů. CIC-IDS2017 a UNSW-NB15: 0 nálezů. Novost potřebuje zralý profil (48 h), krátké výřezy ji nespustí.
 
 ## E) Rozhodnutí, registr slepých míst a co zůstává
 
@@ -233,9 +233,9 @@ Na otázku, zda už nejsou žádná slepá místa: nejsou opravená. Dvě jsem o
 
 `3054301` předregistrace, `4a461c1` kandidáti v enginu, `b5a913c` měření v soaku, `fecbe66` nástroj, `bf16fc3` třída provoz v produkční cestě, `22d62af` úprava novosti, `8828834` úprava třídy provoz, `f6afbe1` ladicí výsledky, `eb0fb1f` preset, a commit této sekce.
 
-## Review kola 1 (sol-loop)
+## Revizní kolo 1
 
-Nezávislé review kódu kroku 6 (GPT-6.1 Sol, kolo 1, jen čtení) našlo 3 blokery a 3 menší nálezy. Všechny jsou opravené nejmenší změnou. Ke každému je regresní test, který bez opravy selže. Ověřil jsem to tak, že jsem opravy dočasně vrátil: 6 z 6 testů selhalo a po obnovení prošly. Výchozí režim zůstává `legacy` a předregistrace (B) ani výběr sestavy se nemění.
+Nezávislá revize kódu kroku 6 (kolo 1, jen čtení) našlo 3 blokery a 3 menší nálezy. Všechny jsou opravené nejmenší změnou. Ke každému je regresní test, který bez opravy selže. Ověřil jsem to tak, že jsem opravy dočasně vrátil: 6 z 6 testů selhalo a po obnovení prošly. Výchozí režim zůstává `legacy` a předregistrace (B) ani výběr sestavy se nemění.
 
 | # | závažnost | nález | oprava | regresní test | změřený dopad (ladicí seedy, párově) |
 |---|---|---|---|---|---|
@@ -282,9 +282,9 @@ Příčina 4+ GiB u druhého 72h běhu (`run-v3-72h-b`, PID 45080): ten běh pou
 
 Commity kola 1: `65b2e0c` (S2), `3cf2ecd` (S3), `a571a15` (fmt), `1744631` (S5), `c563b9b` (S1, S4, S6), `29dfabb` (test zpětné kompatibility), `6bcfd8a` (clippy v testu), `0ab8c55` (diagnostika paměti) a commit této sekce.
 
-## Review kola 2 (sol-loop)
+## Revizní kolo 2
 
-Kolo 2 (GPT-6.1 Sol, jen čtení) uzavřelo S4 a S6. S1, S2, S3 a S5 zůstaly otevřené, protože oprava kola 1 nepokryla uložený stav nebo jednu větev paměti. Každá oprava má regresní test, který bez ní selže. Ověřeno dočasným vrácením oprav: 3 ze 3 nových testů selhaly, po obnovení prošly.
+Kolo 2 (nezávislá revize, jen čtení) uzavřelo S4 a S6. S1, S2, S3 a S5 zůstaly otevřené, protože oprava kola 1 nepokryla uložený stav nebo jednu větev paměti. Každá oprava má regresní test, který bez ní selže. Ověřeno dočasným vrácením oprav: 3 ze 3 nových testů selhaly, po obnovení prošly.
 
 | # | co zůstalo otevřené | oprava | regresní test |
 |---|---|---|---|
@@ -298,7 +298,7 @@ Kolo 2 (GPT-6.1 Sol, jen čtení) uzavřelo S4 a S6. S1, S2, S3 a S5 zůstaly ot
 
 Commity kola 2: `fceb31e` (S2 a S3), `20b3d84` (S1), `1c307ce` (S5) a commit této sekce. Rozsah diffu kola 2 v kódu: `26d8302..1c307ce`, 5 souborů, +208 a −6 řádků (`verify_ladder.rs`, `ops_evidence.rs`, `behavior/novelty.rs`, `pipeline/v3.rs`, `soak/episode.rs`).
 
-## Review kola 3 (sol-loop)
+## Revizní kolo 3
 
 Kolo 3 uzavřelo S2, S3 a S5. S1 zůstal otevřený jen v soakové cestě. `src/soak/episode.rs` četl příznak rozporu s pamětí z `show.reason`, jenže v tu chvíli už důvod přepsal žebřík: nevysoký dopad dostane `verifying` a po rozhodnutí `ladder_confirmed` nebo `ladder_escalated`. Nález znovuotevřený nebo eskalovaný pamětí, který šel do ověření, si tak při stejné službě, prázdných zdrojích a bez čerstvého důkazu ponechal starou značku třídy provoz.
 

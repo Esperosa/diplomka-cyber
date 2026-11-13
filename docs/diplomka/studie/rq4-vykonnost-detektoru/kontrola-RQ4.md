@@ -1,12 +1,12 @@
 # Nezávislá kontrola extrakce RQ4 (protokol §9)
 
-Datum: 2026-10-31. Kontrolor: druhý agent, bez znalosti závěrů před načtením `extrakce.csv`. `extrakce.csv` ani `studie.md` jsem neměnil.
+Datum: 2026-10-31. Kontrolor: druhý kontrolor, bez znalosti závěrů před načtením `extrakce.csv`. `extrakce.csv` ani `studie.md` jsem neměnil.
 
 ## 1. Vzorek a postup
 
 - Řádků V3/V2 celkem: 56 (55 × V3, 1 × V2). Požadovaný minimální vzorek: 30 % (17 řádků), nejméně 20.
 - Závěry Z1-Z15 s jistotou „vysoká“ nebo „střední“ se opírají o 46 ze 56 řádků (Z3, Z4, Z5, Z6, Z7, Z8, Z9, Z10, Z11, Z12, Z14, Z15). Zbylých 10 řádků (001-003 u Z1/Z2 s jistotou nízká, 005, 007, 014, 015, 021, 022, 031, 032, 041, 042, 051, 056 podle mapování) jsem prošel také. Vzorek je proto **všech 56 řádků (100 %)**, bez losování.
-- Zdroje jsem stáhl znovu a čerstvě (curl + pdftotext do nového adresáře `F:\claude-tmp\kontrola4\`, kam jsem nic z dřívějších RQ adresářů nekopíroval): 22 PDF z arXiv (stažení z `https://arxiv.org/pdf/<id>`), PDF Barradas (uwaterloo.ca), Bowman (gwu.edu), Clausen (github.io), Javed (icir.org), Jung (mit.edu), King/Euler (ndss-symposium.org), Hynek (Springer, open access PDF). Hodnoty jsem hledal v textu PDF; u rozbitých tabulek (Anderson Tab. V, Drichel/Anderson Tab. 3, Trizna Tab. II) jsem použil `pdftotext -raw`. WebFetch jsem nepoužil, protože curl dá stejný obsah a umožňuje plný text.
+- Zdroje jsem stáhl znovu a čerstvě (curl + pdftotext do nového adresáře `<pracovní adresář>/kontrola4\`, kam jsem nic z dřívějších RQ adresářů nekopíroval): 22 PDF z arXiv (stažení z `https://arxiv.org/pdf/<id>`), PDF Barradas (uwaterloo.ca), Bowman (gwu.edu), Clausen (github.io), Javed (icir.org), Jung (mit.edu), King/Euler (ndss-symposium.org), Hynek (Springer, open access PDF). Hodnoty jsem hledal v textu PDF; u rozbitých tabulek (Anderson Tab. V, Drichel/Anderson Tab. 3, Trizna Tab. II) jsem použil `pdftotext -raw`. Přímé načtení stránky jsem nepoužil, protože curl dá stejný obsah a umožňuje plný text.
 - Plný text se nepodařilo získat u: Lee a Lee (Springer, Unpaywall `oa_status: closed`; stránka dává jen abstrakt), Maiolini 2009 (Springer, jen abstrakt), Hu et al. Baywatch (pure.psu.edu, jen abstrakt; `doi.org/10.1109/DSN.2016.50` vrací prázdnou odpověď HTTP 202).
 
 ## 2. Kontrolované řádky

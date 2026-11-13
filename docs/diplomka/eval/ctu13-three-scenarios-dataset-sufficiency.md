@@ -41,7 +41,7 @@ CTU-13, 3 scenare/2 rodiny: F1 rozsah [0.273, 0.306], ablace A porazila trivialn
 
 ## Dodatek (30.10.2026): rozšíření na všech 13/13 standardních CTU-13 scénářů, 7 rodin/technik
 
-**Impuls**: uživatel výslovně odmítl N=3 jako statisticky/datově průkazné. Doplněno zbývajících 10 scénářů (Botnet-43/44/45/46/47/48/49/50/52/53) — podrobnosti stažení/ověření rodiny v `dataset-registry.md`. `src/eval/dataset_replay.rs` dostal sdílenou `CTU13_ALL_SCENARIOS` konstantu, nahrazující 6 nezávisle hardcoded N=3 seznamů v různých testech.
+**Důvod rozšíření**: N=3 není statisticky ani datově průkazné. Doplněno zbývajících 10 scénářů (Botnet-43/44/45/46/47/48/49/50/52/53) — podrobnosti stažení/ověření rodiny v `dataset-registry.md`. `src/eval/dataset_replay.rs` dostal sdílenou `CTU13_ALL_SCENARIOS` konstantu, nahrazující 6 nezávisle hardcoded N=3 seznamů v různých testech.
 
 ```
 Botnet-42 (Neris):    known_keys=979  malicious=2614  TP=148 FP=143 FN=644 TN=44 precision=0.509 recall=0.187 f1=0.273 | trivial_f1=0.894

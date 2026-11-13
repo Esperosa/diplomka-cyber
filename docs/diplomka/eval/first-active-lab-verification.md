@@ -19,7 +19,7 @@ Plný síťový emulační lab (návrh sekce 8.2) je velká infrastrukturní inv
 - **httpx**: title `"OWASP Juice Shop"`, status 200 — potvrzeno reálným HTTP probe.
 - **nuclei**: **1 reálný nález** — `bakula-prometheus-metrics-exposed` na `/metrics`, ručně potvrzeno (`curl http://127.0.0.1:3000/metrics` vrací 200 a skutečné aplikační metriky, včetně LLM token počítadel — tahle verze Juice Shopu má AI funkce).
 
-**Důležitá korekce vlastního předpokladu:** před implementací jsem (a nezávislý Plan-agent review) předpokládal, že žádná z 8 kurátorovaných nuclei šablon (cílených na admin panely jako Swagger/Grafana/Actuator) na Juice Shopu nesedne, a 0 nálezů bude správný nulový výsledek — stejný vzorec jako honestní nulový výsledek v Deliverable 3. **Reálné měření to vyvrátilo.** Test byl napsán na předpokládaný výsledek, pak opraven na změřenou realitu, jakmile se ukázala. Přesně tohle je důvod, proč dělat aktivní verifikaci, a ne jen teoreticky odhadovat, co cíl vystavuje.
+**Důležitá korekce vlastního předpokladu:** před implementací jsem (a nezávislá revize) předpokládal, že žádná z 8 kurátorovaných nuclei šablon (cílených na admin panely jako Swagger/Grafana/Actuator) na Juice Shopu nesedne, a 0 nálezů bude správný nulový výsledek — stejný vzorec jako honestní nulový výsledek v Deliverable 3. **Reálné měření to vyvrátilo.** Test byl napsán na předpokládaný výsledek, pak opraven na změřenou realitu, jakmile se ukázala. Přesně tohle je důvod, proč dělat aktivní verifikaci, a ne jen teoreticky odhadovat, co cíl vystavuje.
 
 ## Deliverable 8 — zavření smyčky na reálných datech
 

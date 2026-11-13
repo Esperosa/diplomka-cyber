@@ -4,7 +4,7 @@ Datum: 2026-10-31. Podklad: `kontrola-RQ5.md` (verdikt VRÁTIT K PŘEPRACOVÁNÍ
 
 ## 1. Postup
 
-- Všechny zdroje, o které se opravy opírají, jsem 2026-10-31 stáhl znovu (curl) do nového adresáře `F:\claude-tmp\rq5rev\` a převedl přes `pdftotext`, a to dvakrát: s `-layout` a bez něj. Surový text bez `-layout` zachovává pořadí hodnot ve sloupcích tabulek, takže z něj šlo ověřit přiřazení řádků v tabulkách, které se v layoutu rozpadají (Engelen Tab. II, Wang Tab. 3, Majorczyk slajd 21/27, Layeghy Tab. 4, TESSERACT Tab. 1). Starší texty z `rq5pdf` jsem nepoužil.
+- Všechny zdroje, o které se opravy opírají, jsem 2026-10-31 stáhl znovu (curl) do nového adresáře `<pracovní adresář>/rq5rev\` a převedl přes `pdftotext`, a to dvakrát: s `-layout` a bez něj. Surový text bez `-layout` zachovává pořadí hodnot ve sloupcích tabulek, takže z něj šlo ověřit přiřazení řádků v tabulkách, které se v layoutu rozpadají (Engelen Tab. II, Wang Tab. 3, Majorczyk slajd 21/27, Layeghy Tab. 4, TESSERACT Tab. 1). Starší texty z `rq5pdf` jsem nepoužil.
 - Venue jsem ověřoval přes Crossref API (Engelen, NetDiffusion, Goldschmidt) a podle hlavičky PDF (Wolf, Anjum).
 - Kód soaku jsem četl čerstvě v pracovní kopii (`src/soak/traffic.rs`, `netmodel.rs`, `episode.rs`, `runner.rs`) včetně `git diff` necommitnutých změn.
 - Hodnoty z kontroly jsem nepřebíral. Každou jsem znovu našel ve zdroji. Kde se kontrolor mýlí nebo kde je nález neúplný, je to uvedeno v části 3.
@@ -134,13 +134,13 @@ U 020 a 035 revize navíc doplnila nové údaje. Mezi 12 dříve nekontrolovaný
 ## 8. Druhá kontrola po revizi (vlastní, ne nezávislá)
 
 - **Vzorek:** 47 z 63 řádků (75 %): 001–005, 008, 009, 011, 012, 013, 016, 017, 019–027, 030–035, 037, 038, 040, 043, 045, 047–061. Zahrnuje všechny řádky s věcnou opravou a všechny s opravenou hodnotou nebo umístěním (mimo ně zůstaly jen 041 a 046, kde se měnila poznámka nebo venue), všech 12 dříve nekontrolovaných (008, 009, 011, 012, 021, 033, 048, 051, 052, 057, 058, 061) a 22 řádků, které revize neměnila.
-- **Postup:** Proti čerstvě staženým textům zdrojů (`F:\claude-tmp\rq5rev\`) jsem pro každý řádek ověřil, že hodnoty a citace z revidované `extrakce.csv` jsou ve zdroji doslova. Kontrolu dělá skript `F:\claude-tmp\rq5scripts\second_check.py`, který hledá 1–11 řetězců na řádek: čísla, celé řádky tabulek v pořadí sloupců a doslovné citace. Přiřazení hodnot k řádkům a sloupcům v rozpadlých tabulkách jsem ověřil ručně (Engelen Tab. II, TESSERACT Tab. 1, Layeghy Tab. 4, DoppelGANger Tab. 5, Wang Tab. 3, Majorczyk slajd 21, Larroche Tab. 5 a 6, Jacobs Tab. 5), postup popisuje část 2.
+- **Postup:** Proti čerstvě staženým textům zdrojů (`<pracovní adresář>/rq5rev\`) jsem pro každý řádek ověřil, že hodnoty a citace z revidované `extrakce.csv` jsou ve zdroji doslova. Kontrolu dělá skript `<pracovní adresář>/rq5scripts\second_check.py`, který hledá 1–11 řetězců na řádek: čísla, celé řádky tabulek v pořadí sloupců a doslovné citace. Přiřazení hodnot k řádkům a sloupcům v rozpadlých tabulkách jsem ověřil ručně (Engelen Tab. II, TESSERACT Tab. 1, Layeghy Tab. 4, DoppelGANger Tab. 5, Wang Tab. 3, Majorczyk slajd 21, Larroche Tab. 5 a 6, Jacobs Tab. 5), postup popisuje část 2.
 - **Výsledek:** všech 47 řádků OK. Věcná chybovost **0 / 47 = 0 %** (cíl ≤ 5 % splněn). Drobné chyby v kontrolovaných polích: 0.
 - **Omezení:** Při 0 chybách z 47 je horní mez 95% Wilsonova intervalu 7,6 %, takže vzorek sám nevylučuje chybovost těsně nad 5 %. Kontrolu dělal autor revize, takže není nezávislá ve smyslu protokolu §9. Mimo vzorek zůstalo 16 řádků: 006, 007, 010, 014, 015, 018, 028, 029, 036, 039, 041, 042, 044, 046, 062, 063. Všechny je kontrola-RQ5 označila jako OK (041 s poznámkou, kterou revize zapracovala). Při revizi jsem z nich mimo skript namátkou ověřil 006, 007, 014, 015, 018, 028, 036, 039 a 042 a byly v pořádku.
 
 ## 9. Co zůstává nevyřešené
 
-- Nová nezávislá kontrola podle §9: druhá kontrola zde je vlastní. Pro formální splnění protokolu je potřeba, aby vzorek znovu prošel jiný agent.
+- Nová nezávislá kontrola podle §9: druhá kontrola zde je vlastní. Pro formální splnění protokolu je potřeba, aby vzorek znovu prošel jiný kontrolor.
 - RQ5-016: verze RAID 2003 není srovnána s technickou zprávou CS-2003-02.
 - RQ5-034 (Cantone) a 035 (Layeghy): časopisecká verze nejasná, venue nechávám s „nejasné“ nebo „souvisí s“.
 - RQ5-046/047: vydání v POMACS nepotvrzeno, ověřeno jen SIGMETRICS 2024 přes Crossref.

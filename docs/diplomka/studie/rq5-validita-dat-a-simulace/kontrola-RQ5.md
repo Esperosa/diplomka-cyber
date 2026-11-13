@@ -12,7 +12,7 @@ Věcná chybovost je 6 / 51 = 11,8 % (limit 5 %). Věcné chyby jsou i u dvou z�
 - (a) Povinná část: všechny řádky, o které se opírají závěry s jistotou vysoká nebo střední v tabulce Závěry (Z-1, Z-2, Z-3, Z-5, Z-6, Z-7, Z-8, Z-9, Z-12): 001, 002, 006, 007, 013, 014, 015, 016, 018, 019, 022, 023, 024, 025, 026, 027, 028, 030, 031, 032, 034, 035, 036, 037, 038, 039, 040, 041, 042 až 047, 049, 053, 054, 055, 060, 062, 063.
 - (b) Doplněno: 003, 004, 005 (Engelen, citované v souhrnu studie) a každý třetí z ostatních řádků (005, 010, 017, 029, 050, 056, 059).
 - Nekontrolováno (12 řádků): 008, 009, 011, 012, 021, 033, 048, 051, 052, 057, 058, 061.
-- Postup: 4 nezávislé průchody (skupiny A až D), každý stáhl zdroj znovu (curl, pdftotext nebo WebFetch do nových adresářů). Starší texty z `rq5pdf` sloužily jen k orientaci. Kontrolor nevycházel ze závěrů studie.
+- Postup: 4 nezávislé průchody (skupiny A až D), každý stáhl zdroj znovu (curl, pdftotext nebo přímé načtení stránky do nových adresářů). Starší texty z `rq5pdf` sloužily jen k orientaci. Kontrolor nevycházel ze závěrů studie.
 
 ## Tabulka kontrolovaných řádků
 

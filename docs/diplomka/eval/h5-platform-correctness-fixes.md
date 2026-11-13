@@ -1,6 +1,6 @@
 # H5 krok 1: korektnostní opravy jádra brokeru/platformy (Deliverable 24)
 
-**Status: hotovo (29. 10. 2026).** První krok produkčního plánu (`docs/diplomka/produkcni-plan.md`) pro H5 — oprava reálných korektnostních mezer, které nezávislý 3-agentní audit našel v `src/platform.rs`/`src/broker.rs`/`src/main.rs`, PŘED skokem na skutečný multi-host test (ten je další fáze, vyžaduje Postgres migraci).
+**Status: hotovo (29. 10. 2026).** První krok produkčního plánu (`docs/diplomka/produkcni-plan.md`) pro H5 — oprava reálných korektnostních mezer, které nezávislý audit (tři revize) našel v `src/platform.rs`/`src/broker.rs`/`src/main.rs`, PŘED skokem na skutečný multi-host test (ten je další fáze, vyžaduje Postgres migraci).
 
 ## Co bylo opraveno
 

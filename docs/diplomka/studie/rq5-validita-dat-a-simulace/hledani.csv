@@ -1,35 +1,35 @@
 datum;zdroj;dotaz;pocet_vysledku;prohlizeno;poznamka
-2026-10-31;WebSearch;CICIDS2017 labelling errors Engelen troubleshooting intrusion detection dataset;10;3;Engelen 2021 otevřen (lirias PDF, V3); Lanvin 2022 a Liu 2022 jen abstrakt (V2)
-2026-10-31;WebSearch;Dos and Don'ts of machine learning in computer security Arp arXiv;10;1;arXiv 2010.09470 PDF otevřen (V3)
-2026-10-31;WebSearch;cross-dataset generalization network intrusion detection F1 drop;10;2;proti: hledání negeneralizace; vedlo na Cantone 2024 a IIoT preprint 2607.00553 (oba otevřeny)
-2026-10-31;WebSearch;TESSERACT eliminating experimental bias malware classification space and time;10;1;arXiv 1807.07838 otevřen (V3)
-2026-10-31;WebSearch;NetShare GAN network trace synthesis fidelity evaluation SIGCOMM 2022;10;2;par.nsf.gov nedostupné (ECONNREFUSED); kritika NetShare v CascadeNet NSDI'26 (otevřeno)
-2026-10-31;WebSearch;"reality check" machine learning network intrusion detection Apruzzese;10;2;přesná fráze nenalezena; otevřeny Apruzzese SoK 2023 (2305.00550) a XeNIDS (2203.04686)
-2026-10-31;WebSearch;Cantone "cross-dataset generalization" machine learning network intrusion detection arXiv;10;1;2402.10974 otevřen (V3)
-2026-10-31;WebSearch;Layeghy Portmann generalisability machine learning NIDS cross-dataset NetFlow arXiv;10;1;2205.04112 otevřen (V3); matice F1 jen z obrázku
-2026-10-31;WebSearch;Flood bad design smells benchmark NIDS datasets arXiv;10;1;EuroS&P 2024 final draft otevřen (V3)
-2026-10-31;WebSearch;"emperor has no clothes" AI ML network security shortcut learning Trustee CCS 2022;10;1;trustee.pdf (UCSB) otevřen (V3)
-2026-10-31;WebSearch;Ring Wunderlich survey of network-based intrusion detection data sets arXiv 1903.02460;10;1;otevřen (V3), přehled bez metrik
-2026-10-31;WebSearch;DARPA OpTC dataset usefulness cyber threat detection analysis limitations;10;3;proti: Anjum 2021 (V3), Majorczyk CSET 2025 slajdy (V3); gist neověřen
-2026-10-31;WebSearch;NetDiffusion network data augmentation diffusion models protocol-constrained traffic generation arXiv;10;1;2310.08543 otevřen (V3)
-2026-10-31;WebSearch;Liu Engelen Lynar Essam Joosen error prevalence NIDS datasets CIC-IDS-2017 CSE-CIC-IDS-2018 pdf;10;1;jen abstrakt cps-vo (V2), PDF nenalezeno
-2026-10-31;WebSearch;Tavallaee detailed analysis KDD CUP 99 data set redundant records percentage NSL-KDD;10;1;CISDA 2009 PDF otevřen (V3)
-2026-10-31;WebSearch;Mahoney Chan analysis 1999 DARPA Lincoln Laboratory evaluation data anomaly detection TTL artifacts;10;2;TR CS-2003-02 otevřen (V3); Brown 2009 CISDA otevřen (kvalitativní)
-2026-10-31;WebSearch;synthetic network traffic generation evaluation fidelity benchmark GAN diffusion LLM comparison limitations;10;1;proti: Ammara 2025 IEEE Access otevřen (kvalitativně); další preprinty neotevřeny
-2026-10-31;WebSearch;Kenyon Deka Elizondo "are public intrusion datasets fit for purpose";10;1;Kenyon jen shrnutí (V1); otevřen Goldschmidt & Chudá 2025 (2502.06688, V3) a Catillo DSN 2023 (V3)
-2026-10-31;WebSearch;"Practical GAN-based synthetic IP header trace generation using NetShare" pdf;10;1;jen oficiální abstrakt SEI/FloCon (V2)
-2026-10-31;WebSearch;CascadeNet NSDI 2026 synthetic network trace generation temporal fidelity NetShare;10;1;USENIX PDF otevřen (V3)
-2026-10-31;WebSearch;MAWILab labels combining anomaly detectors ground truth Fontugne evaluation bias;10;1;HAL blokován (Anubis) -> V1
-2026-10-31;WebSearch;CyberBattleSim sim-to-real gap autonomous cyber defense reinforcement learning emulation transfer evaluation;10;2;proti: přímé měření CyberBattleSim->emulace nenalezeno; otevřeny Nyberg 2026 (2609.16541) a Hicks 2026 (2604.08805)
-2026-10-31;WebSearch;temporal split versus random split network intrusion detection data leakage performance overestimation;10;2;proti i pro: BRIDGE 2604.11324 (malý efekt, otevřen), review 2602.05594 (otevřen); 0,24 macro-F1 (Moczkodan) jen shrnutí -> V1
-2026-10-31;WebSearch;LANL comprehensive multi-source cyber-security events red team labels limitations lateral movement detection evaluation critique;10;2;proti: Larroche 2026 (2607.29390) a Larroche 2025 (2504.13527) otevřeny (V3)
-2026-10-31;WebSearch;Bot-IoT ToN-IoT dataset flaws issues labeling analysis machine learning intrusion;10;1;Raskovalov 2022 (2212.13994) otevřen (kvalitativní)
-2026-10-31;WebSearch;Lanvin Gimenez Han Le Guettier Viet Tong "Errors in the CICIDS2017 dataset" arXiv OR pdf relabelled percentage;10;1;HAL blokován; abstrakt z researchportal.ip-paris (V2), čísla nedostupná
-2026-10-31;WebSearch;D'hooge inter-dataset generalization strength supervised machine learning intrusion detection CIC-IDS2017 CSE-CIC-IDS2018;10;1;Verkerken et al. JNSM (imec repozitář) otevřen (V3); D'hooge 2020 JISA jen abstrakt -> V1
-2026-10-31;WebSearch;Sharafaldin Lashkari Ghorbani 2018 toward generating new intrusion detection dataset ICISSP pdf B-Profile;10;1;SCITEPRESS PDF otevřen (V3)
-2026-10-31;WebSearch;Axelsson base-rate fallacy intrusion detection false alarm rate 1999 pdf;10;1;TISSEC 2000 PDF otevřen (V3)
-2026-10-31;WebSearch;IoT-23 dataset labeling issues critique OR CTU-13 labels background unlabeled evaluation problems;10;1;proti: přímá kritika štítků IoT-23 nenalezena; otevřen Garcia & Valeros 2023 (2305.01337)
-2026-10-31;WebSearch;reproducibility study network intrusion detection results could not be reproduced replication failure;10;1;proti: Wang et al. 2025 (2503.20281) otevřen (V3)
-2026-10-31;WebSearch;synthetic attack data augmentation does not improve intrusion detection on real traffic negative result;10;1;proti: Wolf et al. 2024 (2408.16034) otevřen (V3)
+2026-10-31;webové vyhledávání;CICIDS2017 labelling errors Engelen troubleshooting intrusion detection dataset;10;3;Engelen 2021 otevřen (lirias PDF, V3); Lanvin 2022 a Liu 2022 jen abstrakt (V2)
+2026-10-31;webové vyhledávání;Dos and Don'ts of machine learning in computer security Arp arXiv;10;1;arXiv 2010.09470 PDF otevřen (V3)
+2026-10-31;webové vyhledávání;cross-dataset generalization network intrusion detection F1 drop;10;2;proti: hledání negeneralizace; vedlo na Cantone 2024 a IIoT preprint 2607.00553 (oba otevřeny)
+2026-10-31;webové vyhledávání;TESSERACT eliminating experimental bias malware classification space and time;10;1;arXiv 1807.07838 otevřen (V3)
+2026-10-31;webové vyhledávání;NetShare GAN network trace synthesis fidelity evaluation SIGCOMM 2022;10;2;par.nsf.gov nedostupné (ECONNREFUSED); kritika NetShare v CascadeNet NSDI'26 (otevřeno)
+2026-10-31;webové vyhledávání;"reality check" machine learning network intrusion detection Apruzzese;10;2;přesná fráze nenalezena; otevřeny Apruzzese SoK 2023 (2305.00550) a XeNIDS (2203.04686)
+2026-10-31;webové vyhledávání;Cantone "cross-dataset generalization" machine learning network intrusion detection arXiv;10;1;2402.10974 otevřen (V3)
+2026-10-31;webové vyhledávání;Layeghy Portmann generalisability machine learning NIDS cross-dataset NetFlow arXiv;10;1;2205.04112 otevřen (V3); matice F1 jen z obrázku
+2026-10-31;webové vyhledávání;Flood bad design smells benchmark NIDS datasets arXiv;10;1;EuroS&P 2024 final draft otevřen (V3)
+2026-10-31;webové vyhledávání;"emperor has no clothes" AI ML network security shortcut learning Trustee CCS 2022;10;1;trustee.pdf (UCSB) otevřen (V3)
+2026-10-31;webové vyhledávání;Ring Wunderlich survey of network-based intrusion detection data sets arXiv 1903.02460;10;1;otevřen (V3), přehled bez metrik
+2026-10-31;webové vyhledávání;DARPA OpTC dataset usefulness cyber threat detection analysis limitations;10;3;proti: Anjum 2021 (V3), Majorczyk CSET 2025 slajdy (V3); gist neověřen
+2026-10-31;webové vyhledávání;NetDiffusion network data augmentation diffusion models protocol-constrained traffic generation arXiv;10;1;2310.08543 otevřen (V3)
+2026-10-31;webové vyhledávání;Liu Engelen Lynar Essam Joosen error prevalence NIDS datasets CIC-IDS-2017 CSE-CIC-IDS-2018 pdf;10;1;jen abstrakt cps-vo (V2), PDF nenalezeno
+2026-10-31;webové vyhledávání;Tavallaee detailed analysis KDD CUP 99 data set redundant records percentage NSL-KDD;10;1;CISDA 2009 PDF otevřen (V3)
+2026-10-31;webové vyhledávání;Mahoney Chan analysis 1999 DARPA Lincoln Laboratory evaluation data anomaly detection TTL artifacts;10;2;TR CS-2003-02 otevřen (V3); Brown 2009 CISDA otevřen (kvalitativní)
+2026-10-31;webové vyhledávání;synthetic network traffic generation evaluation fidelity benchmark GAN diffusion LLM comparison limitations;10;1;proti: Ammara 2025 IEEE Access otevřen (kvalitativně); další preprinty neotevřeny
+2026-10-31;webové vyhledávání;Kenyon Deka Elizondo "are public intrusion datasets fit for purpose";10;1;Kenyon jen shrnutí (V1); otevřen Goldschmidt & Chudá 2025 (2502.06688, V3) a Catillo DSN 2023 (V3)
+2026-10-31;webové vyhledávání;"Practical GAN-based synthetic IP header trace generation using NetShare" pdf;10;1;jen oficiální abstrakt SEI/FloCon (V2)
+2026-10-31;webové vyhledávání;CascadeNet NSDI 2026 synthetic network trace generation temporal fidelity NetShare;10;1;USENIX PDF otevřen (V3)
+2026-10-31;webové vyhledávání;MAWILab labels combining anomaly detectors ground truth Fontugne evaluation bias;10;1;HAL blokován (Anubis) -> V1
+2026-10-31;webové vyhledávání;CyberBattleSim sim-to-real gap autonomous cyber defense reinforcement learning emulation transfer evaluation;10;2;proti: přímé měření CyberBattleSim->emulace nenalezeno; otevřeny Nyberg 2026 (2609.16541) a Hicks 2026 (2604.08805)
+2026-10-31;webové vyhledávání;temporal split versus random split network intrusion detection data leakage performance overestimation;10;2;proti i pro: BRIDGE 2604.11324 (malý efekt, otevřen), review 2602.05594 (otevřen); 0,24 macro-F1 (Moczkodan) jen shrnutí -> V1
+2026-10-31;webové vyhledávání;LANL comprehensive multi-source cyber-security events red team labels limitations lateral movement detection evaluation critique;10;2;proti: Larroche 2026 (2607.29390) a Larroche 2025 (2504.13527) otevřeny (V3)
+2026-10-31;webové vyhledávání;Bot-IoT ToN-IoT dataset flaws issues labeling analysis machine learning intrusion;10;1;Raskovalov 2022 (2212.13994) otevřen (kvalitativní)
+2026-10-31;webové vyhledávání;Lanvin Gimenez Han Le Guettier Viet Tong "Errors in the CICIDS2017 dataset" arXiv OR pdf relabelled percentage;10;1;HAL blokován; abstrakt z researchportal.ip-paris (V2), čísla nedostupná
+2026-10-31;webové vyhledávání;D'hooge inter-dataset generalization strength supervised machine learning intrusion detection CIC-IDS2017 CSE-CIC-IDS2018;10;1;Verkerken et al. JNSM (imec repozitář) otevřen (V3); D'hooge 2020 JISA jen abstrakt -> V1
+2026-10-31;webové vyhledávání;Sharafaldin Lashkari Ghorbani 2018 toward generating new intrusion detection dataset ICISSP pdf B-Profile;10;1;SCITEPRESS PDF otevřen (V3)
+2026-10-31;webové vyhledávání;Axelsson base-rate fallacy intrusion detection false alarm rate 1999 pdf;10;1;TISSEC 2000 PDF otevřen (V3)
+2026-10-31;webové vyhledávání;IoT-23 dataset labeling issues critique OR CTU-13 labels background unlabeled evaluation problems;10;1;proti: přímá kritika štítků IoT-23 nenalezena; otevřen Garcia & Valeros 2023 (2305.01337)
+2026-10-31;webové vyhledávání;reproducibility study network intrusion detection results could not be reproduced replication failure;10;1;proti: Wang et al. 2025 (2503.20281) otevřen (V3)
+2026-10-31;webové vyhledávání;synthetic attack data augmentation does not improve intrusion detection on real traffic negative result;10;1;proti: Wolf et al. 2024 (2408.16034) otevřen (V3)
 2026-10-31;citační řetězení;zpětně z Engelen 2021, Flood 2024, Arp 2022, Larroche 2026, NetDiffusion (odkazy Lanvin, Liu, Mahoney, Tavallaee, Kitsune/Mirai, NetShare, Pikachu/Euler/Argus);-;7;navedlo na Lanvin, Liu, Mahoney & Chan, NetShare, Trustee (Kitsune)
 2026-10-31;citační řetězení;dopředně (kdo cituje) Engelen 2021, Arp 2022, NetShare, Layeghy 2022 přes výsledky vyhledávače;-;5;navedlo na Cantone 2024, Flood 2024, CascadeNet 2026, NetDiffusion 2024, BRIDGE 2026

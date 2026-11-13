@@ -11,7 +11,7 @@ Výběr:
 - (b) Systematický výběr: každý čtvrtý řádek od RQ6-002 (002, 006, 010, 014, 018, 022, 026, 030, 034, 038, 042, 046, 050). Po odečtení překryvu (022, 042) přibylo 11 řádků.
 - (c) Ručně přidán RQ6-001 (hlavní řádek Alert-Bench, základ Z2 a Z3).
 
-Zdroje: všechny hodnoty jsem ověřoval na čerstvě stažených plných textech z primárních URL z pole `url_nebo_doi` (arXiv PDF, USENIX, NDSS, SciTePress) převedených `pdftotext`. Nástroj WebFetch PDF nedekóduje, proto jsem PDF stáhl `curl` do nového adresáře `%TEMP%\kontrola6` a text přečetl lokálně. Staré kopie z `F:\claude-tmp\rq*pdf\` jsem nepoužil. RQ6-050 jsem ověřil přes WebFetch na README repozitáře GitHub.
+Zdroje: všechny hodnoty jsem ověřoval na čerstvě stažených plných textech z primárních URL z pole `url_nebo_doi` (arXiv PDF, USENIX, NDSS, SciTePress) převedených `pdftotext`. Přímé načtení PDF nefunguje, proto jsem PDF stáhl `curl` do nového adresáře `%TEMP%\kontrola6` a text přečetl lokálně. Staré kopie z `<pracovní adresář>/rq*pdf\` jsem nepoužil. RQ6-050 jsem ověřil přímo na README repozitáře GitHub.
 
 Co jsem nekontroloval: čísla stránek a oddílů v poli `umisteni_a_citace` jsem ověřoval jen tak, že doslovná citace nebo číslo v uvedené tabulce skutečně existuje, ne číslování stránek. Poznámky `pouzitelnost` a `poznamka` jsou úsudek autora, ty jsem hodnotil jen tam, kde z nich plyne tvrzení o datech.
 

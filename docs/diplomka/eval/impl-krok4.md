@@ -28,7 +28,7 @@ Tato sekce se po spuštění slepého testu nemění. Výsledky se zapisují do 
 
 ### Ramena slepého testu
 
-Jedna binárka (release, `CARGO_TARGET_DIR=F:/claude-tmp/target-soak`, commit uvedený v C), stejný harness jako při ladění, párově po sítích:
+Jedna binárka (release, `CARGO_TARGET_DIR=<pracovní adresář>/target-soak`, commit uvedený v C), stejný harness jako při ladění, párově po sítích:
 
 | rameno | konfigurace |
 |---|---|
@@ -142,7 +142,7 @@ Proč G4 selhal: měřil jsem podle předregistrace (jedno vlákno, jedna síť 
 
 ## E) Dlouhý běh v3 (volitelný režim, ne ověření výchozího)
 
-Uživatel chce dlouhý komplexní běh v3 bez ohledu na G4. Výchozí režim zůstává `legacy`, běh tedy měří v3 jako volitelný režim.
+Rozhodnutí o rozsahu: dlouhý komplexní běh v3 se spouští bez ohledu na G4. Výchozí režim zůstává `legacy`, běh tedy měří v3 jako volitelný režim.
 
 - Binárka z commitu `b3a6dd0` (kód shodný s `eea4060` slepého testu), kopie `F:\Projekty\bakula-soak\bin\bakula-soak-v3-k4-b3a6dd0.exe`. Spuštěno 2026-11-04 20:12:17, PID 7212, priorita BelowNormal, výstup `F:\Projekty\bakula-soak\run-v3-72h`, stdout a stderr `F:\Projekty\bakula-soak\run-v3-72h.out` a `.err`, příkaz v `F:\Projekty\bakula-soak\run-v3-72h.cmd.txt`.
 - Příkaz: `soak run --out F:\Projekty\bakula-soak\run-v3-72h --seed 20261105 --wall-hours 72 --threads 12 --engine v3 --noise-mix 1:0.6,10:0.3,50:0.1 --xxxl-share 0.015 --cf-share 0.2 --families all`. Výchozí preset v3 je bez grafu (A), nohy jsou zapnuté (kotva jen vývojová část, `is_dev` v `src/eval/anchor.rs`), zpětná vazba zapnutá, blok 16 sítí.

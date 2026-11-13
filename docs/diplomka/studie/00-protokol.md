@@ -14,7 +14,7 @@ Podklad pro rozhodnutí, jak vylepšit korelační a ověřovací jádro program
 - **RQ6** Přináší dedukce/abdukce, pravděpodobnostní logika a LLM triáž empiricky měřitelné zlepšení při ověřování alertů a s jakými riziky?
 
 ## 3. Strategie hledání (reprodukovatelná)
-- Zdroje: arXiv, ACM DL, IEEE Xplore (abstrakt + DOI), USENIX, NDSS/ACSAC/RAID/CCS/S&P (sborníky), Semantic Scholar, DBLP, Google Scholar (přes WebSearch), technické zprávy NIST/ENISA, repozitáře dat (Zenodo, UNB, CTU).
+- Zdroje: arXiv, ACM DL, IEEE Xplore (abstrakt + DOI), USENIX, NDSS/ACSAC/RAID/CCS/S&P (sborníky), Semantic Scholar, DBLP, Google Scholar (přes webové vyhledávání), technické zprávy NIST/ENISA, repozitáře dat (Zenodo, UNB, CTU).
 - Období 2015–2026; starší jen zakládající práce, označit `seminal=ano`.
 - Jazyk EN/CS.
 - Každý dotaz se zapisuje do `hledani.csv`: `datum;zdroj;dotaz;pocet_vysledku;prohlizeno;poznamka`. Minimálně 15 dotazů na RQ, z toho aspoň 3 dotazy „proti“ (hledání negativních výsledků a kritiky: `limitations`, `fails`, `does not generalize`, `false positives`, `replication`).
@@ -47,7 +47,7 @@ Sloupce: `id;rq;citace;url_nebo_doi;rok;venue;recenzovano;seminal;dataset;typ_da
 - Počty PRISMA: identifikováno → po deduplikaci → po screeningu názvů/abstraktů → plný text zhodnocen → zahrnuto → z toho V3/V2. Uvést i důvody vyloučení (souhrnně).
 
 ## 9. Nezávislá kontrola
-Druhý agent bez znalosti závěrů znovu načte vzorek ≥ 30 % řádků V3/V2 (včetně všech, na nichž stojí závěry vysoké jistoty) a porovná hodnoty se zdrojem. Chybovost > 5 % v uvedených hodnotách znamená, že se celá extrakce RQ musí projít znovu. Výsledek je v `kontrola-RQn.md`.
+Druhý kontrolor bez znalosti závěrů znovu načte vzorek ≥ 30 % řádků V3/V2 (včetně všech, na nichž stojí závěry vysoké jistoty) a porovná hodnoty se zdrojem. Chybovost > 5 % v uvedených hodnotách znamená, že se celá extrakce RQ musí projít znovu. Výsledek je v `kontrola-RQn.md`.
 
 ## 10. Empirické ověření (po rešerši)
 Z každé studie vzejdou předregistrované hypotézy `H-n` ve formátu: změna → očekávaný efekt (rozsah z důkazů) → metrika → scénář/seedy → kritérium zamítnutí. Testuje se na soak harnessu (A/B na stejných seedech, držené rodiny útoků, kotva CTU-13/IoT-23). Zveřejní se i neúspěšné hypotézy.

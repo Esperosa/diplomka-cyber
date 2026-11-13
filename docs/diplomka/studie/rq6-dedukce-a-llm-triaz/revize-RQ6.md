@@ -20,7 +20,7 @@ Ověření: znovu jsem stáhl plné texty z arXiv (`curl`, `pdftotext`): 2604.25
 | RQ6-025 poznámka | bez nuance | doplněno: čistý Qwen už 71 %, přírůstek jen 71 → 100 % | text 2511.02600: „cleanly fine-tuned Qwen model already had a 71% misclassification rate“ |
 | RQ6-042 poznámka | bez upřesnění | doplněno: práh z validace (metoda SIGL/NODLINK) aplikovaný na ORTHRUS, jeden systém a jeden dataset, Bilot je podle řádku RQ6-038 spoluautor ORTHRUS | první část z kontroly. Spoluautorství Bilota jsem převzal z pole `citace` řádku RQ6-038 (Jiang, Bilot et al.), PDF ORTHRUS jsem znovu neotevíral. |
 | RQ6-044 pouzitelnost | bez upozornění | doplněno: není kauzální graf, TPR neuveden | kontrola, text studie |
-| RQ6-050 poznamka | „jen prumery“ | doplněno: průměrování pres 16 LLM neuvedeno, článek nedohledán | README (podle kontroly, WebFetch jsem neopakoval) |
+| RQ6-050 poznamka | „jen prumery“ | doplněno: průměrování pres 16 LLM neuvedeno, článek nedohledán | README (podle kontroly, načtení stránky jsem neopakoval) |
 
 Počet oprav v extrakci: 13 položek v 11 řádcích (RQ6-001, 003, 009 ×3 pole, 021, 022, 023, 025, 034, 042, 044, 050). Z toho 4 povinné opravy z bodu 4 kontroly + 3 venue + 6 doplňujících nuancí.
 
