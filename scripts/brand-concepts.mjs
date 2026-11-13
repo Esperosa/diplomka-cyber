@@ -1,6 +1,6 @@
 // Koncepty znaku Salticus ve vizualnim jazyce aplikace: uzly (kruhy) spojene metaball mosty (stejna funkce
 // metaballBridge i skelet pismen jako v dotmatrix.ts), barvy z tokens.css (inkoust, papir, signalni cervena).
-// Vystup: SVG znaky, ikony aplikace a prehledova stranka v ui-src/brand/koncepty/. Nic z toho se nepripojuje
+// Vystup: SVG znaky, ikony aplikace a prehledova stranka v docs/brand/koncepty/. Nic z toho se nepripojuje
 // do sestaveni UI; vybrany koncept se rucne dopracuje a presune do ui-src/brand/.
 import { buildSync } from "esbuild";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const out = join(root, "ui-src", "brand", "koncepty");
+const out = join(root, "docs", "brand", "koncepty");
 mkdirSync(out, { recursive: true });
 
 const tmp = join(process.env.BRAND_TMP || tmpdir(), "salticus-brand");

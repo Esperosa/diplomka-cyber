@@ -33,8 +33,8 @@ await build({
   legalComments: "none",
 });
 
-// Ikona aplikace (favicon) je dodana autorem: soubory v ui-src/brand/ se zkopiruji do ui/ a odkazou v index.html.
-// Znak se negeneruje; kdyz soubor chybi, odkaz se nevlozi (a favicon se nepozaduje: data: prazdna ikona).
+// Ikona aplikace (znak Skok): soubory v ui-src/brand/ se zkopiruji do ui/ a odkazou v index.html.
+// Kdyz soubor chybi, odkaz se nevlozi (a favicon se nepozaduje: data: prazdna ikona).
 let brandFiles = [];
 try {
   brandFiles = await readdir("ui-src/brand");

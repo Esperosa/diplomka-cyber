@@ -1,3 +1,11 @@
+<p align="center">
+  <img alt="Salticus, znak" src="ui-src/brand/favicon.svg" width="96"><br>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/koncepty/wordmark-tmavy.svg">
+    <img alt="Salticus" src="docs/brand/koncepty/wordmark-svetly.svg" height="56">
+  </picture>
+</p>
+
 # Salticus
 
 Salticus je program pro síťovou detekci a vyhodnocení hrozeb. Spojuje aktivní inventář služeb, kontext zranitelností a pasivní síťové události (Suricata EVE JSON, logy Zeeku) do nálezů, které lze zpětně prověřit. Nález nevzniká jako jediné skóre. Program k němu vede hypotézy o tom, co se děje, ověřuje je v kontrolovaných krocích, pamatuje si, jak dopadly podobné případy, a zásahy do sítě navrhuje, ale provede je jen po schválení.
@@ -100,7 +108,7 @@ Postup podle kroků je v [`docs/diplomka/eval/`](docs/diplomka/eval/) (`impl-kro
 <!-- STATUS:BEGIN -->
 _Tento blok generuje `tools/readme_status.py` z dokumentů v `docs/diplomka/eval/` a z gitu. Ručně se neupravuje._
 
-- Poslední commit: `d3af6f6` ze dne 2026-11-13 (refactor: prejmenovani projektu na Salticus (balicek, binarka, konfigurace, promenne prostredi, metriky, UI, dokumentace))
+- Poslední commit: `ce294a0` ze dne 2026-11-13 (feat(brand): koncepty znaku Salticus ve vizualnim jazyce aplikace (monogram S, skok, wordmark, ikony), generator a nahledy)
 - Počet unit testů knihovny (`cargo test --lib -- --list`): 566
 
 - Výkon sítí XXXL (G4, držené seedy): p99 cyklu 1,08 s a 0,43 s, práh < 3 s, splněno.
