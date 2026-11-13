@@ -35,20 +35,43 @@ export function metaballBridge(a: P, ra: number, b: P, rb: number, neck: number,
   // uhel napojeni phi (od osy, na obou kruzich stejny) z pozadovane sirky mostu v pulce:
   // |y_mid| = (4 (ra+rb) sin(phi) - 3 (h1+h2) cos(phi)) / 8
   const minPhi = d < sumR ? Math.acos(Math.min(1, d / sumR)) + 0.25 : 0.04;
-  const handle = (phi: number) => Math.min(2.4 * rmin, 0.45 * Math.max(d - sumR * Math.cos(phi), 0.1));
-  const mid = (phi: number) => (4 * sumR * Math.sin(phi) - 6 * handle(phi) * Math.cos(phi)) / 8;
-  let lo = minPhi;
-  let hi = Math.PI / 2 - 0.02;
-  let phi = lo;
-  if (mid(lo) < half) {
-    for (let i = 0; i < 40; i += 1) {
+  // Dlouhe mosty: velka rukojet by horni hranu stahla pres osu a most by se prekrizil (motylek). Rukojet se proto
+  // zkracuje, dokud vsechny vzorky hrany zustavaji striktne na sve strane osy.
+  let h = 0;
+  let phi = minPhi;
+  for (const k of [1, 0.7, 0.45, 0.25, 0.1, 0]) {
+    const handle = (p: number) => k * Math.min(2.4 * rmin, 0.45 * Math.max(d - sumR * Math.cos(p), 0.1));
+    const mid = (p: number) => (4 * sumR * Math.sin(p) - 6 * handle(p) * Math.cos(p)) / 8;
+    let lo = minPhi;
+    let hi = Math.PI / 2 - 0.02;
+    phi = lo;
+    if (mid(lo) < half) {
+      for (let i = 0; i < 40; i += 1) {
+        phi = (lo + hi) / 2;
+        if (mid(phi) < half) lo = phi;
+        else hi = phi;
+      }
       phi = (lo + hi) / 2;
-      if (mid(phi) < half) lo = phi;
-      else hi = phi;
     }
-    phi = (lo + hi) / 2;
+    h = handle(phi);
+    const cc = Math.cos(phi);
+    const ss = Math.sin(phi);
+    const y0 = -ra * ss;
+    const y3 = -rb * ss;
+    const y1 = y0 + h * cc;
+    const y2 = y3 + h * cc;
+    let ok = true;
+    for (let i = 0; i <= 32; i += 1) {
+      const u = i / 32;
+      const w = 1 - u;
+      const y = w * w * w * y0 + 3 * w * w * u * y1 + 3 * w * u * u * y2 + u * u * u * y3;
+      if (y > -0.25) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) break;
   }
-  const h = handle(phi);
   const c = Math.cos(phi);
   const s = Math.sin(phi);
   // lokalni soustava: a v pocatku, b v (d, 0), "horni" hrana ma zaporne y
