@@ -70,8 +70,44 @@ Rozhodnutí: když E1 až E14 projdou, vrstva je „připravena na držený běh
 
 ## D) Měření
 
-(doplní se)
+Čtyři ladicí seedy 20261102 až 20261104 a 20262201, 20262202, 40 sítí každý (200 sítí, 6 362 útoků), párově proti `off`, engine v3 s presetem kroku 7, `--endpoint on`. Podrobné tabulky: `k8/vysledky.md` (přepočet `python tools/soak_k8.py`). Drženy zůstaly seedy kroku 7 a ICS, nebyly použity.
+
+| rameno | detekce | FP/síť-den | zobrazeno/síť-den | zavřeno omylem | útoky s omylem zavřeným nálezem |
+|---|---:|---:|---:|---:|---:|
+| off | 83,9 % | 15,1 | 140,4 | 1,4 % | 41 |
+| on100 (všichni hosté mají agenta) | 90,7 % | 16,0 | 145,2 | 1,1 % | 25 |
+| on60 | 88,2 % | 15,7 | 143,1 | 1,8 % | 44 |
+| on30 | 86,5 % | 15,3 | 141,4 | 2,3 % | 62 |
+| comp-silent (kompromitovaný agent mlčí) | 83,9 % | 15,3 | 140,6 | 1,4 % | 45 |
+| comp-ok (kompromitovaný agent hlásí „v pořádku“) | 83,9 % | 16,0 | 142,0 | 1,6 % | 50 |
+
+Párově `on100` − `off`: detekce +6,8 p. b. (+6,1 až +7,5), exploit_attempt +33,6 (+29,5 až +37,8), lateral_movement +11,3 (+9,0 až +13,9), c2_beacon +8,7 (+6,4 až +11,0), pomalé c2 (≤ 0,5×) +5,0 (+1,3 až +9,4); FP poměr 1,060, zobrazeno 1,034.
+
+### Prahy
+
+| práh | výsledek |
+|---|---|
+| E1 až E11 | splněno (hodnoty v `k8/vysledky.md`) |
+| E12 fuzz parserů a limity | splněno: test `fuzz_parsers_never_panic` prošel (0 paniků), limity drženy |
+| E13 determinismus a kompatibilita | splněno: `endpoint_world_is_inert_without_switch_deterministic_and_keeps_protection`, golden snapshot zelený, výstup `legacy` a v3 bez přepínače shodný s krokem 7 |
+| E14 paniky a porušené invarianty | 0 a 0 ve všech ramenech |
+
+Plná sada `cargo test --lib`: 529 prošlo, 6 selhalo. Pět selhání je v testech brokeru (neběží Redis, `connection refused`), šestý (`parse_mode_and_disable_list`) očekával popis sestavy bez přepínače `endpoint` a byl opraven. Clippy hlásí stejné styly varování jako před krokem (collapsible_if, sort_by_key a další); jejich počet nebyl porovnán s krokem 7.
+
+### Omezení měření
+
+- Simulovaná koncová telemetrie vychází z parametrických variant existujících rodin útoků. Kvalita indikátorů proti skutečným záznamům (Sysmon, Wazuh) tím není dokázána; veřejné záznamy slouží jen k testům parserů.
+- `comp-ok`: kompromitovaný agent, který hlásí „v pořádku“, zvyšuje počet útoků s omylem zavřeným nálezem z 41 na 50 (v povoleném limitu, ale není nulový). Chráněné nálezy se tím nezavřou (E10: 0).
+- Přínos klesá s pokrytím agenty, bez agentů (`off`) je výsledek shodný s krokem 7.
 
 ## E) Registr slepých míst po kroku 8
 
-(doplní se)
+| slepé místo | před krokem 8 | po kroku 8 (`on100`, simulace) | kategorie |
+|---|---|---|---|
+| exploit_attempt | detekce kolem 40 % správného typu | +33,6 p. b. proti `off` | (a) uzavřeno měřeným účinkem, jen u hostů s agentem |
+| lateral_movement | kolem 67 % | +11,3 p. b. | (a) u hostů s agentem |
+| c2_beacon (pomalé tempo ≤ 0,5×) | 37 až 61 % | +5,0 p. b. (+1,3 až +9,4) | (b) zmírněno, zbývá mezera |
+| host bez agenta nebo kompromitovaný agent | nepokryto | pokrytí a mlčící agent viditelné v reportu (`endpoint_covered_host_cycles`), mlčící agent síťovou cestu nezhoršuje | (c) vynucené omezení: koncový „neškodný“ signál nikdy sám nezavře chráněný nález |
+| kvalita indikátorů na skutečných záznamech | nezměřeno | nezměřeno (jen simulace a testy parserů) | otevřené, vyžaduje veřejné záznamy nebo vlastní laboratoř |
+
+Zbývá: změřit přínos v dlouhém běhu s presetem kroku 8 (`endpoint` zapnuto) a na držených seedech, zvážit zapnutí v `recommended()` až po tomto běhu.
