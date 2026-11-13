@@ -205,7 +205,7 @@ Odchylka od A9: kategorie útoků se v UNSW-NB15 v čase prolínají, takže roz
 
 ## Budoucí vlny (naplánováno, ne implementováno)
 
-- **Vlna 1 (zbytek):** CSE-CIC-IDS2018, CICIoT2023 — každý jako nová `ScenarioSource` implementace v `src/eval/sources/`. CIC sady vyžadují registrační formulář s osobními údaji, takže jen přes veřejné přegenerované verze (Engelen a kol., CNS 2022), nebo po rozhodnutí uživatele.
+- **Vlna 1 (zbytek):** CSE-CIC-IDS2018, CICIoT2023 — každý jako nová `ScenarioSource` implementace v `src/eval/sources/`. CIC sady vyžadují registrační formulář s osobními údaji, takže jen přes veřejné přegenerované verze (Engelen a kol., CNS 2022), nebo po rozhodnutí autora.
 - **Vlna 2:** threat intel enrichment (NVD/KEV/EPSS, URLhaus, ThreatFox, OTX).
 - **Vlna 3:** Mininet/Containerlab generátor syntetických scénářů — zdroj prakticky neomezeného objemu kontrolovaných scénářů (DHCP/NAT churn, vlastní firewall/DNS/IPS politiky), včetně identity-churn scénářů, které IoT-23 ani CTU-13 nepokrývají.
 
