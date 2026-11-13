@@ -1,12 +1,12 @@
 # Závěrečná studie: jak vylepšit korelační a ověřovací jádro Skákavky (nižší šum, vyšší úspěšnost, univerzálnost)
 
-Verze 1.1, 2026-11-01. Revize po kritikách `kritika-skeptik.md` (K1 až K23) a `kritika-pragmatik.md` (P, Q, U, B, E, M), log změn v `revize-00.md`. Souhrnná (meta)studie nad revidovanými studiemi RQ1 až RQ6 podle `00-protokol.md` v1.0. Zdrojový kód se neměnil, nic se nespouštělo kromě čtení souborů a `git log`, procesy `bakula-soak-*` zůstaly bez zásahu.
+Verze 1.1, 2026-11-01. Revize podle `revize-metodiky-a-rizik.md` (K1 až K23) a `revize-rozsahu-a-nakladu.md` (P, Q, U, B, E, M), log změn v `revize-00.md`. Souhrnná (meta)studie nad revidovanými studiemi RQ1 až RQ6 podle `00-protokol.md` v1.0. Zdrojový kód se neměnil, nic se nespouštělo kromě čtení souborů a `git log`, procesy `bakula-soak-*` zůstaly bez zásahu.
 
 Konvence:
 - `RQn-xxx` je id řádku v `rqN-*/extrakce.csv`.
 - `RQn Zk` je závěr v tabulce Závěry revidované `rqN-*/studie.md`. Jistota je převzatá beze změny nebo snížená, nikdy zvýšená.
 - `[v1]` = `docs/diplomka/eval/soak-findings.md`.
-- `[v2b]` = `F:\Projekty\bakula-soak\run-v2b\status.md`, **snímek 2026-11-01 00:03 SEČ** (1,00 h běhu, 190 sítí, 1 586 virtuálních síť-dnů, seed 20261101). Všechna čísla označená [v2b] jsou z tohoto snímku. Soubor se přepisuje: skeptik četl snímek po 1,25 h (234 sítí), při revizi měl soubor 9,50 h. Pozdější snímky jsem do čísel nepřebíral. Snímkové hodnoty nejsou stacionární (K11, bod 5).
+- `[v2b]` = `F:\Projekty\bakula-soak\run-v2b\status.md`, **snímek 2026-11-01 00:03 SEČ** (1,00 h běhu, 190 sítí, 1 586 virtuálních síť-dnů, seed 20261101). Všechna čísla označená [v2b] jsou z tohoto snímku. Soubor se přepisuje: při revizi metodiky jsem četl snímek po 1,25 h (234 sítí), při dalších revizích měl soubor 9,50 h. Pozdější snímky jsem do čísel nepřebíral. Snímkové hodnoty nejsou stacionární (K11, bod 5).
 - `[A01]` až `[A35]` jsou nálezy auditu kódu `01-analyza-kodu-a-zdroje-sumu.md`. Ručně jsem je ověřil jen tam, kde je uvedeno „ověřeno“.
 - „vlastní výpočet“ = aritmetika nad uvedeným souborem. „odhad autora“ = číslo bez důkazu, s popsaným postupem. „volba autora“ = parametr návrhu experimentu, ne tvrzení o světě.
 
@@ -27,7 +27,7 @@ Konvence:
 7. **Doporučené pořadí (§5.x, §5A):** nejdřív levné změny na největší zdroje šumu bez čekání na plnou bránu G0: G0-min → R5 packet rate → R7-lite historie klíče → R4-lite stav nálezů + R3 Suricata → R13 `unexpected_traffic`. Potom G0-plné, R2, kalibrace, kontext, identita.
    - **Odloženo** s odůvodněním v §5.x: RBA (R9), EVOI/SPRT/pivot (R10 mimo R10-lite), FDR v produkci, auto-uzavírání, LLM, rozšíření detekce mimo zapojení `score_source_hosts`.
    - Soak v3 má 8 primárních předregistrovaných hypotéz s Holmovou korekcí (§7.4), ostatní jsou průzkumné.
-8. **Efekty v §5 jsou hypotézy.** Kde chybí důkaz, píšu „bez podkladu“. Provozní laťka 14denního plánu (pokles zobrazených nálezů a FP/síť-den ≥ 70 %, minimálně 50 %) je volba zadavatele, ne očekávání z literatury.
+8. **Efekty v §5 jsou hypotézy.** Kde chybí důkaz, píšu „bez podkladu“. Provozní laťka 14denního plánu (pokles zobrazených nálezů a FP/síť-den ≥ 70 %, minimálně 50 %) je volba autora práce, ne očekávání z literatury.
 
 ---
 
@@ -35,7 +35,7 @@ Konvence:
 
 ### 2.1 Jak se RQ1 až RQ6 spojily
 
-- **Vstupem byly jen revidované závěry:** tabulky Závěry v `studie.md` po revizi (`revize-RQn*.md`; u RQ5 po druhé revizi `revize-RQ5-v2.md`). Číslo přebírám z textu studie a u každého uvádím id řádku. Vybrané řádky jsem porovnal s `extrakce.csv` (RQ1-040, RQ2-019, RQ3-021, RQ4-014, RQ6-046: hodnoty sedí) a ověřil, že citovaná id v extrakcích existují (kontrola 23 id: vše nalezeno). Vzorek je malý (K10). Skeptik prošel 24 řádků proti textu tvrzení a našel 4 nesoulady interpretace (RQ3-025, RQ6-002, RQ1-024, RQ2-019; ≈ 17 %). Ve v1.1 jsou opravené (K1 až K4). Odhadovaná chybovost interpretace souhrnu je proto kolem 15 % (§8.1).
+- **Vstupem byly jen revidované závěry:** tabulky Závěry v `studie.md` po revizi (`revize-RQn*.md`; u RQ5 po druhé revizi `revize-RQ5-v2.md`). Číslo přebírám z textu studie a u každého uvádím id řádku. Vybrané řádky jsem porovnal s `extrakce.csv` (RQ1-040, RQ2-019, RQ3-021, RQ4-014, RQ6-046: hodnoty sedí) a ověřil, že citovaná id v extrakcích existují (kontrola 23 id: vše nalezeno). Vzorek je malý (K10). Při revizi metodiky jsem prošel 24 řádků proti textu tvrzení a našel 4 nesoulady interpretace (RQ3-025, RQ6-002, RQ1-024, RQ2-019; ≈ 17 %). Ve v1.1 jsou opravené (K1 až K4). Odhadovaná chybovost interpretace souhrnu je proto kolem 15 % (§8.1).
 - **Audit kódu (01):** používám ho jako popis mechanismu. Tvrzení, na kterých stojí doporučení, jsem ověřil přímo v kódu, viz §4.4.
 - **Prior art (09):** je to rychlá rešerše, převážně abstrakty a snippety. Používám ho jen v §8 k opatrnému vymezení novosti.
 - **Naměřená data:** soak v1 [v1] a snímek v2b [v2b].
@@ -61,7 +61,7 @@ Pořadí v §5 se řídí třídou a v rámci třídy náročností a závislost
 
 - Adresář `_predbezne/` (protokol §1).
 - Řádky V1/V0 ze souborů `neovereno.md` a tvrzení výrobců (Splunk, Exabeam, Dynatrace, Vectra, Corelight a další, viz RQ1 §3b, RQ2 §10, RQ4 §10).
-- **Čísla soak v2** (`run-v2-72h`), přestože je citují hypotézy v RQ1 až RQ6. Důvod: zadání v2 vyřazuje a RQ5 (Metodika) ukazuje, že v2 s velkou pravděpodobností běžel s atribucí podle podřetězce a s oknem lookalike událostí prodlouženým o 2 cykly. Kde RQ studie stavěly hypotézu na v2, přepočítávám kontext na [v1] a [v2b].
+- **Čísla soak v2** (`run-v2-72h`), přestože je citují hypotézy v RQ1 až RQ6. Důvod: v2 je z analýzy vyřazeno a RQ5 (Metodika) ukazuje, že v2 s velkou pravděpodobností běžel s atribucí podle podřetězce a s oknem lookalike událostí prodlouženým o 2 cykly. Kde RQ studie stavěly hypotézu na v2, přepočítávám kontext na [v1] a [v2b].
 - Přenos CIC-IDS-2017 → 2018 jako důkaz driftu (RQ2 Z8a).
 - Řádky vyřazené revizemi: RQ4-033 a RQ4-034 (Lee a Lee), RQ3-048 jako důkaz (jen V2, kontext), RQ2-034 až 037 jako důkaz (CALIBURN, autor opravil popis kódu).
 - Kvantitativní odhady auditu 01 (např. „−90 %“) nejsou důkaz. Uvádím je jako „odhad autora auditu“.
@@ -159,7 +159,7 @@ Jednotkou D1 a D3 je **nález × cyklus**. Každý cyklus se tentýž stav vydá
 | D6 | exploit_attempt | detekováno 68,8 %, správný typ 0,0 %, IDS vidělo 2 301 z 5 061 [v1] | 65,8 % / 0,0 %, IDS 138 z 339 [v2b] |
 | D7 | exfiltrace, zdrojové pořadí | 0,0 % → 42,1 % s egress [v1] | 0,0 % → 37,2 % [30,6; 44,2] s egress [v2b] |
 | D8 | c2_beacon | detekováno 4,7 %, typ 0,3 % [v1] | 11,7 % [8,4; 15,9], typ 6,7 %, medián latence 450 min [v2b] |
-| D9 | rogue_device | 0,2 % [v1] | 16,8 % (n = 101) [v2b]. Podle velikosti: S 42 % (n = 19), M 28 % (n = 29), L 5 % (n = 20), XL 0 % (n = 31), XXL 0 % (n = 2). Snímek po 1,25 h má podle skeptika XL 4 % (n = 55, K6). Malá n nedovolují tvrdit trend, nanejvýš S proti L + XL + XXL |
+| D9 | rogue_device | 0,2 % [v1] | 16,8 % (n = 101) [v2b]. Podle velikosti: S 42 % (n = 19), M 28 % (n = 29), L 5 % (n = 20), XL 0 % (n = 31), XXL 0 % (n = 2). Snímek po 1,25 h má podle revize metodiky XL 4 % (n = 55, K6). Malá n nedovolují tvrdit trend, nanejvýš S proti L + XL + XXL |
 | D10 | lateral_movement, správný typ | 12,5 % [v1] | 52,1 % [46,1; 58,0] [v2b] |
 | D11 | provozní a benigní lookalike s FP | – (v1 je nemá) | patch_window 97,7 %, collector_replay 93,8 %, service_crash 89,6 %, batch_job 74,9 %, log_corruption 71,4 %, flash_crowd 64,8 %, backup_burst 62,3 %, authorized_scanner 42,7 %, sensor_crash 0,0 %, retry_storm 0,0 %, software_update 0,0 % [v2b]. Flash_crowd, backup_burst a authorized_scanner nejde vysvětlit zdravím senzoru a jen zčásti kalendářem (K22) |
 | D12 | kalibrace Case Memory | Brier 0,0107; pásmo 0,1 až 0,5 překonfidentní, p ≥ 0,6 podkonfidentní [v1] | Brier 0,0203; [0,5; 0,6) predikce 0,534 → skutečnost 0,327, [0,8; 0,9) 0,867 → 0,997; 82,2 % predikcí v koši [0,9; 1,0) (vlastní výpočet) [v2b] |
@@ -206,7 +206,7 @@ Ověřeno v kódu (stav pracovního stromu 2026-11-01):
 | S9: Wilson přes útoky | `stats.rs`, `report.rs` (podle RQ5, neověřoval jsem) | intervaly v [v2b] jsou pravděpodobně příliš úzké | clusterový bootstrap |
 | S10: jeden seed pro ladění i hlášení | [v2b] seed 20261101 | – | držené seedy (§7) |
 | S11: kotva bez inventáře | `dataset_replay.rs:137` `HashSet::new()` | D14 | dodat pasivní inventář |
-| reprodukovatelnost buildu | [v2b] uvádí commit `15e6fd5`, který je předkem `a293d2b` (commit 23:40 SEČ, běh od 23:03 SEČ) | zadání tvrdí, že v2b odpovídá opravené verzi `a293d2b`. Konzistentní s tím je sensor_crash 0,0 % a 0 panik. Binárka byla ale postavená z necommitnutého stromu, takže to **nelze nezávisle ověřit** | do status zapisovat hash a příznak „dirty“ |
+| reprodukovatelnost buildu | [v2b] uvádí commit `15e6fd5`, který je předkem `a293d2b` (commit 23:40 SEČ, běh od 23:03 SEČ) | podle popisu běhu v2b odpovídá opravené verzi `a293d2b`. Konzistentní s tím je sensor_crash 0,0 % a 0 panik. Binárka byla ale postavená z necommitnutého stromu, takže to **nelze nezávisle ověřit** | do status zapisovat hash a příznak „dirty“ |
 
 [I] Strukturální chyby jádra, které dávají D6 a D7 bez ohledu na harness a k D5 přispívají spolu s plánováním harnessu (A32, K9) (ověřeno v kódu):
 - filtr scope jen podle cíle (`passive/zeek.rs:173-175`, `passive/suricata.rs:69-70`, A10),
@@ -217,7 +217,7 @@ Ověřeno v kódu (stav pracovního stromu 2026-11-01):
 - odhad Case Memory jen podle typu nálezu (`case_memory.rs:209-232`, A21),
 - prázdné `contradicting_evidence` (`hypothesis.rs:156`, A20),
 - nepoužité `time_window_s` (`correlation.rs:6-46`, A16),
-- `score_source_hosts` je definovaná v `passive/anomaly.rs:110` jako `pub(crate)` a volá ji jen `src/eval` (A19; upřesněno podle pragmatika). Zapojení do produkce je tedy levné, levné ale nejsou prahy.
+- `score_source_hosts` je definovaná v `passive/anomaly.rs:110` jako `pub(crate)` a volá ji jen `src/eval` (A19; upřesněno podle revize rozsahu). Zapojení do produkce je tedy levné, levné ale nejsou prahy.
 
 ---
 
@@ -231,10 +231,10 @@ Pořadí realizace je v §5.x a v §5A. Oddíly 5.g až 5.f jsou řazené temati
 
 ### 5.g Metodika měření
 
-**R1 (P1): oprava harnessu a reportu, rozdělená na G0-min a G0-plné (pragmatik P1).**
+**R1 (P1): oprava harnessu a reportu, rozdělená na G0-min a G0-plné (revize rozsahu P1).**
 
 Ve v1.0 R1 blokovala všechny ostatní body. To bylo chybně: snížení šumu se dá měřit na surových počtech nálezů za síť-den párově A/B, protože atribuce ovlivňuje „detekováno“, ne počet nálezů, a v obou ramenech je stejná.
-- **G0-min** (≈ 3 dny, odhad pragmatika) je jediná podmínka pro R5, R7-lite, R4-lite, R3 a R13:
+- **G0-min** (≈ 3 dny, odhad z revize rozsahu) je jediná podmínka pro R5, R7-lite, R4-lite, R3 a R13:
   - FP/síť-den absolutně po typech,
   - zobrazené nálezy/síť-den,
   - `S_quiet`,
@@ -242,7 +242,7 @@ Ve v1.0 R1 blokovala všechny ostatní body. To bylo chybně: snížení šumu s
   - hash buildu a příznak dirty ve status,
   - párování A/B přes jednou vygenerovanou telemetrii (§7.3),
   - metriky enginu (§5A.3).
-- **G0-plné** (≈ 8 až 12 dnů, odhad pragmatika) běží souběžně a je podmínkou pro R2, R3 (precision IDS), R6 a finální fázi E3 (§7.3). Obsahuje body níže.
+- **G0-plné** (≈ 8 až 12 dnů, odhad z revize rozsahu) běží souběžně a je podmínkou pro R2, R3 (precision IDS), R6 a finální fázi E3 (§7.3). Obsahuje body níže.
 - **Změna (G0-plné):**
   - `soak/episode.rs:700-760`: placebo okna pro útoky a kontrafaktuální běh s `mask_truth` pro lookalike (A29, A31, RQ5 S5).
   - `soak/traffic.rs:1194-1216`: počítadlo „doručeno do telemetrie“ za `degrade` (S6).
@@ -272,13 +272,13 @@ Ve v1.0 R1 blokovala všechny ostatní body. To bylo chybně: snížení šumu s
 **R2 (P1): scope `src ∈ S ∨ dst ∈ S` a směr toku (A10), současně s odstraněním S1.**
 - **Změna:** `passive/zeek.rs:46-48, 102-106, 173-178`; `passive/suricata.rs:69-73`; `passive/mod.rs` (`in_scope` → `in_scope_flow` se `Direction`); `soak/episode.rs:487-492`. Pravidla závislá na inventáři (`unexpected_traffic`) pouštět jen na interní cíle.
 - **Důkazy pro:** naměřený blokér: exfiltrace 0,0 % zdrojového pořadí, s egress 42,1 % [v1] a 37,2 % [v2b]. Literatura kvantitativní cíl nedává (RQ4 §3c, §9). Riziko filtrace: RQ1 Z3 (střední).
-- **Očekávaný efekt:** bez podkladu. Hodnota ≈ 37 % [v2b] pochází z diagnostického skóre `score_source_hosts` nad všemi toky, ne z produkčního detektoru po R2. Je to horní reference téže metriky, ne očekávaný efekt změny (K16). Detekce C2/mining s externím cílem: bez podkladu. R2 není snížení šumu, ale rozšíření detekce, a počet nálezů nejspíš zvýší (pragmatik P5).
+- **Očekávaný efekt:** bez podkladu. Hodnota ≈ 37 % [v2b] pochází z diagnostického skóre `score_source_hosts` nad všemi toky, ne z produkčního detektoru po R2. Je to horní reference téže metriky, ne očekávaný efekt změny (K16). Detekce C2/mining s externím cílem: bez podkladu. R2 není snížení šumu, ale rozšíření detekce, a počet nálezů nejspíš zvýší (revize rozsahu P5).
 - **Rizika:**
   - Nové FP z `retry_storm` a `software_update` (dnes 0,0 % jen proto, že se zahodí, [v2b], A10).
   - Bez S1 by engine mohl detekovat útok podle novosti externí adresy, což je artefakt (M2, RQ5 S1).
   - Bez příznaku směru vyrobí každé odchozí spojení na internet `unexpected_traffic`. Před R2 proto napsat test: syntetický odchozí tok na veřejnou IP nesmí `unexpected_traffic` vytvořit (Q1).
   - Toky se zdrojem mimo scope může útočník nebo skener použít k vyrobení neomezeného počtu klíčů a nafouknout stav nálezů a Case Memory (B2). Proto strop kardinality (top N podle skóre, zbytek do agregátu „externí šum“), TTL a metrika velikosti stavu.
-- **Závislosti:** G0-plné (S1 a S2 musí být opravené dřív). **Náročnost:** S v kódu, ≈ 3 dny s testy (pragmatik Q2). Do 14denního jádra nepatří (§5A).
+- **Závislosti:** G0-plné (S1 a S2 musí být opravené dřív). **Náročnost:** S v kódu, ≈ 3 dny s testy (revize rozsahu Q2). Do 14denního jádra nepatří (§5A).
 - **H:** průzkumná X06.
 - **Měření:**
   - Metriky: zdrojové pořadí exfiltrace, detekce a typ C2/exfil/mining/fleet_beacon, FP/síť-den podle typu (zvlášť odchozí), negativní kontrola u rodin jen s příchozím externím zdrojem (ssh_bruteforce, credential_stuffing, web_exploit, ddos_volume) s rozdílem < 2 p. b. (RQ5 H-1).
@@ -301,7 +301,7 @@ Ve v1.0 R1 blokovala všechny ostatní body. To bylo chybně: snížení šumu s
 
 **R4 (P2): perzistentní stav nálezu, deduplikace mezi detektory a agregace do incidentů s nepotlačitelným prvním výskytem. Dvě etapy: R4-lite teď, incidenty později (P4).**
 
-`build_finding_id` (`findings.rs:815-826`) je bez času, a tedy stabilní. Problém není ID, ale chybějící perzistentní stav za ním, takže pipeline vydá nález v každém cyklu znovu (upřesněno podle pragmatika).
+`build_finding_id` (`findings.rs:815-826`) je bez času, a tedy stabilní. Problém není ID, ale chybějící perzistentní stav za ním, takže pipeline vydá nález v každém cyklu znovu (upřesněno podle revize rozsahu).
 - **R4-lite** (≈ 6 až 8 dnů včetně migrace, Q2):
   - `first_seen`, `last_seen`, `occurrences` v `Finding` (`#[serde(default)]`) a nový `finding_state.rs`.
   - Znovuvydání při změně stadia, Δp ≥ 0,1, **nové zdrojové IP nebo novém typu na stejném klíči** nebo po klidu (B1).
@@ -376,7 +376,7 @@ Ve v1.0 R1 blokovala všechny ostatní body. To bylo chybně: snížení šumu s
   - kontextová degradace alertu nebo nálezu na službu, která v inventáři neexistuje nebo není zranitelná.
   
   Pro kalendář v soaku dostane brána jen 50 % oken (návrh auditu (c), simulace neúplné dokumentace).
-- **Rozdělení (pragmatik P9):**
+- **Rozdělení (revize rozsahu P9):**
   - **R6a** (≈ 2 dny): `service_unavailable` místo `connection_timeout_burst` a zdraví senzoru jako snížení váhy.
   - **R6b** (M, odloženo za 14denní jádro): kalendář, allowlisty s TTL, schvalování a UI pro aktivní výjimky.
   
@@ -397,7 +397,7 @@ Ve v1.0 R1 blokovala všechny ostatní body. To bylo chybně: snížení šumu s
   - Metrika `lookalike_incremental_fp` z kontrafaktuálu (ne atribuce oknem, viz 4.4); útok vložený do okna údržby; recall exploit_attempt a web_exploit.
   - Zamítnutí (z RQ1 H1-5, RQ6 H-1, H-2, RQ1 H1-4): pokles inkrementálních FP < 30 % u ≥ 3 ze 4 událostí; recall útoku v okně klesne > 5 p. b.; u spolehlivosti senzoru pokles FP < 25 % nebo detekce > 5 p. b.; u degradace exploitů pokles recallu > 1 p. b.
 
-**R7 (P3): baseline na entitu se sezónním tvarem role, gatingem a zmrazením při alarmu (A02, A03). Nejdřív R7-lite (pragmatik P3).**
+**R7 (P3): baseline na entitu se sezónním tvarem role, gatingem a zmrazením při alarmu (A02, A03). Nejdřív R7-lite (revize rozsahu P3).**
 - **R7-lite** (≈ 4 až 5 dnů, jde hned po G0-min):
   - V `passive/anomaly.rs:334-398` nahradit průřezové z-skóre bez paměti robustním mediánem a MAD přes **historii téhož klíče** `(dst_ip, proto, port)`.
   - Minimální počet toků a pozorování na klíč. Bez historie (méně než N_min pozorování, volba autora, ladí se na L) nález nevzniká, jen se sbírá.
@@ -422,13 +422,13 @@ Ve v1.0 R1 blokovala všechny ostatní body. To bylo chybně: snížení šumu s
 - **Důkazy pro:** naměřeno: falešné rozdělení 32,8 %, sloučení 20,8 % [v2b]. Literatura pro efekt: žádná recenzovaná, jen dokumentace výrobců v prior art (09, bod 6, nízká důvěra). Nepřímo M36 (identita jako předpoklad lateral detekce).
 - **Očekávaný efekt:** bez podkladu. Audit uvádí cíl < 10 % (odhad autora auditu).
 - **Rizika:** MAC randomizace (09, jen snippet). Chybné sloučení otráví baseline.
-- **Závislosti:** G0-min. **Náročnost:** M až L (8 až 12 dnů, Q2). Do 14 dnů ne. Nejdřív jedna diagnostická tabulka v E0: kolik FP `inductive_volume_anomaly` a `unexpected_traffic` vzniká kvůli identitě (pragmatik P8). Identita v generátoru je syntetická a o MAC randomizaci ani DHCP v reálné síti nic neříká.
+- **Závislosti:** G0-min. **Náročnost:** M až L (8 až 12 dnů, Q2). Do 14 dnů ne. Nejdřív jedna diagnostická tabulka v E0: kolik FP `inductive_volume_anomaly` a `unexpected_traffic` vzniká kvůli identitě (revize rozsahu P8). Identita v generátoru je syntetická a o MAC randomizaci ani DHCP v reálné síti nic neříká.
 - **H:** průzkumná X16.
 - **Měření:** falešné rozdělení a sloučení, vliv na X13. Zamítnutí: falešné rozdělení se nesníží aspoň o polovinu (volba autora).
 
 ### 5.e Učení a kalibrace, prioritizace
 
-**R9 (P3, ODLOŽENO z core plánu, pragmatik P7): pořadí podle RBA kombinace (závažnost + akumulace + rozmanitost, trailing okno) a denní rozpočet alertů.**
+**R9 (P3, ODLOŽENO z core plánu, revize rozsahu P7): pořadí podle RBA kombinace (závažnost + akumulace + rozmanitost, trailing okno) a denní rozpočet alertů.**
 
 Proč odloženo:
 - důkaz je nízký a pochází z jediného preprintu,
@@ -446,7 +446,7 @@ Náhrada v jádru je RBA-light bez předregistrované H: řazení zobrazených n
   - Metriky: AUROC pravý vs falešný incident, pravé incidenty v horních 10 %, detekce při rozpočtech 5, 11, 25/den (RQ2 H2).
   - Zamítnutí: AUROC kombinace ≤ AUROC podle závažnosti nebo Wilcoxon p > 0,05 (RQ1 H1-2a). Negativní kontroly H1-2c a H1-3: zamítnutí, pokud samotná akumulace významně překoná závažnost nebo vzácnost dosáhne AUROC > 0,70; naše prostředí je pak jiné než RBA. RQ2 H2: detekce rodiny klesne > 10 p. b. při rozpočtu ≤ 10/den.
 
-**R12 (P3): kalibrace a podmíněné učení Case Memory, monitorování driftu. Rozděleno na R12a a R12b (pragmatik P12).**
+**R12 (P3): kalibrace a podmíněné učení Case Memory, monitorování driftu. Rozděleno na R12a a R12b (revize rozsahu P12).**
 - **Změna:**
   - **R12a** (≈ 4 dny, po R4-lite): `IsotonicCalibrator` z `src/eval/calibration.rs` do knihovny a kalibrace zvlášť pro behaviorální typy, pooly s minimem vzorků. Rekalibrace bez rozdělení typů je zbytečná, protože 82,2 % predikcí v koši [0,9; 1,0) tvoří převážně statické expozice (A33, K22).
   - **R12b** (odloženo): `case_memory.rs:209-232` → `estimate_ctx` s hierarchickým backoffem a časovým rozpadem (A21); LR tabulky pro výsledky kontrol (A22).
@@ -465,7 +465,7 @@ Náhrada v jádru je RBA-light bez předregistrované H: řazení zobrazených n
 
 ### 5.b Žebřík proklepávání (sekvenční ověřování, rozpočet, pivoting)
 
-**R10 (P3/P4): sekvenční bayesovské ověřování incidentu s EVOI, stropem, fondy a trojstavovým verdiktem. V core plánu zůstává jen R10-lite. EVOI, SPRT, fondy a pivot jsou ODLOŽENY jako budoucí práce (pragmatik P10).**
+**R10 (P3/P4): sekvenční bayesovské ověřování incidentu s EVOI, stropem, fondy a trojstavovým verdiktem. V core plánu zůstává jen R10-lite. EVOI, SPRT, fondy a pivot jsou ODLOŽENY jako budoucí práce (revize rozsahu P10).**
 - **R10-lite** (≈ 3 dny, volitelné v 14denním plánu):
   - neplánovat kontroly, které `LocalRunner` stejně neprovede (no-op `passive_extended_observation`, `verification_exec.rs:79`),
   - deduplikace plánů,
@@ -504,7 +504,7 @@ Náhrada v jádru je RBA-light bez předregistrované H: řazení zobrazených n
 
 ### 5.c Rozšíření pokrytí detekce
 
-**R11 (P3/P4): beaconing, DNS, lateral/pivot, reverse shell, source-centric detektory do produkce. V core plánu zůstává jen zapojení `score_source_hosts` jako signálu, ve výchozím stavu vypnutého a měřeného na kotvě (≤ 1 den). Ostatní je ODLOŽENO (pragmatik P11).** Beacon nelze na soaku čistě měřit kvůli artefaktu periodicity (RQ5). Pro pivot a reverse shell nemáme podklad. Do diplomky se nepíšou jako cíle.
+**R11 (P3/P4): beaconing, DNS, lateral/pivot, reverse shell, source-centric detektory do produkce. V core plánu zůstává jen zapojení `score_source_hosts` jako signálu, ve výchozím stavu vypnutého a měřeného na kotvě (≤ 1 den). Ostatní je ODLOŽENO (revize rozsahu P11).** Beacon nelze na soaku čistě měřit kvůli artefaktu periodicity (RQ5). Pro pivot a reverse shell nemáme podklad. Do diplomky se nepíšou jako cíle.
 - **Změna:**
   - `score_source_hosts` (definovaná v `passive/anomaly.rs:110`, `pub(crate)`, volaná jen z `src/eval`) jako detektor produkující signály.
   - Nový `detectors/beacon.rs`: periodicita přes cykly, okna ≥ 24 h a ≥ 12 spojení na dvojici.
@@ -536,7 +536,7 @@ Náhrada v jádru je RBA-light bez předregistrované H: řazení zobrazených n
 
 ### 5.x Souhrnná tabulka pořadí (přeřazeno ve v1.1)
 
-Ve v1.0 bylo pořadí seřazené podle metodické čistoty (P1 až P4), a oprava největších zdrojů šumu tím čekala na bránu G0 (pragmatik P1, P13). Ve v1.1 je pořadí podle poměru efekt/cena a závislostí. Jistota důkazů se tím nemění. Dny jsou odhad pragmatika (Q2) pro jednoho vývojáře včetně testů a migrace, nikdo je neověřil.
+Ve v1.0 bylo pořadí seřazené podle metodické čistoty (P1 až P4), a oprava největších zdrojů šumu tím čekala na bránu G0 (revize rozsahu P1, P13). Ve v1.1 je pořadí podle poměru efekt/cena a závislostí. Jistota důkazů se tím nemění. Dny jsou odhad z revize rozsahu (Q2) pro jednoho vývojáře včetně testů a migrace, nikdo je neověřil.
 
 | pořadí | R | jistota hlavního důkazu | dny | naměřený blokér | stav |
 |---:|---|---|---:|---|---|
@@ -566,16 +566,16 @@ Ve v1.0 bylo pořadí seřazené podle metodické čistoty (P1 až P4), a oprava
 | auto-uzavírání (R12) | škrtnuto | tichá ztráta nálezu je pro správce bez SOC horší než šum (B4); laťka AACT je z jedné firmy (M48, nízká) |
 | LLM | škrtnuto z plánu, X34 jen podmíněně | riziko injection (RQ6 Z6), bez replikace (K2), nulová práce (B5) |
 | R11 mimo zapojení `score_source_hosts` | odloženo | beacon nelze na soaku čistě měřit (RQ5), pivot a reverse shell bez podkladu (RQ4 Z12b, Z13) |
-| hybridní soak CTU-13 + injekce, `slow_scan_camouflage` | odloženo z v3 | drahé, vázané na odložené R10 (pragmatik E6) |
+| hybridní soak CTU-13 + injekce, `slow_scan_camouflage` | odloženo z v3 | drahé, vázané na odložené R10 (revize rozsahu E6) |
 
 ---
 
 ## 5A. Plán na 14 dní (realizační jádro)
 
 Předpoklady:
-- jeden vývojář a jeden stroj, na kterém běží `bakula-soak-*`. Do těchto procesů se nezasahuje a A/B běhy se pouští jen ve volném okně (pragmatik E4),
+- jeden vývojář a jeden stroj, na kterém běží `bakula-soak-*`. Do těchto procesů se nezasahuje a A/B běhy se pouští jen ve volném okně (revize rozsahu E4),
 - commit po logických celcích, push až po dokončené sekci,
-- dny jsou odhad pragmatika upravený autorem (přidaná diagnostika R13), ne měření.
+- dny jsou odhad z revize rozsahu upravený autorem (přidaná diagnostika R13), ne měření.
 
 ### 5A.1 Nejmenší sada změn a pořadí
 
@@ -598,7 +598,7 @@ Předpoklady:
 
 ### 5A.2 Laťka a poctivé očekávání
 
-- **Laťka (volba zadavatele, ne důkaz):** zobrazené nálezy/síť-den a FP/síť-den klesnou o ≥ 70 %, minimálně o 50 %. Pod 50 % se výsledek zveřejní jako negativní a přepínač se vrátí.
+- **Laťka (volba autora práce, ne důkaz):** zobrazené nálezy/síť-den a FP/síť-den klesnou o ≥ 70 %, minimálně o 50 %. Pod 50 % se výsledek zveřejní jako negativní a přepínač se vrátí.
 - **Bez falešného optimismu:**
   - Ve [v2b] tvoří `inductive_volume_anomaly` a `packet_rate_spike` dohromady jen 48,3 % FP (vlastní výpočet). I kdyby R5 a R7-lite oba typy úplně odstranily, celkové FP klesnou o méně než 50 %. Laťku na mixu v2b lze splnit jen spolu s R4-lite (opakované vydávání) a R13 (`unexpected_traffic`). Na mixu [v1] (97 % FP v těchto dvou typech) stačí R5 a R7-lite.
   - Po −70 % by FP na úrovni [v2b] byly ≈ 280 / síť-den (vlastní výpočet). To je stále daleko od provozního cíle (§5A.3).
@@ -619,7 +619,7 @@ Předpoklady:
 | metriky enginu | nálezy za cyklus podle typu, zobrazené nové nálezy/den, velikost stavové tabulky, `noop_share`, latence cyklu, RSS a halda; musí být hotové před R4-lite (únik +78 MiB/h [v2b] by v produkci proces ukončil) | M6 |
 | strop a TTL stavu nálezů | strop počtu stavů na síť (top N podle skóre, zbytek do agregátu), TTL, metrika velikosti; proti vyčerpání paměti a pozornosti útokem s mnoha klíči | B2 |
 | riziko deduplikace | znovuvydání při novém zdroji, novém typu, změně stadia a Δp; první výskyt vždy viditelný | B1, RQ1 Z2 |
-| provozní cíl | počet zobrazených nových položek za den na 100 zařízení. Návrh pragmatika je ≤ 10. Je to rozhodnutí o zadání, které musí určit autor práce (§8.3); do té doby se hlásí absolutní hodnota | U1 |
+| provozní cíl | počet zobrazených nových položek za den na 100 zařízení. Návrh z revize rozsahu je ≤ 10. Je to rozhodnutí o zadání, které musí určit autor práce (§8.3); do té doby se hlásí absolutní hodnota | U1 |
 | dokumentace | krátký změnový záznam a popis prahů s verzí po každé R | M5 |
 | reálná síť | shadow běh na pasivních datech jedné sítě lokálně; žádná data ani osobní údaje do externích služeb | M7 |
 
@@ -650,8 +650,8 @@ Předpoklady:
 | Citovat soak v2 jako důkaz | pravděpodobně stará atribuce | RQ5 Metodika |
 | Používat CIC-IDS-2017 → 2018 jako drift | dvě kolekce, ne časový posun | RQ2 Z8a |
 | Slibovat detekci reverse shellu z toků s čísly | žádný recenzovaný TPR/FPR | RQ4 Z13 |
-| Auto-uzavírat alerty | tichá ztráta nálezu; laťka z jedné firmy | M48 (nízká), pragmatik B4 |
-| Zavádět pivot a aktivní L1/L2 sondy ve výchozím stavu | bez podkladu, riziko sond přes scope a vyvolání útočníkem | RQ3 §9, M18, pragmatik B3 |
+| Auto-uzavírat alerty | tichá ztráta nálezu; laťka z jedné firmy | M48 (nízká), revize rozsahu B4 |
+| Zavádět pivot a aktivní L1/L2 sondy ve výchozím stavu | bez podkladu, riziko sond přes scope a vyvolání útočníkem | RQ3 §9, M18, revize rozsahu B3 |
 | Používat držené seedy nebo testovací část kotvy opakovaně | přestávají být držené | RQ5 Z-9, K19 |
 
 ---
@@ -683,7 +683,7 @@ Předpoklady:
 10. Přepínač `--engine`. Status zapisuje hash buildu a příznak dirty. Únik haldy [v2b] opravit, nebo běhy omezit na ≤ 6 h wall-clock (volba autora).
 11. Hlášení: FP/síť-den absolutně, precision, precision při 0,01 až 0,1 útoku/síť-den, recall při pevném FP, AP.
 
-### 7.2 Seedy, držené rodiny, kotva (přepracováno podle K19 a pragmatika E3)
+### 7.2 Seedy, držené rodiny, kotva (přepracováno podle K19 a revize rozsahu E3)
 
 Rozdělení je pevné a zapíše se commitem před E0. Žádná sada se nepřesouvá.
 
@@ -696,7 +696,7 @@ Rozdělení je pevné a zapíše se commitem před E0. Žádná sada se nepřeso
 | H2 (držená) | 20261105 až 20261111 | 40 | **jednou**, finální E3 soaku v3 |
 
 - **Původ seedů:** dosud nepoužité jsou všechny kromě 20260131 (v1), 20261031 (v2) a 20261101 (v2b). Seed 20261031 je v L. Běh v2 se nepoužívá jako důkaz a ladění na tomtéž seedu je přípustné.
-- **3 seedy po 40 sítích** odpovídají návrhu pragmatika (E3). Sítě stratifikovat podle velikosti (S, M, L a část XL), aby rameno bylo rychlé.
+- **3 seedy po 40 sítích** odpovídají návrhu z revize rozsahu (E3). Sítě stratifikovat podle velikosti (S, M, L a část XL), aby rameno bylo rychlé.
 - **Držené rodiny:** fleet_beacon a ics_attack (RQ5 H-6), mimo veškeré ladění. Obě jsou slabé (K19):
   - fleet_beacon je příbuzná c2_beacon, na které se ladí,
   - ics_attack měl 11 pozorovatelných útoků [v2b] a vzniká jen v Industrial, takže se hlásí jen popisně.
@@ -710,7 +710,7 @@ Rozdělení je pevné a zapíše se commitem před E0. Žádná sada se nepřeso
 ### 7.3 Pořadí experimentů a párování
 
 **Párování:**
-- U pasivních změn (R5, R7-lite, R4-lite, R3, R13, R12a) se telemetrie seedu vygeneruje jednou a uloží. Varianty enginu se pak přes ni pouští opakovaně (pragmatik E3). Ramena tak mají bitově stejný vstup a párová korelace je vysoká, což je podmínka síly v §7.4a.
+- U pasivních změn (R5, R7-lite, R4-lite, R3, R13, R12a) se telemetrie seedu vygeneruje jednou a uloží. Varianty enginu se pak přes ni pouští opakovaně (revize rozsahu E3). Ramena tak mají bitově stejný vstup a párová korelace je vysoká, což je podmínka síly v §7.4a.
 - Pokud harness generování a zpracování oddělit neumí, je to úkol G0-min (den 2). Do té doby se běží na stejném `(seed, network_id)` s vypnutou zpětnou vazbou zásahů do generátoru, jinak se ramena rozejdou: blok mění provoz útočníka, zadrženo je až 80,2 % u ssh_bruteforce [v2b] (K20).
 - U změn se zpětnou vazbou (R10, aktivní kontroly) se hlásí divergence ramen.
 
@@ -755,7 +755,7 @@ G platí pro P1 až P7. Hypotéza je podpořena, jen když platí její práh **
 | P4 | R13 `unexpected_traffic` | FP `unexpected_traffic` + `unmapped_passive_event`/síť-den (R) | horní mez R ≤ 0,70, G a detekce rogue_device nepoklesne (popisně, n < 100) | horní mez R > 0,70 nebo porušení G | volba autora: pokles ≥ 30 %, konzervativní, protože hypotéza zastaralého inventáře je neověřená |
 | P5 | R10-lite | podíl plánů mimo rozpočet | `noop_share` = 0 (bodově, deterministické) a horní mez podílu mimo rozpočet ≤ 0,50 | podíl mimo rozpočet > 0,50 (horní mez), nebo klesne počet útoků s potvrzující kontrolou (horní mez ztráty > 5 p. b.) | volba autora; výchozí stav 88,5 % [v2b] |
 | P6 | R3 Suricata | správný typ exploit_attempt / podíl útoků viditelných IDS | dolní mez poměru ≥ 0,90 a G | dolní mez < 0,90 | audit, krok 3 |
-| P7 | celé 14denní jádro proti v1 | zobrazené nálezy/síť-den a FP/síť-den (obě R) | horní mez obou R ≤ 0,50 (minimum laťky) a G; cíl laťky (bodově R ≤ 0,30) se hlásí zvlášť | horní mez kterékoli R > 0,50 nebo porušení G | laťka zadavatele (§5A.2) |
+| P7 | celé 14denní jádro proti v1 | zobrazené nálezy/síť-den a FP/síť-den (obě R) | horní mez obou R ≤ 0,50 (minimum laťky) a G; cíl laťky (bodově R ≤ 0,30) se hlásí zvlášť | horní mez kterékoli R > 0,50 nebo porušení G | laťka autora práce (§5A.2) |
 | P8 | R12a kalibrace behaviorálních typů | ECE behaviorálních typů (poměr B/A) | horní mez poměru ECE ≤ 0,70 a horní mez rozdílu Brier ≤ 0 | horní mez poměru ECE > 0,70 nebo Brier se zhorší | RQ2 H5 (≥ 30 %, odhad autora RQ2) |
 
 ### 7.4b Průzkumné hypotézy
@@ -821,10 +821,10 @@ Celkem odhadem desítky hodin místo ≈ 180 h ve v1.0. Po E0 se odhad přepoč�
 ### 8.1 Hrozby validity této studie
 
 - **Druhotnost:** pracuji se závěry jiných studií. Plné texty jsem znovu nečetl a ověřil jsem jen existenci id a pět hodnot v extrakci (§2.1).
-- **Chybovost interpretace (K10):** skeptik našel 4 nesoulady ve 24 řádcích (≈ 17 %). Odhadovaná chybovost interpretace souhrnu je proto kolem 15 %, nad hranicí 5 % z protokolu §9. Před použitím v diplomce je nutné znovu projít všechna tvrzení s jistotou střední a vyšší. Pět ověření zdroje přes URL navržených skeptikem (RQ6-002, RQ3-025, RQ1-024, RQ4-039, RQ1-038) zatím neproběhlo.
+- **Chybovost interpretace (K10):** revize metodiky našla 4 nesoulady ve 24 řádcích (≈ 17 %). Odhadovaná chybovost interpretace souhrnu je proto kolem 15 %, nad hranicí 5 % z protokolu §9. Před použitím v diplomce je nutné znovu projít všechna tvrzení s jistotou střední a vyšší. Pět ověření zdroje přes URL navržených v revizi metodiky (RQ6-002, RQ3-025, RQ1-024, RQ4-039, RQ1-038) zatím neproběhlo.
 - **Jeden vyhledávač ve všech RQ**, převaha preprintů 2025 a 2026, citační řetězení jen částečné (odchylka od protokolu §3 přiznaná v RQ1 až RQ4).
 - **Nepřímost:** většina důkazů jsou alerty, hostové logy nebo ML klasifikátory, ne korelační engine nad toky (RQ5 Hrozby, RQ6 Nepřímost). Každý přenos efektu je extrapolace.
-- **Soak v2b** je 1h snímek (190 sítí, 2026-11-01 00:03 SEČ) s přepisovaným souborem. Snímková čísla nejsou stacionární (K11: FP/síť-den mezi snímkem 1,00 h a 1,25 h z 932 na 1 043 podle skeptika). Vazbu na `a293d2b` nelze nezávisle ověřit (§4.4). Intervaly jsou Wilsonovy (S9).
+- **Soak v2b** je 1h snímek (190 sítí, 2026-11-01 00:03 SEČ) s přepisovaným souborem. Snímková čísla nejsou stacionární (K11: FP/síť-den mezi snímkem 1,00 h a 1,25 h z 932 na 1 043 podle revize metodiky). Vazbu na `a293d2b` nelze nezávisle ověřit (§4.4). Intervaly jsou Wilsonovy (S9).
 - **Shoda našich FP s literaturou** může vycházet z konstrukce generátoru, ne ze stejného jevu (RQ6 Hrozby, RQ5 S8).
 - **Autor auditu kódu, studií RQ a této souhrnné studie není nezávislý.** Tato studie neprošla kontrolou podle protokolu §9.
 
@@ -840,7 +840,7 @@ Celkem odhadem desítky hodin místo ≈ 180 h ve v1.0. Po E0 se odhad přepoč�
 
 ### 8.3 Otevřené otázky
 
-1. Poměr nákladů `C_FN/C_FP`, rozpočet poplachů a **provozní cíl** (zobrazené nové položky za den na 100 zařízení; pragmatik navrhuje ≤ 10, U1) jsou rozhodnutí o zadání, ne inženýrská volba (audit, Otevřené otázky 2).
+1. Poměr nákladů `C_FN/C_FP`, rozpočet poplachů a **provozní cíl** (zobrazené nové položky za den na 100 zařízení; revize rozsahu navrhuje ≤ 10, U1) jsou rozhodnutí o zadání, ne inženýrská volba (audit, Otevřené otázky 2).
 2. Realistická četnost útoků na síť-den pro SOHO a SMB není v literatuře (RQ5).
 3. Korelovanost signálů pro součet LLR je třeba změřit na `S_quiet` (audit, Otevřené otázky 3).
 4. Nevysvětlené jevy z §4.3: Botnet-44, Cloud FP a lift 0,00× v 6 scénářích IoT-23. Původní „záhada IoT-23 ve všech scénářích“ je zrušená (K5).
@@ -854,10 +854,10 @@ Celkem odhadem desítky hodin místo ≈ 180 h ve v1.0. Po E0 se odhad přepoč�
 Ve v1.1 je oddíl zúžený (K23).
 
 - **Výběr ověřovací kontroly nad tokovými alerty se ground truth:** měření podle VOI/EVOI nebo banditu s metrikou počtu kontrol, FP a času jsme nenašli (RQ3 §9; 09 bod 3). Sousední linie ale existují a 09 je neprohledala:
-  - nákladově citlivé modelování detekce a odezvy (kritika uvádí Lee et al., J. Computer Security 2002),
-  - rozhodovací a herně teoretické enginy odezvy (kritika uvádí RRE, DSN 2009).
+  - nákladově citlivé modelování detekce a odezvy (revize metodiky uvádí Lee et al., J. Computer Security 2002),
+  - rozhodovací a herně teoretické enginy odezvy (revize metodiky uvádí RRE, DSN 2009).
   
-  Obě reference uvádí skeptik a já je neověřoval. Případná novost je jen v ověřovací kontrole (ne v odezvě) nad toky. EVOI je navíc v tomto plánu odložené (§5.x), takže novost by vyžadovala budoucí práci.
+  Obě reference jsem převzal z revize metodiky a neověřoval je. Případná novost je jen v ověřovací kontrole (ne v odezvě) nad toky. EVOI je navíc v tomto plánu odložené (§5.x), takže novost by vyžadovala budoucí práci.
 - **Měřená fúze Zeek + Suricata** (`community_id`) s dopadem na precision a recall: nenalezeno (RQ1 §9).
 - **Reverse shell a interaktivní relace z toků s TPR/FPR:** nenalezeno (RQ4 Z13). Jde o mezeru literatury, ne o cíl této práce (§5.x).
 - **Benigní vysvětlení:** kauzální benigní kontext existuje u provenance na hostech (NoDoze, RQ6-031, R-2, R-3). Nenalezeno je jen jeho použití **pro toky a provozní události** (výpadek senzoru, replay kolektoru, patch) s měřením na ground truth (RQ6).
@@ -882,7 +882,7 @@ Priorita: **1** = primární (rozhoduje se s Holmem), **2** = průzkumná po 14d
 | P4 | – (nové podle K12) | 1 | R13 `unexpected_traffic` | – |
 | P5 | (audit, žebřík; oprava no-op) | 1 | R10-lite | – |
 | P6 | (audit krok 3; souvisí s RQ1 H1-6) | 1 | R3 | V3-H07 |
-| P7 | (laťka zadavatele) | 1 | celé jádro proti v1 | – |
+| P7 | (laťka autora práce) | 1 | celé jádro proti v1 | – |
 | P8 | RQ2 H5 | 1 | R12a | část V3-H19 |
 | X01 | RQ5 H-1 | 2 | před R2 | V3-H01 |
 | X02 | RQ5 H-3 | 2 | | V3-H02 |
@@ -926,7 +926,7 @@ Pokrytí: všech 50 původních hypotéz je zařazeno (RQ1: 11, RQ2: 8, RQ3: 9, 
 
 ---
 
-## Dodatek A (2026-11-01): požadavek zadavatele a jeho dopad na plán
+## Dodatek A (2026-11-01): požadavek autora práce a jeho dopad na plán
 
 **Požadavek (závazný):** Skákavka je produkční nástroj, ne důkaz konceptu. Podezření má **co nejvíce automaticky ověřit a buď vyloučit, nebo potvrdit**. Člověku se zobrazuje jen to, co po automatickém ověření přežilo, nebo co má vysoký dopad.
 
